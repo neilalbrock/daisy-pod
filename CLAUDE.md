@@ -36,13 +36,13 @@ The top-level `Makefile` sets a few variables, then includes `lib/libDaisy/core/
 
 ## Firmware architecture
 
-Everything is currently in `src/main.cpp`, following the standard libDaisy pattern:
+`src/main.cpp` holds the hardware setup and control handling, following the standard libDaisy pattern. The granular DSP lives in `src/grain_engine.{h,cpp}` (`GrainEngine`).
 
 - `main()` initialises the `DaisyPod hw` global, sets the audio config (48 kHz, block size 4), initialises the DSP objects with `hw.AudioSampleRate()`, then calls `hw.StartAdc()` and `hw.StartAudio(AudioCallback)`.
 - `AudioCallback` runs in interrupt context once per block. It calls `hw.ProcessAllControls()`, reads knobs and buttons (`GetKnobValue`, `button1.RisingEdge()`), then processes non-interleaved stereo (`in[ch][i]`, `out[ch][i]`). Keep it real-time safe: no heap allocation, no blocking calls, no `System::Delay`.
-- The `while(1)` loop in `main()` handles slow, non-audio work: LEDs (`led1`/`led2.Set` followed by `hw.UpdateLeds()`) and a heartbeat.
+- The `while(1)` loop in `main()` handles slow, non-audio work: LEDs (`led1`/`led2.Set` followed by `hw.UpdateLeds()`).
 - State shared between the callback and the main loop is held in plain globals.
 
 Memory: put large audio buffers (grain and delay lines) in the 64 MB external SDRAM with `DSY_SDRAM_BSS`, for example `float DSY_SDRAM_BSS buffer[48000 * 10];`. Internal RAM is small.
 
-The current program is a starter used to verify the toolchain and hardware: knob 1 sets the low-pass cutoff (exponential, 20 Hz to 18 kHz), knob 2 sets the output level, and button 1 toggles bypass. If you change the control mapping, update the control table in `README.md` and the header comment in `main.cpp`.
+The current program is a granular processor; its paged control mapping is documented in `README.md` and the header comment in `main.cpp`. If you change the control mapping, update the control table in `README.md` and the header comment in `main.cpp`.

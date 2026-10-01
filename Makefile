@@ -2,7 +2,7 @@
 TARGET = grainfall
 
 # Sources
-CPP_SOURCES = src/main.cpp
+CPP_SOURCES = src/main.cpp src/grain_engine.cpp
 
 # Library Locations
 LIBDAISY_DIR = lib/libDaisy

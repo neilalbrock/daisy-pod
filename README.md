@@ -58,11 +58,22 @@ first so every object is rebuilt with the new flags.
 - Large audio buffers (grain/delay buffers) belong in the 64 MB SDRAM:
   `float DSY_SDRAM_BSS buffer[48000 * 10];`
 
-## Pod controls (starter program)
+## Pod controls (granular engine)
+
+Input is recorded continuously into a 10 s buffer in SDRAM and played back as
+a cloud of short, windowed grains. The two knobs are shared across three pages.
+Press the encoder to change page. After a page change, a knob does nothing
+until you move it, so values don't jump.
+
+| Page (LED 2) | Knob 1 | Knob 2 |
+|---|---|---|
+| 1 (blue) | Grain size, 5 ms - 500 ms | Density, 1 - 100 grains/s |
+| 2 (magenta) | Position: how far back grains start, 0 - 2 s | Spray: random extra offset, 0 - 1 s |
+| 3 (yellow) | Dry/wet mix | Stereo spread |
 
 | Control | Function |
 |---|---|
-| Knob 1 | Low-pass cutoff |
-| Knob 2 | Output level |
+| Encoder turn | Pitch in semitones (-24 to +24) |
+| Encoder press | Next page |
 | Button 1 | Bypass (LED 1: green = active, red = bypassed) |
-| LED 2 | Heartbeat blink |
+| Button 2 | Freeze the buffer (LED 1 blue while frozen) |
