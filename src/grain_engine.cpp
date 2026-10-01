@@ -46,7 +46,7 @@ void GrainEngine::SetParams(const Params &p)
 
     params_            = p;
     params_.size_s     = Clamp(p.size_s, 0.005f, 1.0f);
-    params_.density_hz = Clamp(p.density_hz, 0.5f, 200.0f);
+    params_.density_hz = Clamp(p.density_hz, 0.05f, 200.0f);
     params_.pitch      = Clamp(p.pitch, 0.25f, 4.0f);
     params_.spread     = Clamp(p.spread, 0.0f, 1.0f);
     // Leave room for the longest grain read at the highest pitch.
@@ -126,7 +126,9 @@ void GrainEngine::Process(float in_l, float in_r, float *out_l, float *out_r)
     }
 
     spawn_acc_ += params_.density_hz / sample_rate_;
-    if(spawn_acc_ >= 1.0f)
+    if(params_.ext_trigger)
+        spawn_acc_ = 0.0f;
+    else if(spawn_acc_ >= 1.0f)
     {
         spawn_acc_ -= 1.0f;
         StartGrain();

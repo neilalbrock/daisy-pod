@@ -36,7 +36,7 @@ The top-level `Makefile` sets a few variables, then includes `lib/libDaisy/core/
 
 ## Firmware architecture
 
-`src/main.cpp` holds the hardware setup and control handling, following the standard libDaisy pattern. The granular DSP lives in `src/grain_engine.{h,cpp}` (`GrainEngine`).
+`src/main.cpp` holds the hardware setup and control handling, following the standard libDaisy pattern. The granular DSP lives in `src/grain_engine.{h,cpp}` (`GrainEngine`). `src/midi_clock.{h,cpp}` (`MidiClock`) follows incoming MIDI clock for tempo sync. MIDI (Pod TRS and USB) is polled in the audio callback so ticks are timestamped to within a block.
 
 - `main()` initialises the `DaisyPod hw` global, sets the audio config (48 kHz, block size 4), initialises the DSP objects with `hw.AudioSampleRate()`, then calls `hw.StartAdc()` and `hw.StartAudio(AudioCallback)`.
 - `AudioCallback` runs in interrupt context once per block. It calls `hw.ProcessAllControls()`, reads knobs and buttons (`GetKnobValue`, `button1.RisingEdge()`), then processes non-interleaved stereo (`in[ch][i]`, `out[ch][i]`). Keep it real-time safe: no heap allocation, no blocking calls, no `System::Delay`.

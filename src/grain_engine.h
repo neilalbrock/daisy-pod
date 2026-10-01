@@ -17,13 +17,15 @@ class GrainEngine
 
     struct Params
     {
-        float size_s     = 0.1f;  // grain length, seconds
-        float density_hz = 10.0f; // grains started per second
-        float position_s = 0.2f;  // how far behind the record head grains start
-        float spray_s    = 0.0f;  // random extra offset added to position
-        float pitch      = 1.0f;  // playback rate (2 = up an octave)
-        float spread     = 0.5f;  // random stereo placement, 0 = centred, 1 = hard L/R
-        bool  freeze     = false; // stop recording, keep granulating what's held
+        float size_s      = 0.1f;  // grain length, seconds
+        float density_hz  = 10.0f; // grains started per second
+        bool  ext_trigger = false; // grains start only on Trigger(); density_hz
+                                   // is then just the expected rate, for levels
+        float position_s  = 0.2f;  // how far behind the record head grains start
+        float spray_s     = 0.0f;  // random extra offset added to position
+        float pitch       = 1.0f;  // playback rate (2 = up an octave)
+        float spread      = 0.5f;  // random stereo placement, 0 = centred, 1 = hard L/R
+        bool  freeze      = false; // stop recording, keep granulating what's held
     };
 
     // buf_l/buf_r: buffer_len samples each.
@@ -31,6 +33,9 @@ class GrainEngine
 
     // Read once per block from the audio callback; values are clamped.
     void SetParams(const Params &p);
+
+    // Starts a grain now. Call before Process() for the sample it lands on.
+    void Trigger() { StartGrain(); }
 
     // Records in_l/in_r (unless frozen) and returns the wet grain cloud.
     void Process(float in_l, float in_r, float *out_l, float *out_r);
