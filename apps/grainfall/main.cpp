@@ -27,6 +27,7 @@
 #include "daisysp.h"
 #include "grain_engine.h"
 #include "midi_clock.h"
+#include "paged_knobs.h"
 
 using namespace daisy;
 using namespace daisysp;
@@ -44,17 +45,12 @@ constexpr int kNumPages = 3;
 constexpr int kNumKnobs = 2;
 
 // Raw knob positions (0..1) per page, initial values chosen to sound sensible.
-float page_values[kNumPages][kNumKnobs] = {
+PagedKnobs<kNumPages, kNumKnobs> pages({
     {0.6f, 0.45f}, // size ~120 ms, density ~8/s
     {0.1f, 0.05f}, // position 0.2 s, spray 50 ms
     {0.5f, 0.5f},  // mix 50 %, spread 0.5
-};
-// The knob reading when the page was entered; a knob takes over once it
-// moves away from this.
-float knob_at_entry[kNumKnobs];
-bool  knob_live[kNumKnobs];
+});
 
-int  page      = 0;
 int  semitones = 0;
 bool bypass    = false;
 bool freeze    = false;
@@ -144,28 +140,15 @@ void AudioCallback(AudioHandle::InputBuffer  in,
     if(hw.encoder.FallingEdge() && long_press_done)
         long_press_done = false;
     else if(hw.encoder.FallingEdge())
-    {
-        page = (page + 1) % kNumPages;
-        for(int k = 0; k < kNumKnobs; k++)
-        {
-            knob_at_entry[k] = knob[k];
-            knob_live[k]     = false;
-        }
-    }
-    for(int k = 0; k < kNumKnobs; k++)
-    {
-        if(!knob_live[k] && fabsf(knob[k] - knob_at_entry[k]) > 0.02f)
-            knob_live[k] = true;
-        if(knob_live[k])
-            page_values[page][k] = knob[k];
-    }
+        pages.NextPage(knob);
+    pages.Update(knob);
 
     GrainEngine::Params p;
-    p.size_s     = ExpMap(page_values[0][0], 0.005f, 0.5f);
-    p.density_hz = ExpMap(page_values[0][1], 1.0f, 100.0f);
-    p.position_s = page_values[1][0] * 2.0f;
-    p.spray_s    = page_values[1][1] * 1.0f;
-    p.spread     = page_values[2][1];
+    p.size_s     = ExpMap(pages.Value(0, 0), 0.005f, 0.5f);
+    p.density_hz = ExpMap(pages.Value(0, 1), 1.0f, 100.0f);
+    p.position_s = pages.Value(1, 0) * 2.0f;
+    p.spray_s    = pages.Value(1, 1) * 1.0f;
+    p.spread     = pages.Value(2, 1);
     p.pitch      = powf(2.0f, semitones / 12.0f);
     p.freeze     = freeze;
 
@@ -175,10 +158,10 @@ void AudioCallback(AudioHandle::InputBuffer  in,
     {
         float spt     = midi_clock.SamplesPerTick();
         float sr      = hw.AudioSampleRate();
-        div           = Pick(kDensityDivs, page_values[0][1]);
+        div           = Pick(kDensityDivs, pages.Value(0, 1));
         p.ext_trigger = true;
         p.density_hz  = sr / (div * spt);
-        p.position_s  = Pick(kPositionDivs, page_values[1][0]) * spt / sr;
+        p.position_s  = Pick(kPositionDivs, pages.Value(1, 0)) * spt / sr;
 
         // Entering sync: pick up the grid where it is instead of firing.
         float pos = midi_clock.Position(now);
@@ -191,7 +174,7 @@ void AudioCallback(AudioHandle::InputBuffer  in,
     clock_locked = synced;
     grains.SetParams(p);
 
-    float mix = page_values[2][0];
+    float mix = pages.Value(2, 0);
 
     for(size_t i = 0; i < size; i++)
     {
@@ -243,8 +226,7 @@ int main(void)
     hw.StartAdc();
     System::Delay(10); // let the ADC settle before taking the reference reading
     hw.ProcessAnalogControls();
-    knob_at_entry[0] = hw.GetKnobValue(DaisyPod::KNOB_1);
-    knob_at_entry[1] = hw.GetKnobValue(DaisyPod::KNOB_2);
+    pages.Latch({hw.GetKnobValue(DaisyPod::KNOB_1), hw.GetKnobValue(DaisyPod::KNOB_2)});
 
     hw.StartAudio(AudioCallback);
 
@@ -269,7 +251,7 @@ int main(void)
             if(dark)
                 hw.led1.Set(0.0f, 0.0f, 0.0f);
         }
-        const float *c = page_colours[page];
+        const float *c = page_colours[pages.Page()];
         hw.led2.Set(c[0], c[1], c[2]);
         hw.UpdateLeds();
         System::Delay(20);

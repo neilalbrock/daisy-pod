@@ -24,6 +24,7 @@
 //                        white = filter
 
 #include "daisy_pod.h"
+#include "paged_knobs.h"
 #include "tape_engine.h"
 
 using namespace daisy;
@@ -39,18 +40,13 @@ constexpr int kNumPages = 4;
 constexpr int kNumKnobs = 2;
 
 // Raw knob positions (0..1) per page, initial values chosen to sound sensible.
-float page_values[kNumPages][kNumKnobs] = {
-    {0.3f, 0.3f},  // wow, flutter
+PagedKnobs<kNumPages, kNumKnobs> pages({
+    {0.3f, 0.3f},   // wow, flutter
     {0.35f, 0.15f}, // saturate, failure
-    {0.0f, 0.5f},  // dry none, volume unity
-    {0.2f, 0.0f},  // noise, spread
-};
-// The knob reading when the page was entered; a knob takes over once it
-// moves away from this.
-float knob_at_entry[kNumKnobs];
-bool  knob_live[kNumKnobs];
+    {0.0f, 0.5f},   // dry none, volume unity
+    {0.2f, 0.0f},   // noise, spread
+});
 
-int             page     = 0;
 int             model    = 5; // VHS 2nd gen
 TapeEngine::Aux aux_type = TapeEngine::Aux::kStop;
 bool            aux_on   = false;
@@ -126,36 +122,23 @@ void AudioCallback(AudioHandle::InputBuffer  in,
     if(hw.encoder.FallingEdge() && long_press_done)
         long_press_done = false;
     else if(hw.encoder.FallingEdge())
-    {
-        page = (page + 1) % kNumPages;
-        for(int k = 0; k < kNumKnobs; k++)
-        {
-            knob_at_entry[k] = knob[k];
-            knob_live[k]     = false;
-        }
-    }
-    for(int k = 0; k < kNumKnobs; k++)
-    {
-        if(!knob_live[k] && fabsf(knob[k] - knob_at_entry[k]) > 0.02f)
-            knob_live[k] = true;
-        if(knob_live[k])
-            page_values[page][k] = knob[k];
-    }
+        pages.NextPage(knob);
+    pages.Update(knob);
 
     TapeEngine::Params p;
-    p.wow      = page_values[0][0];
-    p.flutter  = page_values[0][1];
-    p.saturate = page_values[1][0];
-    p.failure  = page_values[1][1];
-    p.noise    = page_values[3][0];
-    p.spread   = page_values[3][1];
+    p.wow      = pages.Value(0, 0);
+    p.flutter  = pages.Value(0, 1);
+    p.saturate = pages.Value(1, 0);
+    p.failure  = pages.Value(1, 1);
+    p.noise    = pages.Value(3, 0);
+    p.spread   = pages.Value(3, 1);
     p.model    = model;
     p.aux      = aux_type;
     p.aux_on   = aux_on;
     tape_engine.SetParams(p);
 
-    float dry    = page_values[2][0] * page_values[2][0];
-    float volume = page_values[2][1] * 2.0f;
+    float dry    = pages.Value(2, 0) * pages.Value(2, 0);
+    float volume = pages.Value(2, 1) * 2.0f;
 
     for(size_t i = 0; i < size; i++)
     {
@@ -198,8 +181,7 @@ int main(void)
     hw.StartAdc();
     System::Delay(10); // let the ADC settle before taking the reference reading
     hw.ProcessAnalogControls();
-    knob_at_entry[0] = hw.GetKnobValue(DaisyPod::KNOB_1);
-    knob_at_entry[1] = hw.GetKnobValue(DaisyPod::KNOB_2);
+    pages.Latch({hw.GetKnobValue(DaisyPod::KNOB_1), hw.GetKnobValue(DaisyPod::KNOB_2)});
 
     hw.StartAudio(AudioCallback);
 
@@ -249,7 +231,7 @@ int main(void)
         }
         else
         {
-            const float *c = page_colours[page];
+            const float *c = page_colours[pages.Page()];
             hw.led2.Set(c[0], c[1], c[2]);
         }
         hw.UpdateLeds();
