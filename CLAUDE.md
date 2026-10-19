@@ -9,6 +9,7 @@ Bare-metal firmware experiments for the Electrosmith Daisy Pod (Daisy Seed 3, ST
 Each experiment is a separate app in `apps/<name>/`, and all of them live on `main` (experiments are folders, not branches). Code shared between apps goes in `common/`. Current apps:
 
 - `apps/grainfall/`: granular processor with MIDI clock sync. This is the default `APP`.
+- `apps/tapeworn/`: lo-fi tape machine (after Chase Bliss Generation Loss MKII).
 - `apps/starter/`: low-pass filter hardware check, and the template that `make new` copies.
 
 Each app has its own `README.md` with its control table. The top-level `README.md` indexes the apps.
@@ -60,5 +61,7 @@ Every app's `main.cpp` follows the standard libDaisy pattern:
 Memory: put large audio buffers (grain and delay lines) in the 64 MB external SDRAM with `DSY_SDRAM_BSS`, for example `float DSY_SDRAM_BSS buffer[48000 * 10];`. Internal RAM is small.
 
 Grainfall: `apps/grainfall/main.cpp` holds the hardware setup and paged control handling. The granular DSP is in `apps/grainfall/grain_engine.{h,cpp}` (`GrainEngine`). `common/midi_clock.{h,cpp}` (`MidiClock`) follows incoming MIDI clock for tempo sync. MIDI (Pod TRS and USB) is polled in the audio callback so ticks are timestamped to within a block.
+
+Tapeworn: `apps/tapeworn/main.cpp` holds the hardware setup and paged controls. `TapeEngine` (`tape_engine.{h,cpp}`) runs the chain, built from `Hysteresis` (Jiles-Atherton saturation, 2x oversampled), `Wow`/`Flutter` (`tape_wobble`), `TapeFailure` and `TapeModel` (EQ profiles). The DSP files don't include libDaisy, so they also compile on the host for offline tests.
 
 If you change an app's control mapping, update the control table in that app's `README.md` and the header comment in its `main.cpp`. When adding an app, add it to the app table in the top-level `README.md`.

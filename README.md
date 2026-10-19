@@ -6,6 +6,7 @@ a separate app under `apps/`, all built from `main`.
 | App | Description |
 |---|---|
 | [grainfall](apps/grainfall/README.md) | Granular processor with MIDI clock sync (default) |
+| [tapeworn](apps/tapeworn/README.md) | Lo-fi tape machine: wow, flutter, hysteresis saturation, tape models, failures |
 | [starter](apps/starter/README.md) | Low-pass filter toolchain and hardware check; template for new apps |
 
 Code shared between apps goes in `common/` (currently `MidiClock`).
