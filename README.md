@@ -7,9 +7,12 @@ a separate app under `apps/`, all built from `main`.
 |---|---|
 | [grainfall](apps/grainfall/README.md) | Granular processor with MIDI clock sync (default) |
 | [tapeworn](apps/tapeworn/README.md) | Lo-fi tape machine: wow, flutter, hysteresis saturation, tape models, failures |
+| [usbaudio](apps/usbaudio/README.md) | The Pod as a USB sound card; hardware check for `UsbAudio` |
 | [starter](apps/starter/README.md) | Low-pass filter toolchain and hardware check; template for new apps |
 
-Code shared between apps goes in `common/` (currently `MidiClock` and `PagedKnobs`).
+Code shared between apps goes in `common/` (currently `MidiClock` and
+`PagedKnobs`). `common/usb_device/` holds `UsbAudio`, which makes the Pod a
+USB sound card. It's opt-in (see [USB audio](#usb-audio)).
 
 ## Toolchain
 
@@ -68,6 +71,23 @@ make APP=<name> debug     # terminal 2: attach arm-none-eabi-gdb
 
 Build with `make DEBUG=1 OPT=-Og` for a debuggable binary. Run `make clean`
 first so every object is rebuilt with the new flags.
+
+## USB audio
+
+`UsbAudio` (`common/usb_device/usb_audio.h`) makes the Seed's USB port a
+class-compliant USB sound card: stereo in and out, 24-bit, 48 kHz, no driver
+needed. To use it in an app:
+
+1. Add `USB_DEVICE = 1` to `apps/<name>/app.mk`.
+2. In `main()`, call `usb.Init("Name")` before `hw.StartAudio`.
+3. In the audio callback, call `usb.Read(left, right, size)` for audio from
+   the computer and `usb.Write(left, right, size)` for audio to it, once per
+   block each.
+
+It brings its own copy of ST's USB device stack, which replaces libDaisy's.
+An app that uses it can't also use libDaisy's USB device classes
+(`MidiUsbHandler`, USB logging, `UsbHandle`), and the link fails if it tries.
+See `apps/usbaudio/` for an example.
 
 ## Memory notes
 

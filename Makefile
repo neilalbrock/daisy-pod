@@ -34,6 +34,20 @@ OCD_DIR ?= $(shell brew --prefix 2>/dev/null || echo /usr/local)/share/openocd/s
 # Per-app overrides, e.g. APP_TYPE = BOOT_SRAM
 -include apps/$(APP)/app.mk
 
+# USB audio device (common/usb_device/), for apps whose app.mk sets
+# USB_DEVICE = 1. It builds its own copy of ST's USB device core with its own
+# usbd_conf.h, which must come before libDaisy's on the include path. These
+# objects then stand in for libDaisy's USB device objects at link time, so an
+# app that uses this can't also use libDaisy's USB device classes
+# (MidiUsbHandler, USB logging, UsbHandle).
+ifeq ($(USB_DEVICE),1)
+USBD_CORE_DIR = $(LIBDAISY_DIR)/Middlewares/ST/STM32_USB_Device_Library/Core/Src
+CPP_SOURCES += $(wildcard common/usb_device/*.cpp)
+C_SOURCES += $(wildcard common/usb_device/*.c) \
+	$(addprefix $(USBD_CORE_DIR)/,usbd_core.c usbd_ctlreq.c usbd_ioreq.c)
+C_INCLUDES := -Icommon/usb_device $(C_INCLUDES)
+endif
+
 # Core location, and generic Makefile.
 SYSTEM_FILES_DIR = $(LIBDAISY_DIR)/core
 include $(SYSTEM_FILES_DIR)/Makefile

@@ -10,6 +10,7 @@ Each experiment is a separate app in `apps/<name>/`, and all of them live on `ma
 
 - `apps/grainfall/`: granular processor with MIDI clock sync. This is the default `APP`.
 - `apps/tapeworn/`: lo-fi tape machine (after Chase Bliss Generation Loss MKII).
+- `apps/usbaudio/`: the Pod as a USB sound card, and the hardware check for `UsbAudio`.
 - `apps/starter/`: low-pass filter hardware check, and the template that `make new` copies.
 
 Each app has its own `README.md` with its control table. The top-level `README.md` indexes the apps.
@@ -45,6 +46,7 @@ The top-level `Makefile` sets a few variables, then includes `lib/libDaisy/core/
 - `CPP_SOURCES` is every `.cpp` in `apps/$(APP)/` plus every `.cpp` in `common/`, so new files need no Makefile edit. `common/` is on the include path. Object files are named by basename only, so file names must be unique across an app and `common/`.
 - libDaisy's `program` and `debug` recipes hardcode `./build/$(TARGET).elf`. The Makefile symlinks that path to the app's ELF, so don't remove that rule.
 - `apps/<name>/app.mk` (optional) holds per-app overrides and is included before libDaisy's Makefile. It should set variables only, not define rules.
+- `USB_DEVICE = 1` in an app's `app.mk` adds `common/usb_device/` (not covered by the `common/*.cpp` wildcard) plus ST's USB device core sources from libDaisy's nested submodule, and puts `common/usb_device` first on the include path so its `usbd_conf.h` replaces libDaisy's.
 - `CPP_STANDARD = -std=gnu++17` (libDaisy's default is gnu++14).
 - `APP_TYPE` defaults to `BOOT_NONE`, which puts code in the 128 KB internal flash. If an app outgrows that, set `APP_TYPE = BOOT_SRAM` in its `app.mk`, flash the Daisy bootloader once with `make program-boot`, then keep using `make program-dfu`. Flashing a `BOOT_NONE` app overwrites the bootloader.
 - `OCD_DIR` points at Homebrew's OpenOCD scripts.
@@ -58,6 +60,8 @@ Every app's `main.cpp` follows the standard libDaisy pattern:
 - The `while(1)` loop in `main()` handles slow, non-audio work: LEDs (`led1`/`led2.Set` followed by `hw.UpdateLeds()`).
 - State shared between the callback and the main loop is held in plain globals.
 - Apps with more parameters than knobs page them with `PagedKnobs` (`common/paged_knobs.h`): the encoder press calls `NextPage`, the callback calls `Update` each block, and `main()` calls `Latch` once before `StartAudio` so a knob does nothing until it moves.
+
+USB audio: `common/usb_device/` makes the Seed's USB port a USB Audio Class 1 device (stereo in and out, 24-bit, 48 kHz). `usb_audio.{h,cpp}` holds the public `UsbAudio` class (`Init`, then `Read`/`Write` once per block in the audio callback), plus the descriptors, the class callbacks and the ring buffers. `usbd_conf.{h,c}` is the HAL glue, adapted from libDaisy's. libDaisy can't be used for this because it compiles the ST core with `USBD_MAX_NUM_INTERFACES 1`. Our objects take over from libDaisy's at link time because `usbd_conf.c` defines every global symbol that libDaisy's `usbd_conf.o` does; libDaisy's `system.o` references `hpcd_USB_OTG_HS`, so leaving any of them out drags libDaisy's copy back in. So an app with `USB_DEVICE = 1` can't also use libDaisy's USB device classes (`MidiUsbHandler`, USB logging, `UsbHandle`), and the link fails with a duplicate `OTG_FS_IRQHandler` if it tries. Clock drift between the codec (PLL3, about 48.014 kHz) and the computer is handled asynchronously: a feedback endpoint steers the computer's rate from the receive buffer's fill level, and outgoing packets are 47, 48 or 49 frames depending on the send buffer's level. The audio callback and the USB interrupt share only lock-free single-producer, single-consumer rings.
 
 Memory: put large audio buffers (grain and delay lines) in the 64 MB external SDRAM with `DSY_SDRAM_BSS`, for example `float DSY_SDRAM_BSS buffer[48000 * 10];`. Internal RAM is small.
 
