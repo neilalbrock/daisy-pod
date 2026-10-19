@@ -1,4 +1,4 @@
-// Grainfall - MIDI clock follower
+// MIDI clock follower
 //
 // Fed with MIDI clock ticks (24 per quarter note), Start messages and a
 // running sample count, it tracks the tempo and gives a continuous position
