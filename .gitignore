@@ -129,3 +129,7 @@ vcpkg_installed/
 # test output & cache
 Testing/
 .cache/
+
+### Local ###
+
+dev
