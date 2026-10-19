@@ -2,6 +2,7 @@
 
 #include <algorithm>
 #include <atomic>
+#include <cmath>
 #include <cstdint>
 
 #include "usbd_core.h"
@@ -556,9 +557,12 @@ float ToFloat(int32_t s)
     return float(s) * (1.0f / 8388608.0f);
 }
 
+// The inverse of ToFloat, so 24-bit samples survive a round trip exactly
+// (the loopback test in apps/usbaudio relies on that)
 int32_t FromFloat(float x)
 {
-    return int32_t(std::clamp(x, -1.0f, 1.0f) * 8388607.0f);
+    x = std::clamp(x * 8388608.0f, -8388608.0f, 8388607.0f);
+    return int32_t(std::lrintf(x));
 }
 
 // Audio callback side of the receive ring
