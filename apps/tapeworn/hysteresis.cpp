@@ -136,11 +136,19 @@ float Hysteresis::Solve(float h)
     float k2 = t_ * Dmdt(m_n1_ + k1 * 0.5f, (h + h_n1_) * 0.5f, (h_d + hd_n1_) * 0.5f);
     float m  = m_n1_ + k2;
 
-    if(!std::isfinite(m) || fabsf(m) > ms_ * 2.0f)
+    if(!std::isfinite(m))
     {
         // Shouldn't happen, but never let a bad step latch the output.
         m   = 0.0f;
         h_d = 0.0f;
+    }
+    else
+    {
+        // Loud, bright input at high drive moves H across the whole curve in
+        // one step, and the explicit step can overshoot. |M| can't exceed
+        // Ms, so clamp there. (Resetting M to 0 instead clicked, up to
+        // thousands of times a second on noisy material.)
+        m = Clamp(m, -ms_, ms_);
     }
     m_n1_  = m;
     h_n1_  = h;
