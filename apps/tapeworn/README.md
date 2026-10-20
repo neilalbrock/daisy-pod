@@ -13,7 +13,7 @@ make APP=tapeworn program-dfu
 ```
 in -> saturate (hysteresis) -> tape transport (wow, flutter, snags, stop)
    -> + hiss, crinkles, pops -> tape model EQ -> drops -> + hum -> volume
-                                                                    + dry -> out
+                                                      + dry -> limiter -> out
 ```
 
 ## Controls
@@ -80,7 +80,10 @@ measurements of real ones.
 - With spread at zero both channels move together. Turn it up, add some dry,
   and wow becomes a wide chorus; failure becomes a randomised stereo splitter.
 - Saturate keeps roughly the same level across its range, so quiet signals get
-  louder as it compresses. Past 80 % the bias drifts and it gets lopsided and
-  gnarly.
+  louder as it compresses. Past noon the drive eases off so the top end stays
+  thick rather than crisp, and past 80 % the bias drifts and it gets lopsided.
+- A stereo limiter on dry + wet holds the output under -1 dBFS, so turning the
+  dry and wet levels up gets louder until it's held there, rather than clipping.
+  Bypass skips it and passes the input straight through.
 - The Pod's input is stereo. With a mono source on the left channel only, hold
   button 1 to turn on mono in.

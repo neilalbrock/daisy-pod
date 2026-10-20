@@ -70,14 +70,21 @@ void Hysteresis::SetAmount(float amount)
     amount_ = s;
 
     // The tape is fixed; the knob sets how hard it's recorded. The curve
-    // keeps more of the sweep in the subtle range.
+    // keeps more of the sweep in the subtle range. Above about noon it eases
+    // off, topping out at +16.5 dB rather than +24: driven harder, the
+    // magnetisation squares the wave up and the upper harmonics stop falling
+    // away (h7 only 12 dB under h3), which sounds crisp rather than like tape.
+    constexpr float kKnee = 0.4f;
+    constexpr float kEase = (1.0f - 0.75f) / ((1.0f - kKnee) * (1.0f - kKnee));
     float u = powf(s, 1.3f);
-    drive_  = DbToGain(-6.0f + 30.0f * u);
+    if(u > kKnee)
+        u -= kEase * (u - kKnee) * (u - kKnee); // 1 -> 0.75, slope 1 at knee
+    drive_ = DbToGain(-6.0f + 30.0f * u);
 
     // Fitted offline so a 0.3 peak sine keeps about the same level across the
     // sweep, then trimmed ~5 dB at the top, where peaky material (plucks,
     // drums) otherwise came out louder. Quiet input gets louder as it
-    // compresses.
+    // compresses. (Fitted over u up to 1; the eased curve now stops at 0.75.)
     makeup_ = DbToGain(9.0f - 38.6f * u + 11.4f * u * u);
 
     // Past ~80 % the record bias drifts off: the loop goes lopsided.

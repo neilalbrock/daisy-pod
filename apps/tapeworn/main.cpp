@@ -12,6 +12,7 @@
 //                          Knob 2 - failure: crinkles, pops, snags, drops
 //   Page 3 (LED 2 yellow)  Knob 1 - dry level (none to unity)
 //                          Knob 2 - wet volume (noon is unity, max x2)
+//                          (a limiter holds dry + wet under -1 dBFS)
 //   Page 4 (LED 2 cyan)    Knob 1 - noise: hiss and hum
 //                          Knob 2 - stereo spread: channels fail independently
 //   Encoder turn       - tape model (LED 2 flashes its colour; white = flat)
@@ -24,6 +25,7 @@
 //                        white = filter
 
 #include "daisy_pod.h"
+#include "limiter.h"
 #include "paged_knobs.h"
 #include "tape_engine.h"
 
@@ -35,6 +37,7 @@ float DSY_SDRAM_BSS buffer_r[kBufferLen];
 
 DaisyPod   hw;
 TapeEngine tape_engine;
+Limiter    limiter; // on dry + wet, so turning both up doesn't clip
 
 constexpr int kNumPages = 4;
 constexpr int kNumKnobs = 2;
@@ -154,6 +157,7 @@ void AudioCallback(AudioHandle::InputBuffer  in,
 
         float fx_l = wet_l * volume + in_l * dry;
         float fx_r = wet_r * volume + in_r * dry;
+        limiter.Process(&fx_l, &fx_r);
         out[0][i]  = fx_l + (in_l - fx_l) * bypass_mix;
         out[1][i]  = fx_r + (in_r - fx_r) * bypass_mix;
     }
@@ -175,6 +179,7 @@ int main(void)
     hw.SetAudioSampleRate(SaiHandle::Config::SampleRate::SAI_48KHZ);
 
     tape_engine.Init(hw.AudioSampleRate(), buffer_l, buffer_r, kBufferLen);
+    limiter.Init(hw.AudioSampleRate());
     bypass_inc = 1.0f / (kBypassFadeS * hw.AudioSampleRate());
 
     // Every knob starts "not live" so the defaults above hold until a knob moves.
