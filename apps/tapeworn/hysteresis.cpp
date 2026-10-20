@@ -10,6 +10,7 @@ namespace
 {
 constexpr size_t kPhaseTaps = 16; // non-zero taps in the halfband's even phase
 constexpr size_t kUpDelay   = 7;  // centre tap position, in input samples
+constexpr float  kDAlpha    = 0.75f; // damping of the trapezoidal dH/dt
 
 // Modified Bessel function of the first kind, order 0, for the Kaiser window.
 float BesselI0(float x)
@@ -26,7 +27,8 @@ float BesselI0(float x)
 
 void Hysteresis::Init(float sample_rate)
 {
-    t_ = 1.0f / (sample_rate * 2.0f);
+    t_       = 1.0f / (sample_rate * 2.0f);
+    hd_gain_ = (1.0f + kDAlpha) / t_;
 
     // Kaiser-windowed halfband lowpass. Only the even-index taps are non-zero
     // apart from the centre one (0.5), so that's all we keep.
@@ -46,6 +48,7 @@ void Hysteresis::Init(float sample_rate)
         tap /= sum; // exact unity gain at DC
 
     Reset();
+    amount_ = -1.0f;
     SetAmount(0.0f);
 }
 
@@ -62,6 +65,9 @@ void Hysteresis::Reset()
 void Hysteresis::SetAmount(float amount)
 {
     float s = Clamp(amount, 0.0f, 1.0f);
+    if(s == amount_)
+        return;
+    amount_ = s;
 
     // The tape is fixed; the knob sets how hard it's recorded. The curve
     // keeps more of the sweep in the subtle range.
@@ -81,37 +87,50 @@ void Hysteresis::SetAmount(float amount)
 
 float Hysteresis::Dmdt(float m, float h, float h_d) const
 {
-    float q = (h + alpha_ * m) / a_;
+    // This runs four times per sample per channel, so divides (and tanhf,
+    // which hides another) are kept to the two that can't be avoided.
+    constexpr float kInvA = 1.0f / a_;
+    float q = (h + alpha_ * m) * kInvA;
     float l, l_prime; // Langevin function and its derivative
     if(fabsf(q) < 0.1f)
     {
         // coth(q) - 1/q cancels badly in float near zero; use the series.
-        l       = q / 3.0f - q * q * q / 45.0f;
-        l_prime = 1.0f / 3.0f - q * q / 15.0f;
+        l       = q * (1.0f / 3.0f) - q * q * q * (1.0f / 45.0f);
+        l_prime = 1.0f / 3.0f - q * q * (1.0f / 15.0f);
     }
     else
     {
-        float coth = 1.0f / tanhf(q);
-        l          = coth - 1.0f / q;
-        l_prime    = 1.0f / (q * q) - coth * coth + 1.0f;
+        // coth and 1/q from one exp and one divide. With e = exp(-2|q|),
+        // coth(q) = sign(q) (1 + e) / (1 - e), and e can't overflow.
+        float abs_q = fabsf(q);
+        float e     = expf(-2.0f * abs_q);
+        float r     = 1.0f / (q * (1.0f - e));
+        float coth  = (1.0f + e) * abs_q * r;
+        float inv_q = (1.0f - e) * r;
+        l           = coth - inv_q;
+        l_prime     = inv_q * inv_q - coth * coth + 1.0f;
     }
 
-    float m_diff  = ms_ * l - m;
-    float delta   = h_d >= 0.0f ? 1.0f : -1.0f;
-    float delta_m = (delta > 0.0f) == (m_diff >= 0.0f) ? 1.0f : 0.0f;
-    float nc      = 1.0f - c_;
+    float m_diff = ms_ * l - m;
+    float delta  = h_d >= 0.0f ? 1.0f : -1.0f;
+    bool  moving = (delta > 0.0f) == (m_diff >= 0.0f); // irreversible part on
+    float nc     = 1.0f - c_;
 
-    float f1 = nc * delta_m * m_diff / (nc * delta * k_ - alpha_ * m_diff);
     float f2 = c_ * ms_ / a_ * l_prime;
     float f3 = 1.0f - c_ * alpha_ * ms_ / a_ * l_prime;
-    return h_d * (f1 + f2) / f3;
+    if(!moving)
+        return h_d * f2 / f3;
+
+    // f1 = nc m_diff / den, folded into the one divide:
+    // h_d (f1 + f2) / f3 = h_d (nc m_diff + f2 den) / (den f3)
+    float den = nc * delta * k_ - alpha_ * m_diff;
+    return h_d * (nc * m_diff + f2 * den) / (den * f3);
 }
 
 float Hysteresis::Solve(float h)
 {
     // dH/dt by an alpha-damped trapezoidal rule, then one RK2 step for M.
-    constexpr float kDAlpha = 0.75f;
-    float h_d = (1.0f + kDAlpha) / t_ * (h - h_n1_) - kDAlpha * hd_n1_;
+    float h_d = hd_gain_ * (h - h_n1_) - kDAlpha * hd_n1_;
 
     float k1 = t_ * Dmdt(m_n1_, h_n1_, hd_n1_);
     float k2 = t_ * Dmdt(m_n1_ + k1 * 0.5f, (h + h_n1_) * 0.5f, (h_d + hd_n1_) * 0.5f);
@@ -151,15 +170,16 @@ float Hysteresis::Process(float x)
     float m1 = Solve(h1);
 
     // Downsample: same halfband, evaluated only for the sample we keep.
+    constexpr size_t kMask = kDownLen - 1;
     down_hist_[down_pos_] = m0;
-    down_pos_             = (down_pos_ + 1) % kHalfbandTaps;
+    down_pos_             = (down_pos_ + 1) & kMask;
     down_hist_[down_pos_] = m1;
     size_t newest         = down_pos_;
-    down_pos_             = (down_pos_ + 1) % kHalfbandTaps;
+    down_pos_             = (down_pos_ + 1) & kMask;
 
-    float y = 0.5f * down_hist_[(newest + kHalfbandTaps - kHalfbandTaps / 2) % kHalfbandTaps];
+    float y = 0.5f * down_hist_[(newest - kHalfbandTaps / 2) & kMask];
     for(size_t i = 0; i < kPhaseTaps; i++)
-        y += 0.5f * up_taps_[i] * down_hist_[(newest + kHalfbandTaps - 2 * i) % kHalfbandTaps];
+        y += 0.5f * up_taps_[i] * down_hist_[(newest - 2 * i) & kMask];
 
     return y * makeup_;
 }

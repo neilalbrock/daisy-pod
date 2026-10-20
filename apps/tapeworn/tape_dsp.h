@@ -70,9 +70,10 @@ class Rng
     float Range(float lo, float hi) { return lo + (hi - lo) * Uni(); }
 
     // True on average `rate_hz` times a second when called once per sample.
+    // Multiplies rather than divides: it runs several times per sample.
     bool Chance(float rate_hz, float sample_rate)
     {
-        return Uni() < rate_hz / sample_rate;
+        return Uni() * sample_rate < rate_hz;
     }
 
   private:
