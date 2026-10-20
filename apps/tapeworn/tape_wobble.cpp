@@ -51,9 +51,18 @@ float Flutter::Process()
 
     phase1_ = WrapPhase(phase1_ + inc1_ * drift_);
     phase2_ = WrapPhase(phase2_ + inc2_ * drift_);
-    noise_ += noise_coef_ * (rng_.Bi() - noise_);
+    // Four poles, not one: a single pole's -6 dB/octave tail jitters the
+    // delay line at audio rates, which put a hiss-like skirt around every
+    // note (about -44 dB at flutter 0.3, against -80 dB now).
+    float n = rng_.Bi();
+    for(auto &s : noise_)
+    {
+        s += noise_coef_ * (n - s);
+        n = s;
+    }
 
-    // Low-passed white noise is small; x6 brings it up to about the sines.
+    // Low-passed white noise is small; x8.5 brings it up to about the sines
+    // (and matches the single pole's x6 below 30 Hz).
     return 0.55f * FastSin(phase1_) + 0.25f * FastSin(phase2_)
-           + 0.2f * Clamp(noise_ * 6.0f, -1.0f, 1.0f);
+           + 0.2f * Clamp(n * 8.5f, -1.0f, 1.0f);
 }

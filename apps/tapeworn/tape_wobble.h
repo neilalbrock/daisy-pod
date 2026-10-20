@@ -38,5 +38,6 @@ class Flutter
     float     inc1_ = 0.0f, inc2_ = 0.0f;
     float     drift_ = 1.0f, drift_target_ = 1.0f, drift_coef_ = 0.0f;
     int32_t   drift_hold_ = 0;
-    float     noise_ = 0.0f, noise_coef_ = 0.0f;
+    float     noise_[4] = {}; // four one-poles in series on white noise
+    float     noise_coef_ = 0.0f;
 };
