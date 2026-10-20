@@ -31,7 +31,7 @@ jump.
 
 | Control | Function |
 |---|---|
-| Encoder turn | Tape model (LED 2 flashes the model's colour, white = off) |
+| Encoder turn | Tape model (LED 2 flashes the model's colour, white = flat) |
 | Encoder press | Next page |
 | Encoder long press (0.6 s) | AUX type: stop, fail, filter (LED 1 flashes the new type) |
 | Button 1 | Bypass (LED 1: green = active, red = bypassed) |
@@ -56,7 +56,7 @@ measurements of real ones.
 
 | # | Model | Character |
 |---|---|---|
-| 0 | Off | Unfiltered |
+| 0 | Flat | No playback EQ. Wow, flutter, saturation, failure and noise still apply |
 | 1 | Reel-to-reel | Full range, low head bump |
 | 2 | Cassette deck | Slight top-end loss, head bump |
 | 3 | Walkman | Scooped mids |

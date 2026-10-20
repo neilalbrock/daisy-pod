@@ -38,7 +38,7 @@ class TapeEngine
         float flutter  = 0.0f; // 0..1
         float saturate = 0.0f; // 0..1
         float failure  = 0.0f; // 0..1
-        int   model    = 0;    // 0 (off) .. TapeModel::kNumModels - 1
+        int   model    = 0;    // 0 (flat, no EQ) .. TapeModel::kNumModels - 1
         float noise    = 0.0f; // 0..1, hiss and hum
         float spread   = 0.0f; // 0 = channels move together, 1 = independent
         Aux   aux      = Aux::kStop;

@@ -13,7 +13,7 @@
 class TapeModel
 {
   public:
-    static constexpr int kNumModels = 13; // model 0 is off (unfiltered)
+    static constexpr int kNumModels = 13; // model 0 is flat (no EQ)
 
     static const char *Name(int model);
 

@@ -14,7 +14,7 @@
 //                          Knob 2 - wet volume (noon is unity, max x2)
 //   Page 4 (LED 2 cyan)    Knob 1 - noise: hiss and hum
 //                          Knob 2 - stereo spread: channels fail independently
-//   Encoder turn       - tape model (LED 2 flashes its colour; white = off)
+//   Encoder turn       - tape model (LED 2 flashes its colour; white = flat)
 //   Encoder long press - AUX type: stop, fail, filter (LED 1 flashes it)
 //   Button 1           - bypass (LED 1: green = active, red = bypassed)
 //   Button 1 hold 1 s  - mono in: the left input feeds both channels
@@ -224,7 +224,7 @@ int main(void)
         // LED 2: page colour, or the model's colour just after a change.
         if(now < model_flash_until)
         {
-            float r = 1.0f, g = 1.0f, b = 1.0f; // model 0, off: white
+            float r = 1.0f, g = 1.0f, b = 1.0f; // model 0, flat: white
             if(model > 0)
                 Hue(0.8f * (model - 1) / (TapeModel::kNumModels - 2), &r, &g, &b);
             hw.led2.Set(r, g, b);

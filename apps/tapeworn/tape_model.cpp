@@ -8,7 +8,7 @@ using namespace tape;
 // clang-format off
 const TapeModel::Profile TapeModel::kProfiles[kNumModels] = {
     // name              hp      lp      lp_q  peak    pk_q  pk_db  gain_db
-    {"Off",              0,      0,      0.0f, 0,      0.0f,  0.0f, 0.0f},
+    {"Flat",             0,      0,      0.0f, 0,      0.0f,  0.0f, 0.0f},
     {"Reel-to-reel",     25,     16000,  0.7f, 55,     1.3f,  4.0f, 0.0f},
     {"Cassette deck",    30,     12500,  0.7f, 70,     1.0f,  2.0f, 0.5f},
     {"Walkman",          50,     10000,  0.8f, 900,    0.7f, -2.5f, 1.5f},
