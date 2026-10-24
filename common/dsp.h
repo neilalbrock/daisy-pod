@@ -156,6 +156,49 @@ class Biquad
     float z1_ = 0.0f, z2_ = 0.0f;
 };
 
+// State variable filter in topology-preserving form (Zavalishin). It stays
+// well behaved while the cutoff moves, so it can be swept once per block.
+class Svf
+{
+  public:
+    void Reset() { ic1_ = ic2_ = 0.0f; }
+
+    void Set(float freq, float q, float sample_rate)
+    {
+        float g = tanf(kPi * Clamp(freq, 10.0f, sample_rate * 0.45f) / sample_rate);
+        k_      = 1.0f / q;
+        a1_     = 1.0f / (1.0f + g * (g + k_));
+        a2_     = g * a1_;
+        a3_     = g * a2_;
+    }
+
+    // Saves a second tanf for the other channel of a stereo pair.
+    void CopyCoefs(const Svf &other)
+    {
+        k_  = other.k_;
+        a1_ = other.a1_;
+        a2_ = other.a2_;
+        a3_ = other.a3_;
+    }
+
+    // Returns the low-pass output. *bp gets the band-pass, scaled to unity
+    // gain at the centre frequency.
+    float Process(float x, float *bp)
+    {
+        float v3 = x - ic2_;
+        float v1 = a1_ * ic1_ + a2_ * v3;
+        float v2 = ic2_ + a2_ * ic1_ + a3_ * v3;
+        ic1_     = 2.0f * v1 - ic1_;
+        ic2_     = 2.0f * v2 - ic2_;
+        *bp      = v1 * k_;
+        return v2;
+    }
+
+  private:
+    float k_ = 1.414f, a1_ = 1.0f, a2_ = 0.0f, a3_ = 0.0f;
+    float ic1_ = 0.0f, ic2_ = 0.0f;
+};
+
 // First-order DC blocker, corner around 10 Hz at 48 kHz.
 class DcBlock
 {

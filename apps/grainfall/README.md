@@ -1,55 +1,126 @@
 # Grainfall
 
-Granular effects processor.
+Granular and micro-loop effects, our own take on the Hologram Microcosm: 11
+effects with 4 variations each, steered by macro controls, then pitch
+modulation, a resonant low-pass and the dry/wet mix.
 
 ```sh
 make APP=grainfall program-dfu
 ```
 
+**Work in progress.** The controls, tempo, Hold, reverse, post chain and MIDI
+map are in place, but every effect slot currently plays the same placeholder
+grain cloud (see below) until the real effects are written.
+
+## Signal flow
+
+```
+in -> Hold (live, or the held loop) -> 22 s buffer -> effect voices
+   -> pitch mod -> low-pass -> effect volume -> + dry -> limiter -> out
+```
+
 ## Controls
 
-Input is recorded continuously into a 10 s buffer in SDRAM and played back as
-a cloud of short, windowed grains. The two knobs are shared across three pages.
-Press the encoder to change page. After a page change, a knob does nothing
-until you move it, so values don't jump.
+The two knobs are shared across five pages. Press the encoder to change page.
+After a page change, a knob does nothing until you move it, so values don't
+jump.
 
 | Page (LED 2) | Knob 1 | Knob 2 |
 |---|---|---|
-| 1 (blue) | Grain size, 5 ms - 500 ms | Density, 1 - 100 grains/s |
-| 2 (magenta) | Position: how far back grains start, 0 - 2 s | Spray: random extra offset, 0 - 1 s |
-| 3 (yellow) | Dry/wet mix | Stereo spread |
+| 1 (blue) | Activity: more or less of the effect | Repeats: how long the effect goes on |
+| 2 (magenta) | Shape: square, ramp up, triangle, ramp down (quarters of the knob) | Time: subdivision 1/4, 1/2, TAP, 2x, 4x, 8x (sixths of the knob) |
+| 3 (yellow) | Filter: low-pass, fully open at max, silent at min | Mix: dry to wet |
+| 4 (cyan) | Pitch mod depth | Pitch mod rate, 0.05 - 10 Hz |
+| 5 (white) | Filter resonance | Effect volume, noon is unity, max x2 |
 
 | Control | Function |
 |---|---|
-| Encoder turn | Pitch in semitones (-24 to +24) |
+| Encoder turn | Effect and variation, Mosaic A ... Warp D (wraps round). LED 2 flashes the effect's colour, LED 1 the variation: A red, B yellow, C green, D blue |
 | Encoder press | Next page |
-| Encoder long press (0.6 s) | MIDI clock sync on/off |
-| Button 1 | Bypass (LED 1: green = active, red = bypassed) |
-| Button 2 | Freeze the buffer (LED 1 blue while frozen) |
+| Encoder long press (0.6 s) | Reverse on/off |
+| Button 1 | Tap tempo (quarter notes) |
+| Button 1 hold (1 s) | Bypass (LED 1 red) |
+| Button 2 | Hold sampler on/off. Hold it for momentary: it turns off when you let go |
+| Both buttons, 1 s | Mono in: the left input feeds both channels. LED 1 flashes cyan for on, dark for off |
+
+LED 1 is green when active, blue while Hold is on and cyan while reversed. It
+blinks off at the start of each beat.
+
+Time sets the effect's rhythmic step against the beat: TAP is one step per
+beat, 2x two, 1/4 one every four beats, and so on.
+
+**Hold** freezes the last step of input (the Time setting, between 0.25 and
+2 s) and loops it into the effect in place of the live input, so the effect
+keeps working on it. The dry signal stays live, so you can play over it.
 
 A limiter on dry + wet holds the output under -1 dBFS. Bypass fades over 5 ms
 so it doesn't click, and the buffer keeps recording while bypassed.
 
-## MIDI clock sync
+## Effects
 
-Grainfall follows MIDI clock from the Pod's TRS MIDI input or over USB MIDI.
-The Seed's USB port shows up as a MIDI device on a computer. Send clock to only
-one of them at a time.
+In encoder order. Program change numbers follow the Microcosm, which orders
+them differently.
 
-Long-press the encoder to turn sync on. While clock is arriving:
+| Effect | Program change | Description (from the Microcosm manual) |
+|---|---|---|
+| Mosaic | 21-24 | Overlapping loops at multiple speeds |
+| Seq | 17-20 | Short loops rearranged into rhythmic sequences |
+| Glide | 13-16 | Short overlapping loops that shift in pitch |
+| Haze | 25-28 | Clusters of grains, a wash of sound |
+| Tunnel | 29-32 | Cyclic micro-loop drones |
+| Strum | 33-36 | Rhythmic chains of recent note onsets |
+| Blocks | 9-12 | Rearrangements and bursts of recent notes |
+| Interrupt | 5-8 | Glitches that interrupt the dry signal |
+| Arp | 1-4 | Recent notes sequenced into arpeggios |
+| Pattern | 37-40 | Multi-tap delay rhythms |
+| Warp | 41-44 | Delay taps with filters and pitch shift |
 
-- Grains start on a note-division grid locked to the clock. MIDI Start resets
-  the grid so the next grain lands on the downbeat.
-- Density (page 1, knob 2) selects the division: 1 bar, 1/2, 1/4, 1/8, 1/8T,
-  1/16, 1/16T, 1/32, 1/32T, 1/64, 1/128.
-- Position (page 2, knob 1) snaps to 0, 1/32, 1/16, 1/8, dotted 1/8, 1/4,
-  dotted 1/4, 1/2 or 1 bar. With pitch shifted up, grains start a little
-  further back so they don't run into the record head, which moves them off
-  the grid.
-- Grain size and spray stay in milliseconds.
-- LED 1 blinks off at the start of each beat.
+### Placeholder cloud
 
-If sync is on but no clock is arriving, LED 1 flickers and the effect runs
-free on the knob settings. It locks as soon as clock arrives, and falls back
-to free running within about 0.3 s of the clock stopping.
+Until each effect is written, its slot plays this:
 
+- **Grains:** grains start on each Time step, and at random in between.
+- **Activity:** extra grains, 2 to 60 a second.
+- **Repeats:** grain length, 20 ms to 1 s.
+- **Shape:** the grain envelope.
+- **Variation:** the playback speeds. A plays at 1x; B at 1x and 2x; C at 1x and 0.5x; D at 0.5x, 1x and 2x.
+- **Reach:** grains reach up to one step back in time.
+
+## MIDI
+
+Grainfall listens on the Pod's TRS MIDI input and over USB MIDI (the Seed's
+USB port shows up as a MIDI device on a computer), on channel 1, with the
+Microcosm's map. Send clock to only one of them at a time.
+
+**Clock:** MIDI Start (or Continue) switches to the incoming clock, and Stop
+switches back to the internal tempo, which carries on from where the clock
+left it. If the clock just stops arriving, it does the same. Tap tempo is
+ignored while following clock.
+
+**Program change** 1-44 (sent as 0-43) selects the effect and variation:
+four per effect in the order above.
+
+**Control change:**
+
+| CC | Function | Range |
+|---|---|---|
+| 5 | Time subdivision | 0 = 1/4, 1 = 1/2, 2 = TAP, 3 = 2x, 4 = 4x, 5 = 8x |
+| 6 | Activity | 0-127 |
+| 7 | Shape | 0-31 square, 32-63 ramp up, 64-95 triangle, 96-127 ramp down |
+| 8 | Filter | 0-127 |
+| 9 | Mix | 0-127 |
+| 10 | Tempo, 40-240 BPM | 0-127 |
+| 11 | Repeats | 0-127 |
+| 14 | Pitch mod rate | 0-127 |
+| 15 | Filter resonance | 0-127 |
+| 16 | Effect volume | 0-127 |
+| 19 | Pitch mod depth | 0-127 |
+| 47 | Reverse: toggles on 64-127 | |
+| 48 | Hold: 0-63 off, 64-127 on | |
+| 93 | Tap tempo: taps on 64-127 | |
+| 102 | Bypass: 0-63 bypass, 64-127 engage | |
+
+A CC moves the value just as a knob would. If that parameter's page is
+showing, its knob lets go until you move it, so it doesn't snap back.
+
+The Microcosm's reverb, phrase looper and preset CCs are ignored.

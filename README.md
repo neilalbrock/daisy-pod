@@ -5,13 +5,14 @@ a separate app under `apps/`, all built from `main`.
 
 | App | Description |
 |---|---|
-| [grainfall](apps/grainfall/README.md) | Granular processor with MIDI clock sync (default) |
+| [grainfall](apps/grainfall/README.md) | Granular and micro-loop effects after the Hologram Microcosm, with tap tempo, MIDI clock and the Microcosm's MIDI map (default; work in progress) |
 | [tapeworn](apps/tapeworn/README.md) | Lo-fi tape machine: wow, flutter, hysteresis saturation, tape models, failures |
 | [starter](apps/starter/README.md) | Low-pass filter toolchain and hardware check; template for new apps |
 
 Code shared between apps goes in `common/`: `MidiClock`, `PagedKnobs`,
-`PressHold` (tap vs hold on a button), `BypassFade`, `Limiter`, and the DSP
-helpers in `dsp.h` (`Rng`, `Biquad`, `DcBlock` and friends).
+`PressHold` (tap vs hold on a button), `BypassFade`, `Limiter`, `Hue()` for LED
+colours, and the DSP helpers in `dsp.h` (`Rng`, `Biquad`, `Svf`, `DcBlock` and
+friends).
 
 ## Toolchain
 

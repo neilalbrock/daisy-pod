@@ -2,7 +2,8 @@
 //
 // Shares a few physical knobs across pages of parameters. After a page
 // change (or at startup) a knob does nothing until it moves, so values don't
-// jump to wherever the knob happens to be. The app reads the knobs and
+// jump to wherever the knob happens to be. Values can also be set from
+// elsewhere, such as MIDI CC, with the same takeover. The app reads the knobs and
 // passes the values in, so this doesn't depend on libDaisy. Call it only
 // from the audio callback, apart from Latch() before audio starts.
 
@@ -29,6 +30,7 @@ class PagedKnobs
         for(int k = 0; k < Knobs; k++)
         {
             at_entry_[k] = knobs[k];
+            last_[k]     = knobs[k];
             live_[k]     = false;
         }
     }
@@ -45,10 +47,23 @@ class PagedKnobs
     {
         for(int k = 0; k < Knobs; k++)
         {
+            last_[k] = knobs[k];
             if(!live_[k] && fabsf(knobs[k] - at_entry_[k]) > kTakeover)
                 live_[k] = true;
             if(live_[k])
                 values_[page_][k] = knobs[k];
+        }
+    }
+
+    // Sets a value directly. If its page is showing, that knob lets go until
+    // it moves again, so it doesn't snap the value straight back.
+    void Set(int page, int knob, float value)
+    {
+        values_[page][knob] = value;
+        if(page == page_)
+        {
+            at_entry_[knob] = last_[knob];
+            live_[knob]     = false;
         }
     }
 
@@ -60,6 +75,7 @@ class PagedKnobs
 
     float values_[Pages][Knobs];
     float at_entry_[Knobs] = {};
+    float last_[Knobs]     = {}; // knob positions at the last Update
     bool  live_[Knobs]     = {};
     int   page_            = 0;
 };

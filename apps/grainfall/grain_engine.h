@@ -1,9 +1,14 @@
-// Grainfall - granular engine
+// Grainfall - engine
 //
-// Records stereo input continuously into a circular buffer and plays it back
-// as a cloud of short, windowed grains. All memory is supplied by the caller
-// (the buffers belong in SDRAM) and Process() never allocates, so it is safe
-// to call from the audio callback.
+// Signal flow, in stereo:
+//
+//   in -> Hold (live, or the held loop) -> sample buffer -> effect voices
+//      -> pitch mod -> low-pass -> effect volume -> wet out
+//
+// The input also feeds an onset detector, so effects can pick out notes.
+// Dry/wet mix is left to the caller. All memory is supplied by the caller
+// (the buffers belong in SDRAM) and nothing allocates, so it is safe to run
+// from the audio callback. libDaisy-free, so it also builds on a desktop.
 
 #pragma once
 
@@ -11,60 +16,91 @@
 #include <cstdint>
 
 #include "dsp.h"
+#include "effect.h"
+#include "fx_cloud.h"
+#include "hold.h"
+#include "onset.h"
+#include "post_fx.h"
+#include "sample_buffer.h"
+#include "voice.h"
 
 class GrainEngine
 {
   public:
-    static constexpr size_t kMaxGrains = 32;
+    // In the order the encoder steps through them, as on the Microcosm.
+    enum class EffectId
+    {
+        kMosaic,
+        kSeq,
+        kGlide,
+        kHaze,
+        kTunnel,
+        kStrum,
+        kBlocks,
+        kInterrupt,
+        kArp,
+        kPattern,
+        kWarp,
+    };
+    static constexpr int kNumEffects    = 11;
+    static constexpr int kNumVariations = 4;
+    static constexpr int kNumSubdivs    = 6;
 
     struct Params
     {
-        float size_s      = 0.1f;  // grain length, seconds
-        float density_hz  = 10.0f; // grains started per second
-        bool  ext_trigger = false; // grains start only on Trigger(); density_hz
-                                   // is then just the expected rate, for levels
-        float position_s  = 0.2f;  // how far behind the record head grains start
-        float spray_s     = 0.0f;  // random extra offset added to position
-        float pitch       = 1.0f;  // playback rate (2 = up an octave)
-        float spread      = 0.5f;  // random stereo placement, 0 = centred, 1 = hard L/R
-        bool  freeze      = false; // stop recording, keep granulating what's held
+        EffectId effect    = EffectId::kHaze;
+        int      variation = 0;    // 0..3 = A..D
+        float    activity  = 0.5f; // 0..1
+        float    repeats   = 0.5f; // 0..1
+        int      shape     = 0;    // 0..3: square, ramp up, triangle, ramp down
+        int      subdiv    = 2;    // 0..5: 1/4, 1/2, TAP, 2x, 4x, 8x
+        bool     reverse   = false;
+        bool     hold      = false;
+
+        // From Tempo, at the start of the block
+        float samples_per_beat = 24000.0f;
+        float beat_pos         = 0.0f;
+
+        PostFx::Params post;
     };
 
-    // buf_l/buf_r: buffer_len samples each.
-    void Init(float sample_rate, float *buf_l, float *buf_r, size_t buffer_len);
+    // buffer: buffer_frames * 2 floats; hold_buffer: hold_frames * 2 floats.
+    // Both frame counts must be powers of two. The hold buffer must be
+    // longer than the longest hold (2 s) plus 20 ms.
+    void Init(float  sample_rate,
+              float *buffer,
+              size_t buffer_frames,
+              float *hold_buffer,
+              size_t hold_frames);
 
-    // Read once per block from the audio callback; values are clamped.
-    void SetParams(const Params &p);
+    // Once per block, before Process(): takes the controls and lets the
+    // current effect schedule its voices.
+    void BeginBlock(const Params &p, int block_frames);
 
-    // Starts a grain now. Call before Process() for the sample it lands on.
-    void Trigger() { StartGrain(); }
-
-    // Records in_l/in_r (unless frozen) and returns the wet grain cloud.
     void Process(float in_l, float in_r, float *out_l, float *out_r);
 
+    int NumVoices() const { return voices_.NumActive(); }
+
   private:
-    struct Grain
-    {
-        bool  active;
-        float pos;       // read position in the buffer, fractional samples
-        float inc;       // read increment per output sample (pitch)
-        float phase;     // 0..1 through the window
-        float phase_inc; // 1 / length in samples
-        float gain_l, gain_r;
-    };
+    Effect *EffectFor(EffectId id);
 
-    void  StartGrain();
-    float Read(const float *buf, float pos) const;
+    float sample_rate_ = 48000.0f;
 
-    float  sample_rate_ = 48000.0f;
-    float *buf_l_       = nullptr;
-    float *buf_r_       = nullptr;
-    size_t len_         = 0;
-    size_t write_       = 0;
+    SampleBuffer  buffer_;
+    VoicePool     voices_;
+    Hold          hold_;
+    OnsetDetector onset_detector_;
+    OnsetLog      onsets_;
+    PostFx        post_;
+    dsp::Rng      rng_;
 
-    Params   params_;
-    Grain    grains_[kMaxGrains] = {};
-    float    spawn_acc_          = 0.0f; // counts up to 1, then starts a grain
-    float    norm_               = 1.0f; // output gain compensating for overlap
-    dsp::Rng rng_;
+    FxCloud cloud_;
+
+    Params  params_;
+    Effect *effect_     = nullptr;
+    bool    first_      = true;
+    int32_t last_step_  = -1;
+    bool    onset_      = false; // seen since the last block
+    float   hold_len_   = 0.0f;  // frames, used when Hold engages
+    uint32_t preroll_   = 0;     // onsets are logged this far before detection
 };

@@ -26,6 +26,7 @@
 
 #include "daisy_pod.h"
 #include "bypass_fade.h"
+#include "colour.h"
 #include "limiter.h"
 #include "paged_knobs.h"
 #include "press_hold.h"
@@ -153,15 +154,6 @@ void AudioCallback(AudioHandle::InputBuffer  in,
         out[0][i] = fx_l;
         out[1][i] = fx_r;
     }
-}
-
-// Hue 0..1 around the colour wheel, full saturation and value.
-void Hue(float h, float *r, float *g, float *b)
-{
-    float x = h * 6.0f;
-    *r      = fminf(fmaxf(fabsf(x - 3.0f) - 1.0f, 0.0f), 1.0f);
-    *g      = fminf(fmaxf(2.0f - fabsf(x - 2.0f), 0.0f), 1.0f);
-    *b      = fminf(fmaxf(2.0f - fabsf(x - 4.0f), 0.0f), 1.0f);
 }
 
 int main(void)

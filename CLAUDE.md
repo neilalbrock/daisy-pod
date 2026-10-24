@@ -8,7 +8,7 @@ Bare-metal firmware experiments for the Electrosmith Daisy Pod (Daisy Seed 3, ST
 
 Each experiment is a separate app in `apps/<name>/`, and all of them live on `main` (experiments are folders, not branches). Code shared between apps goes in `common/`. Current apps:
 
-- `apps/grainfall/`: granular processor with MIDI clock sync. This is the default `APP`.
+- `apps/grainfall/`: granular and micro-loop effects after the Hologram Microcosm (work in progress). This is the default `APP`.
 - `apps/tapeworn/`: lo-fi tape machine (after Chase Bliss Generation Loss MKII).
 - `apps/starter/`: low-pass filter hardware check, and the template that `make new` copies.
 
@@ -63,7 +63,7 @@ Every app's `main.cpp` follows the standard libDaisy pattern:
 
 Memory: put large audio buffers (grain and delay lines) in the 64 MB external SDRAM with `DSY_SDRAM_BSS`, for example `float DSY_SDRAM_BSS buffer[48000 * 10];`. Internal RAM is small.
 
-Grainfall: `apps/grainfall/main.cpp` holds the hardware setup and paged control handling. The granular DSP is in `apps/grainfall/grain_engine.{h,cpp}` (`GrainEngine`). `common/midi_clock.{h,cpp}` (`MidiClock`) follows incoming MIDI clock for tempo sync. MIDI (Pod TRS and USB) is polled in the audio callback so ticks are timestamped to within a block.
+Grainfall: `apps/grainfall/main.cpp` holds the hardware setup, paged controls, buttons and the MIDI map (Microcosm's CCs and program changes). MIDI (Pod TRS and USB) is polled in the audio callback so clock ticks are timestamped to within a block. `GrainEngine` (`grain_engine.{h,cpp}`) runs the chain: `Hold` (`hold.h`) -> `SampleBuffer` (interleaved stereo, power-of-two, SDRAM) -> the current `Effect` -> `PostFx` (pitch mod, resonant low-pass, volume). Each effect (`effect.h`) is a scheduler that, once per block, starts and steers voices from the `VoicePool` (`voice.{h,cpp}`: slices of the buffer played as grains or loops, with envelope, rate, reverse, filter and bitcrush), using the tempo grid and onsets (`onset.h`). `Tempo` (`tempo.{h,cpp}`) combines tap tempo with `MidiClock` (`common/midi_clock.{h,cpp}`). Every effect slot currently uses the placeholder `FxCloud` (`fx_cloud.{h,cpp}`). Grainfall is close to the 128 KB internal flash limit, so the full set of effects will need `APP_TYPE = BOOT_SRAM`.
 
 Tapeworn: `apps/tapeworn/main.cpp` holds the hardware setup and paged controls. `TapeEngine` (`tape_engine.{h,cpp}`) runs the chain, built from `Hysteresis` (Jiles-Atherton saturation, 2x oversampled), `Wow`/`Flutter` (`tape_wobble`), `TapeFailure` and `TapeModel` (EQ profiles).
 
