@@ -1,0 +1,57 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Daisy Pod</title>
+    <link rel="stylesheet" href="css/style.css" />
+    <script type="module" src="js/main.js"></script>
+  </head>
+  <body>
+    <header class="bar">
+      <div class="brand">
+        <span class="brand-mark" aria-hidden="true"></span>
+        <span class="brand-name">Daisy Pod</span>
+        <span class="app-name" id="app-name"></span>
+      </div>
+      <div class="connection">
+        <label>In <select id="input" aria-label="MIDI input from the Pod"></select></label>
+        <label>Out <select id="output" aria-label="MIDI output to the Pod"></select></label>
+        <button type="button" id="connect" class="connect">Connect</button>
+        <span class="status" id="status" data-state="off" role="status">Not connected</span>
+      </div>
+    </header>
+
+    <main>
+      <p class="notice" id="notice" hidden></p>
+
+      <section class="scope" aria-label="Sample buffer">
+        <div class="scope-head">
+          <h2>Buffer</h2>
+          <div class="legend" aria-hidden="true">
+            <span><i class="sw sw-slow"></i>slower</span>
+            <span><i class="sw sw-unity"></i>normal</span>
+            <span><i class="sw sw-fast"></i>faster</span>
+            <span><i class="sw sw-tap"></i>delay tap</span>
+            <span><i class="sw sw-onset"></i>note</span>
+          </div>
+          <div class="span" role="group" aria-label="Time shown">
+            <button type="button" data-span="2" aria-pressed="false">2 s</button>
+            <button type="button" data-span="8" aria-pressed="true">8 s</button>
+            <button type="button" data-span="22" aria-pressed="false">All</button>
+          </div>
+        </div>
+        <canvas id="buffer" class="buffer" role="img"
+          aria-label="The sample buffer over time, with the voices and delay taps reading from it"></canvas>
+      </section>
+
+      <section class="readouts">
+        <div class="readout" id="tempo"></div>
+        <div class="readout" id="levels"><div class="readout-title">Levels</div></div>
+        <div class="readout" id="cpu"></div>
+      </section>
+
+      <section class="controls" id="controls" aria-label="Controls"></section>
+    </main>
+  </body>
+</html>

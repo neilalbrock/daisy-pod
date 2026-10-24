@@ -198,6 +198,30 @@ void VoicePool::ReleaseAll()
             v.releasing = true;
 }
 
+int VoicePool::Heads(weblink::Head *out, int max) const
+{
+    int n = 0;
+    for(const auto &v : voices_)
+    {
+        if(!v.active || n >= max)
+            continue;
+        float p    = v.offset * v.inv_length;
+        float fade = fminf(fminf(p, 1.0f - p) * v.inv_fade, 1.0f);
+        float pos  = v.reverse ? v.length - v.offset : v.offset;
+
+        weblink::Head &h = out[n++];
+        h.start          = v.start;
+        h.length         = v.length;
+        h.pos            = v.start + (uint32_t)pos;
+        h.rate           = v.rate;
+        h.reverse        = v.reverse;
+        h.tap            = false;
+        h.amp            = Shape(v.env, p) * fade * v.gain * v.level * v.release;
+        h.pan            = v.pan_r * v.pan_r * 0.5f; // pan_l^2 + pan_r^2 = 2
+    }
+    return n;
+}
+
 int VoicePool::NumActive() const
 {
     int n = 0;

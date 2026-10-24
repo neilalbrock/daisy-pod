@@ -1,0 +1,179 @@
+// Web link - SysEx protocol between an app and the web control surface
+//
+// The page in web/ talks to the Seed over USB MIDI. It sets parameters and
+// asks for information with short SysEx commands; while it keeps sending
+// keep-alives, the app streams its parameter list, state and a telemetry
+// frame (tempo, levels, CPU, buffer and read heads) back as SysEx. Nothing
+// is sent when no page is listening, so a DAW never sees it.
+//
+// Every message is F0 7D 01 <type> <payload> F7: 7D is the manufacturer ID
+// set aside for non-commercial use, 01 the protocol version. Payload
+// numbers are 7, 14 or 21 bits wide, most significant 7 bits first, and
+// strings are 7-bit ASCII ending in 0. web/js/protocol.js is the other half
+// and must match.
+//
+// libDaisy-free: the app reads SysEx from its MIDI handler into Receive()
+// (from the audio callback) and sends what the Writer builds (from the main
+// loop).
+
+#pragma once
+
+#include <cstddef>
+#include <cstdint>
+
+namespace weblink
+{
+constexpr uint8_t kId      = 0x7D;
+constexpr uint8_t kVersion = 1;
+
+// libDaisy's USB MIDI transmit buffer holds 768 bytes of SysEx and doesn't
+// check, so stay well under it.
+constexpr size_t kMaxMessage = 720;
+
+enum class Msg : uint8_t
+{
+    // App to page
+    kHello = 0x01, // app name, layout, group and meter names
+    kParam = 0x02, // one parameter's description
+    kState = 0x03, // every parameter's value
+    kFrame = 0x04, // telemetry sections, below
+
+    // Page to app
+    kRequest   = 0x40, // send everything from the start
+    kSet       = 0x41, // index (7), value (14)
+    kKeepAlive = 0x42,
+};
+
+enum class Kind : uint8_t
+{
+    kContinuous, // value 0..16383 for 0..1
+    kChoice,     // value is the option index
+    kToggle,     // 0 or 1
+    kTrigger,    // any value fires it
+};
+
+// Telemetry frame sections, each starting with its tag.
+enum class Section : uint8_t
+{
+    kTempo    = 1, // bpm x 10 (14), beat x 1000 (21), steps per beat x 4 (7), clock (7)
+    kLevels   = 2, // count (7), then peak since last frame x 16383 (14) each
+    kCpu      = 3, // average % (7), peak % (7)
+    kBuffer   = 4, // write head (21), onsets: count (7) + frame (21) each,
+                   // heads: count (7) + Head each
+    kOverview = 5, // first column (14), count (7), sqrt(peak) x 127 (7) each
+};
+
+// One read head in the buffer, for the kBuffer section.
+struct Head
+{
+    uint32_t start;  // first frame of the slice
+    float    length; // slice length, frames (0 for a delay tap)
+    uint32_t pos;    // frame being read now
+    float    rate;   // playback speed, > 0
+    bool     reverse;
+    bool     tap; // a delay tap rather than a voice
+    float    amp; // 0..1
+    float    pan; // 0 = left, 1 = right
+};
+
+struct Param
+{
+    const char        *name;
+    Kind               kind;
+    uint8_t            group;   // index into the app's group names
+    const char *const *options; // kChoice
+    uint8_t            num_options;
+    uint8_t            columns; // kChoice: lay the options out in this many columns
+};
+
+// Builds one message. The buffer belongs to the caller (it can live in
+// SDRAM: the Writer has no constructor that touches it).
+class Writer
+{
+  public:
+    void Init(uint8_t *buf) { buf_ = buf; }
+
+    void Begin(Msg type);
+    void U7(uint32_t v);
+    void U14(uint32_t v);
+    void U21(uint32_t v);
+    void Unit(float v); // 0..1 as 14 bits
+    void Str(const char *s);
+
+    // Appends F7. Returns the length, or 0 if the message overflowed.
+    size_t End();
+
+    // Bytes left before kMaxMessage, keeping one for F7.
+    size_t Room() const { return n_ + 1 < kMaxMessage ? kMaxMessage - 1 - n_ : 0; }
+
+    uint8_t *Data() { return buf_; }
+
+  private:
+    void Byte(uint8_t b);
+
+    uint8_t *buf_      = nullptr;
+    size_t   n_        = 0;
+    bool     overflow_ = false;
+};
+
+// Standard messages.
+void WriteParam(Writer &w, int index, const Param &p);
+void WriteHead(Writer &w, const Head &h);
+
+// What a command from the page asks for.
+struct Command
+{
+    Msg     type;
+    uint8_t index; // kSet
+    int     raw;   // kSet: the 14-bit value
+};
+
+// Parses a SysEx payload as libDaisy delivers it (no F0 or F7). False if
+// it isn't ours.
+bool Parse(const uint8_t *data, int length, Command *out);
+
+// Tracks whether a page is listening and what it still needs. Receive()
+// runs in the audio callback, Next() in the main loop: they share only
+// plain flags and counters.
+class Session
+{
+  public:
+    static constexpr uint32_t kTimeoutMs = 3000;
+    static constexpr uint32_t kStateMs   = 500; // resend state at least this often
+    static constexpr uint32_t kChangeMs  = 50;  // and changes at most this often
+    static constexpr uint32_t kFrameMs   = 30;
+
+    void Init(int num_params) { num_params_ = num_params; }
+
+    // Handles a request or keep-alive. Returns true, with *set filled, for
+    // a kSet the app should apply.
+    bool Receive(const uint8_t *data, int length, uint32_t now_ms, Command *set);
+
+    enum class Send
+    {
+        kNothing,
+        kHello,
+        kParam,
+        kState,
+        kFrame,
+    };
+
+    // The message to send now, if any. For kParam, *param is its index.
+    // state_changed: the app's values differ from the last state sent.
+    Send Next(uint32_t now_ms, bool state_changed, int *param);
+
+    // True once each time the hello goes out (to a new page, or on
+    // request): the app should start its buffer overview from scratch.
+    bool TakeRestart();
+
+  private:
+    int               num_params_ = 0;
+    volatile uint32_t last_heard_ = 0;
+    volatile bool     heard_      = false;
+    volatile bool     requested_  = false;
+    int               next_param_ = -1; // -1: hello next
+    bool              restart_    = false;
+    uint32_t          last_state_ = 0;
+    uint32_t          last_frame_ = 0;
+};
+} // namespace weblink

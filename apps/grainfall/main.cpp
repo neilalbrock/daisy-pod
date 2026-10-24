@@ -32,6 +32,9 @@
 // MIDI on the Pod's TRS input and over USB, channel 1, follows the
 // Microcosm's map: clock (MIDI Start follows it, Stop lets go), program
 // change 1-44 for the effects, and CCs for the controls. See README.md.
+//
+// Over USB it also talks to the web control surface (web/, `make web`),
+// streaming the buffer, voices, tempo, levels and CPU while the page is open.
 
 #include <cmath>
 
@@ -43,6 +46,9 @@
 #include "paged_knobs.h"
 #include "press_hold.h"
 #include "tempo.h"
+#include "util/CpuLoadMeter.h"
+#include "web_link.h"
+#include "web_view.h"
 
 using namespace daisy;
 
@@ -52,12 +58,19 @@ float DSY_SDRAM_BSS buffer[kBufferFrames * 2];
 float DSY_SDRAM_BSS hold_buffer[kHoldFrames * 2];
 float DSY_SDRAM_BSS mod_buffer[PostFx::kModLen * 2]; // pitch mod delay
 
+// For the web page: a peak per 256 frames (5 ms) of the buffer, and the
+// message being sent.
+constexpr size_t      kOverviewColumns = 4096;
+uint8_t DSY_SDRAM_BSS overview[kOverviewColumns];
+uint8_t DSY_SDRAM_BSS web_buffer[weblink::kMaxMessage];
+
 DaisyPod       hw;
 MidiUsbHandler usb_midi;
 GrainEngine    engine;
 Tempo          tempo;
 Limiter        limiter; // on dry + wet, so a loud wet signal doesn't clip
 BypassFade     bypass_fade;
+CpuLoadMeter   cpu_meter;
 
 constexpr int kNumPages = 5;
 constexpr int kNumKnobs = 2;
@@ -154,6 +167,150 @@ void HandleCc(uint8_t cc, uint8_t value, uint32_t now)
     }
 }
 
+// ---------------------------------------------------------------- Web link
+//
+// The page in web/ (see web_view.h). It sets values through SysEx, which
+// arrives with the other MIDI in the audio callback; the main loop sends it
+// what it needs.
+
+using namespace web_view;
+
+weblink::Session web;
+weblink::Writer  web_out;
+int              web_state[kNumParams]; // values in the last state sent
+OverviewCursor   overview_cursor = {0};
+
+// Filled by the audio callback when the main loop asks, so a frame shows
+// one moment.
+Telemetry DSY_SDRAM_BSS telemetry;
+volatile bool           want_telemetry = false;
+float                   peaks[3]       = {}; // running, in the callback
+
+// A value from the page, in the audio callback.
+void SetParam(int index, int raw, uint32_t now, uint32_t now_ms)
+{
+    float v = raw / 16383.0f;
+    switch(index)
+    {
+        case kParamEffect: SelectSlot(raw, now_ms); break;
+        case kParamShape: pages.Set(1, 0, (raw + 0.5f) / 4.0f); break;
+        case kParamTime: pages.Set(1, 1, (raw + 0.5f) / GrainEngine::kNumSubdivs); break;
+        case kParamTempo: tempo.SetBpm(kMinBpm + v * kBpmRange); break;
+        case kParamTap: tempo.Tap(now); break;
+        case kParamReverse: reverse = raw != 0; break;
+        case kParamHold: hold_on = raw != 0; break;
+        case kParamBypass: bypass = raw != 0; break;
+        case kParamMono: mono_in = raw != 0; break;
+        default:
+            if(index >= kParamActivity && index <= kParamVolume)
+                pages.Set((index - 1) / 2, (index - 1) % 2, v);
+            break;
+    }
+}
+
+// A value for the page, in the main loop.
+int ParamRaw(int index)
+{
+    auto unit = [](float v) { return (int)(fminf(fmaxf(v, 0.0f), 1.0f) * 16383.0f + 0.5f); };
+    switch(index)
+    {
+        case kParamEffect: return slot;
+        case kParamShape: return (int)fminf(pages.Value(1, 0) * 4.0f, 3.0f);
+        case kParamTime:
+            return (int)fminf(pages.Value(1, 1) * GrainEngine::kNumSubdivs,
+                              GrainEngine::kNumSubdivs - 1);
+        case kParamTempo:
+        {
+            float bpm = 60.0f * hw.AudioSampleRate() / tempo.SamplesPerBeat();
+            return unit((bpm - kMinBpm) / kBpmRange);
+        }
+        case kParamTap: return 0;
+        case kParamReverse: return reverse;
+        case kParamHold: return hold_on;
+        case kParamBypass: return bypass;
+        case kParamMono: return mono_in;
+        default: return unit(pages.Value((index - 1) / 2, (index - 1) % 2));
+    }
+}
+
+// In the audio callback, when asked.
+void FillTelemetry(int subdiv)
+{
+    Snapshot(engine, &telemetry);
+    for(int i = 0; i < 3; i++)
+    {
+        telemetry.peaks[i] = peaks[i];
+        peaks[i]           = 0.0f;
+    }
+    telemetry.beat             = tempo.BeatPos();
+    telemetry.samples_per_beat = tempo.SamplesPerBeat();
+    telemetry.steps_per_beat   = GrainEngine::StepsPerBeat(subdiv);
+    telemetry.following        = tempo.Following();
+}
+
+// Asks the audio callback for a snapshot and waits for it (a block, 83 us).
+bool TakeTelemetry()
+{
+    want_telemetry = true;
+    uint32_t start = System::GetUs();
+    while(want_telemetry)
+    {
+        if(System::GetUs() - start > 2000)
+        {
+            want_telemetry = false;
+            return false;
+        }
+    }
+    return true;
+}
+
+// From the main loop: sends the page the next message it needs, if any.
+void SendWeb(uint32_t now_ms)
+{
+    int  raw[kNumParams];
+    bool changed = false;
+    for(int i = 0; i < kNumParams; i++)
+    {
+        raw[i] = ParamRaw(i);
+        // The tempo wavers with MIDI clock; the regular resend covers it.
+        if(i != kParamTempo && raw[i] != web_state[i])
+            changed = true;
+    }
+
+    weblink::Writer &w     = web_out;
+    int              param = 0;
+    switch(web.Next(now_ms, changed, &param))
+    {
+        case weblink::Session::Send::kHello:
+            WriteHello(w, hw.AudioSampleRate(), kBufferFrames, kOverviewColumns);
+            break;
+        case weblink::Session::Send::kParam: weblink::WriteParam(w, param, kParams[param]); break;
+        case weblink::Session::Send::kState:
+            w.Begin(weblink::Msg::kState);
+            w.U7(kNumParams);
+            for(int i = 0; i < kNumParams; i++)
+            {
+                w.U14((uint32_t)raw[i]);
+                web_state[i] = raw[i];
+            }
+            break;
+        case weblink::Session::Send::kFrame:
+            if(!TakeTelemetry())
+                return;
+            WriteFrame(w, telemetry, hw.AudioSampleRate(), cpu_meter.GetAvgCpuLoad(),
+                       cpu_meter.GetMaxCpuLoad(), overview, kOverviewColumns,
+                       web.TakeRestart(), &overview_cursor);
+            cpu_meter.Reset();
+            break;
+        default: return;
+    }
+    size_t size = w.End();
+    if(size > 0)
+        usb_midi.SendMessage(w.Data(), size);
+}
+
+// ---------------------------------------------------------------- MIDI
+
 void HandleMidi(MidiEvent e, uint32_t now, uint32_t now_ms)
 {
     switch(e.type)
@@ -175,6 +332,14 @@ void HandleMidi(MidiEvent e, uint32_t now, uint32_t now_ms)
                 HandleCc(cc.control_number, cc.value, now);
             break;
         }
+        case SystemCommon:
+            if(e.sc_type == SystemExclusive)
+            {
+                weblink::Command c;
+                if(web.Receive(e.sysex_data, e.sysex_message_len, now_ms, &c))
+                    SetParam(c.index, c.raw, now, now_ms);
+            }
+            break;
         case ProgramChange:
         {
             ProgramChangeEvent pc = e.AsProgramChange();
@@ -251,6 +416,7 @@ void AudioCallback(AudioHandle::InputBuffer  in,
                    AudioHandle::OutputBuffer out,
                    size_t                    size)
 {
+    cpu_meter.OnBlockStart();
     hw.ProcessAllControls();
     uint32_t now    = sample_count;
     uint32_t now_ms = System::GetNow();
@@ -327,8 +493,19 @@ void AudioCallback(AudioHandle::InputBuffer  in,
         bypass_fade.Process(bypass, in_l, in_r, &fx_l, &fx_r);
         out[0][i] = fx_l;
         out[1][i] = fx_r;
+
+        peaks[0] = fmaxf(peaks[0], fmaxf(fabsf(in_l), fabsf(in_r)));
+        peaks[1] = fmaxf(peaks[1], fmaxf(fabsf(wet_l), fabsf(wet_r)));
+        peaks[2] = fmaxf(peaks[2], fmaxf(fabsf(fx_l), fabsf(fx_r)));
     }
     sample_count += size;
+
+    if(want_telemetry)
+    {
+        FillTelemetry(p.subdiv);
+        want_telemetry = false;
+    }
+    cpu_meter.OnBlockEnd();
 }
 
 int main(void)
@@ -339,12 +516,19 @@ int main(void)
 
     engine.Init(hw.AudioSampleRate(), buffer, kBufferFrames, hold_buffer,
                 kHoldFrames, mod_buffer);
+    engine.SetOverview(overview, kOverviewColumns);
+    cpu_meter.Init(hw.AudioSampleRate(), hw.AudioBlockSize());
+    web.Init(kNumParams);
+    web_out.Init(web_buffer);
     tempo.Init(hw.AudioSampleRate());
     limiter.Init(hw.AudioSampleRate());
     bypass_fade.Init(hw.AudioSampleRate());
 
     MidiUsbHandler::Config usb_cfg;
     usb_cfg.transport_config.periph = MidiUsbTransport::Config::INTERNAL;
+    // A long SysEx message to the web page can still be going out when the
+    // next one is ready; wait up to 2 ms for it (in the main loop).
+    usb_cfg.transport_config.tx_retry_count = 20;
     usb_midi.Init(usb_cfg);
     usb_midi.StartReceive();
     hw.midi.StartReceive();
@@ -411,6 +595,8 @@ int main(void)
             hw.led2.Set(c[0], c[1], c[2]);
         }
         hw.UpdateLeds();
-        System::Delay(20);
+
+        SendWeb(now);
+        System::Delay(10);
     }
 }

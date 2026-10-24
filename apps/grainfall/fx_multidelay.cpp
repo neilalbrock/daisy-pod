@@ -187,6 +187,25 @@ void MultiTap::Process(const SampleBuffer &buf,
     *fb_r += SoftClip(dc_r_.Process(lp_r_) * feedback_);
 }
 
+int MultiTap::Heads(const SampleBuffer &buf, weblink::Head *out, int max) const
+{
+    int n = count_ < max ? count_ : max;
+    for(int k = 0; k < n; k++)
+    {
+        float          rate = taps_[k].Rate();
+        weblink::Head &h    = out[k];
+        h.pos               = buf.WritePos() - (uint32_t)taps_[k].Delay();
+        h.start             = h.pos;
+        h.length            = 0.0f;
+        h.rate              = fabsf(rate);
+        h.reverse           = rate < 0.0f;
+        h.tap               = true;
+        h.amp               = Clamp(0.7f * (gain_l_[k] + gain_r_[k]), 0.0f, 1.0f);
+        h.pan               = (k & 1) ? 0.75f : 0.25f; // as Setup() pans them
+    }
+    return n;
+}
+
 // ---------------------------------------------------------------- Pattern
 
 void FxPattern::Block(const EffectContext &ctx)

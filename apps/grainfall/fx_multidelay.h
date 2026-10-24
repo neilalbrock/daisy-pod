@@ -55,6 +55,9 @@ class TapReader
 
     void Read(const SampleBuffer &buf, float *l, float *r);
 
+    float Delay() const { return delay_ < 0.0f ? target_ : delay_; }
+    float Rate() const { return rate_; }
+
     // Moves on a sample without reading, for a tap that's faded out.
     void Skip()
     {
@@ -88,6 +91,7 @@ class MultiTap : public Effect
     void Reset() override;
     void Process(const SampleBuffer &buf, float in_l, float in_r, float *l,
                  float *r, float *fb_l, float *fb_r) override;
+    int  Heads(const SampleBuffer &buf, weblink::Head *out, int max) const override;
 
   protected:
     enum class TapFilter

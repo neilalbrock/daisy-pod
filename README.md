@@ -11,8 +11,16 @@ a separate app under `apps/`, all built from `main`.
 
 Code shared between apps goes in `common/`: `MidiClock`, `PagedKnobs`,
 `PressHold` (tap vs hold on a button), `BypassFade`, `Limiter`, `Hue()` for LED
-colours, and the DSP helpers in `dsp.h` (`Rng`, `Biquad`, `Svf`, `DcBlock` and
-friends).
+colours, the DSP helpers in `dsp.h` (`Rng`, `Biquad`, `Svf`, `DcBlock` and
+friends), and the web link protocol (`web_link.h`).
+
+## Web control surface
+
+`web/` is a page that connects to the Pod over USB MIDI and shows what the
+app is doing (the buffer with every voice and delay tap, the beat grid, note
+onsets, levels and CPU) next to all its controls. Run `make web` and open
+http://localhost:8000 in Chrome or Edge. So far grainfall supports it; see
+[web/README.md](web/README.md).
 
 ## Toolchain
 

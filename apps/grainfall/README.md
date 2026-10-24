@@ -303,3 +303,13 @@ A CC moves the value just as a knob would. If that parameter's page is
 showing, its knob lets go until you move it, so it doesn't snap back.
 
 The Microcosm's reverb, phrase looper and preset CCs are ignored.
+
+## Web control surface
+
+With the Pod plugged in by USB, `make web` and http://localhost:8000 (Chrome
+or Edge) show the buffer with every voice and delay tap as it plays, the beat
+grid, detected notes, levels and CPU load, next to all the controls: the
+effect grid, the five knob pages, tempo and tap, and the switches (including
+mono in). See [web/README.md](../../web/README.md).
+
+The page only streams while it's open, and only over USB.

@@ -90,6 +90,18 @@ class GrainEngine
 
     int NumVoices() const { return voices_.NumActive(); }
 
+    // For the web view, from the audio callback.
+    static constexpr int kMaxHeads = VoicePool::kMaxVoices + MultiTap::kTaps;
+    static float StepsPerBeat(int subdiv); // the Time setting's steps per beat
+    int Heads(weblink::Head *out, int max) const; // voices, then effect taps
+    const OnsetLog &Onsets() const { return onsets_; }
+    uint32_t        WritePos() const { return buffer_.WritePos(); }
+    uint32_t        BufferFrames() const { return buffer_.Frames(); }
+
+    // Keeps a peak per column of the buffer in `columns` (a power of two,
+    // dividing the buffer frames), as sqrt(peak) * 127.
+    void SetOverview(uint8_t *columns, size_t count);
+
   private:
     Effect *EffectFor(EffectId id);
 
@@ -128,4 +140,9 @@ class GrainEngine
     bool    onset_      = false; // seen since the last block
     float   hold_len_   = 0.0f;  // frames, used when Hold engages
     uint32_t preroll_   = 0;     // onsets are logged this far before detection
+
+    uint8_t *overview_       = nullptr;
+    uint32_t overview_mask_  = 0; // frames per column - 1
+    uint32_t overview_shift_ = 0;
+    float    overview_peak_  = 0.0f;
 };

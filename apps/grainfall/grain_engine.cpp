@@ -58,6 +58,30 @@ Effect *GrainEngine::EffectFor(EffectId id)
     return &haze_;
 }
 
+float GrainEngine::StepsPerBeat(int subdiv)
+{
+    return kSubdivMult[subdiv < 0 ? 0 : (subdiv >= kNumSubdivs ? kNumSubdivs - 1 : subdiv)];
+}
+
+int GrainEngine::Heads(weblink::Head *out, int max) const
+{
+    int n = voices_.Heads(out, max);
+    return effect_ != nullptr ? n + effect_->Heads(buffer_, out + n, max - n) : n;
+}
+
+void GrainEngine::SetOverview(uint8_t *columns, size_t count)
+{
+    uint32_t frames = buffer_.Frames() / (uint32_t)count;
+    overview_shift_ = 0;
+    while((1u << overview_shift_) < frames)
+        overview_shift_++;
+    overview_mask_ = frames - 1;
+    overview_peak_ = 0.0f;
+    for(size_t i = 0; i < count; i++)
+        columns[i] = 0;
+    overview_ = columns;
+}
+
 void GrainEngine::BeginBlock(const Params &p, int block_frames)
 {
     bool changed = first_ || p.effect != params_.effect
@@ -127,7 +151,18 @@ void GrainEngine::Process(float in_l, float in_r, float *out_l, float *out_r)
     fb_lp_r_ += fb_tone_ * (r - fb_lp_r_);
     float fb_l = SoftClip(fb_dc_l_.Process(fb_lp_l_) * fb_);
     float fb_r = SoftClip(fb_dc_r_.Process(fb_lp_r_) * fb_);
-    buffer_.Write(src_l + fb_l + fx_fb_l, src_r + fb_r + fx_fb_r);
+    float rec_l = src_l + fb_l + fx_fb_l, rec_r = src_r + fb_r + fx_fb_r;
+    buffer_.Write(rec_l, rec_r);
+    if(overview_ != nullptr)
+    {
+        overview_peak_ = fmaxf(overview_peak_, fmaxf(fabsf(rec_l), fabsf(rec_r)));
+        if((buffer_.WritePos() & overview_mask_) == 0)
+        {
+            uint32_t col   = ((buffer_.WritePos() - 1) & (buffer_.Frames() - 1)) >> overview_shift_;
+            overview_[col] = (uint8_t)(127.0f * sqrtf(fminf(overview_peak_, 1.0f)) + 0.5f);
+            overview_peak_ = 0.0f;
+        }
+    }
 
     post_.Process(&l, &r);
 

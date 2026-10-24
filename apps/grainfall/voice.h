@@ -11,6 +11,7 @@
 
 #include "dsp.h"
 #include "sample_buffer.h"
+#include "web_link.h"
 
 // Amplitude contour over each pass through a slice. The first four are the
 // Shape control's settings.
@@ -79,6 +80,10 @@ class VoicePool
     void ReleaseTag(uint8_t tag);
     void ReleaseAll();
     int  NumActive() const;
+
+    // Where the playing voices are reading, for the web view: up to `max`
+    // into `out`, returning how many.
+    int Heads(weblink::Head *out, int max) const;
 
     // Sums every voice reading from buf.
     void Process(const SampleBuffer &buf, float *out_l, float *out_r);

@@ -12,6 +12,7 @@
 #include "dsp.h"
 #include "onset.h"
 #include "voice.h"
+#include "web_link.h"
 
 struct EffectContext
 {
@@ -68,6 +69,10 @@ class Effect
     // add its own feedback to *fb_l and *fb_r, which are recorded into the
     // buffer with this sample.
     virtual void Process(const SampleBuffer &, float, float, float *, float *, float *, float *) {}
+
+    // Read heads of the effect's own (not voices) for the web view: up to
+    // `max` into `out`, returning how many.
+    virtual int Heads(const SampleBuffer &, weblink::Head *, int) const { return 0; }
 
   protected:
     ~Effect() = default;

@@ -5,7 +5,7 @@
 APP ?= grainfall
 APPS = $(patsubst apps/%/,%,$(sort $(dir $(wildcard apps/*/*.cpp))))
 
-ifeq ($(filter list new all-apps clean-all,$(MAKECMDGOALS)),)
+ifeq ($(filter list new all-apps clean-all web,$(MAKECMDGOALS)),)
 ifeq ($(filter $(APP),$(APPS)),)
 $(error No app "$(APP)" in apps/. Available: $(APPS))
 endif
@@ -55,7 +55,7 @@ program debug: build/$(APP).elf
 build/$(APP).elf: $(BUILD_DIR)/$(TARGET).elf
 	ln -sf $(APP)/$(APP).elf $@
 
-.PHONY: list new all-apps clean-all libs
+.PHONY: list new all-apps clean-all libs web
 
 # List the apps; * marks the one APP selects
 list:
@@ -78,3 +78,9 @@ clean-all:
 libs:
 	$(MAKE) -C $(LIBDAISY_DIR)
 	$(MAKE) -C $(DAISYSP_DIR)
+
+# Serve the web control surface (web/) on localhost, where Web MIDI is allowed
+WEB_PORT ?= 8000
+web:
+	@echo "Open http://localhost:$(WEB_PORT) in Chrome or Edge (Ctrl-C to stop)"
+	@python3 -m http.server $(WEB_PORT) --bind 127.0.0.1 --directory web
