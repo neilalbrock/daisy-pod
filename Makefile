@@ -31,8 +31,13 @@ CPP_STANDARD = -std=gnu++17
 # Homebrew on Apple Silicon installs OpenOCD scripts under /opt/homebrew
 OCD_DIR ?= $(shell brew --prefix 2>/dev/null || echo /usr/local)/share/openocd/scripts
 
-# Per-app overrides, e.g. APP_TYPE = BOOT_SRAM
+# Per-app overrides, e.g. APP_TYPE = BOOT_NONE
 -include apps/$(APP)/app.mk
+
+# Every app runs from SRAM via the Daisy bootloader (flash it once with
+# `make program-boot`), so none is held to the 128 KB internal flash and
+# switching apps never overwrites the bootloader.
+APP_TYPE ?= BOOT_SRAM
 
 # Core location, and generic Makefile.
 SYSTEM_FILES_DIR = $(LIBDAISY_DIR)/core

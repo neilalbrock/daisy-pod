@@ -27,8 +27,9 @@ make new APP=<name>  # copy apps/starter to apps/<name>
 make clean           # remove one app's build dir; make clean-all removes build/
 make DEBUG=1 OPT=-Og # debuggable build (run `make clean` first so all objects rebuild)
 
-make APP=<name> program-dfu  # build if needed, then flash over USB; the Seed must be in DFU mode first (hold BOOT, tap RESET, release BOOT)
-make APP=<name> program      # flash via ST-Link/OpenOCD
+make program-boot            # once per Seed: install the Daisy bootloader (chip DFU mode: hold BOOT, tap RESET, release BOOT)
+make APP=<name> program-dfu  # build if needed, then flash over USB into the bootloader's DFU window (tap RESET, then press BOOT while the LED pulses to hold it there)
+make APP=<name> program      # flash via ST-Link/OpenOCD (BOOT_NONE apps only)
 make openocd                 # GDB server (one terminal) ...
 make APP=<name> debug        # ... then attach arm-none-eabi-gdb (another terminal)
 ```
@@ -46,7 +47,7 @@ The top-level `Makefile` sets a few variables, then includes `lib/libDaisy/core/
 - libDaisy's `program` and `debug` recipes hardcode `./build/$(TARGET).elf`. The Makefile symlinks that path to the app's ELF, so don't remove that rule.
 - `apps/<name>/app.mk` (optional) holds per-app overrides and is included before libDaisy's Makefile. It should set variables only, not define rules.
 - `CPP_STANDARD = -std=gnu++17` (libDaisy's default is gnu++14).
-- `APP_TYPE` defaults to `BOOT_NONE`, which puts code in the 128 KB internal flash. If an app outgrows that, set `APP_TYPE = BOOT_SRAM` in its `app.mk`, flash the Daisy bootloader once with `make program-boot`, then keep using `make program-dfu`. Flashing a `BOOT_NONE` app overwrites the bootloader.
+- `APP_TYPE` defaults to `BOOT_SRAM` (set after `app.mk` is included, so an app can override it): the Daisy bootloader, installed once with `make program-boot`, loads code into SRAM (480 KB). Globals go in the 128 KB DTCM, shared with the stack. Grainfall uses about 115 KB of it, mostly libDaisy's MIDI handlers, so keep new state small and put buffers in SDRAM. An app with `APP_TYPE = BOOT_NONE` goes in the 128 KB internal flash and overwrites the bootloader.
 - `OCD_DIR` points at Homebrew's OpenOCD scripts.
 
 ## Firmware architecture
@@ -63,7 +64,7 @@ Every app's `main.cpp` follows the standard libDaisy pattern:
 
 Memory: put large audio buffers (grain and delay lines) in the 64 MB external SDRAM with `DSY_SDRAM_BSS`, for example `float DSY_SDRAM_BSS buffer[48000 * 10];`. Internal RAM is small.
 
-Grainfall: `apps/grainfall/main.cpp` holds the hardware setup, paged controls, buttons and the MIDI map (Microcosm's CCs and program changes). MIDI (Pod TRS and USB) is polled in the audio callback so clock ticks are timestamped to within a block. `GrainEngine` (`grain_engine.{h,cpp}`) runs the chain: `Hold` (`hold.h`) -> `SampleBuffer` (interleaved stereo, power-of-two, SDRAM) -> the current `Effect` -> `PostFx` (pitch mod, resonant low-pass, volume). Each effect (`effect.h`) is a scheduler that, once per block, starts and steers voices from the `VoicePool` (`voice.{h,cpp}`: slices of the buffer played as grains or loops, with envelope, rate, reverse, filter and bitcrush), using the tempo grid and onsets (`onset.h`). `Tempo` (`tempo.{h,cpp}`) combines tap tempo with `MidiClock` (`common/midi_clock.{h,cpp}`). Every effect slot currently uses the placeholder `FxCloud` (`fx_cloud.{h,cpp}`). Grainfall is close to the 128 KB internal flash limit, so the full set of effects will need `APP_TYPE = BOOT_SRAM`.
+Grainfall: `apps/grainfall/main.cpp` holds the hardware setup, paged controls, buttons and the MIDI map (Microcosm's CCs and program changes). MIDI (Pod TRS and USB) is polled in the audio callback so clock ticks are timestamped to within a block. `GrainEngine` (`grain_engine.{h,cpp}`) runs the chain: `Hold` (`hold.h`) -> `SampleBuffer` (interleaved stereo, power-of-two, SDRAM) -> the current `Effect` -> `PostFx` (pitch mod, resonant low-pass, volume). Each effect (`effect.h`) is a scheduler that, once per block, starts and steers voices from the `VoicePool` (`voice.{h,cpp}`: slices of the buffer played as grains or loops, with envelope, rate, reverse, filter and bitcrush), using the tempo grid and onsets (`onset.h`). `Tempo` (`tempo.{h,cpp}`) combines tap tempo with `MidiClock` (`common/midi_clock.{h,cpp}`). Effect slots without a real effect yet use the placeholder `FxCloud` (`fx_cloud.{h,cpp}`).
 
 Tapeworn: `apps/tapeworn/main.cpp` holds the hardware setup and paged controls. `TapeEngine` (`tape_engine.{h,cpp}`) runs the chain, built from `Hysteresis` (Jiles-Atherton saturation, 2x oversampled), `Wow`/`Flutter` (`tape_wobble`), `TapeFailure` and `TapeModel` (EQ profiles).
 

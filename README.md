@@ -51,9 +51,23 @@ alone, so file names must be unique across the app and `common/`.
 
 ## Flash over USB (no debug probe)
 
+Apps run from SRAM, loaded by the Daisy bootloader (`APP_TYPE = BOOT_SRAM`).
+That lifts the 128 KB internal flash limit, and switching apps never touches
+the bootloader.
+
+**Once per Seed**, install the bootloader:
+
 1. Connect the Seed's USB-C port to your Mac.
-2. Put the Seed in DFU mode: hold **BOOT**, tap **RESET**, release **BOOT**.
-3. `make APP=<name> program-dfu` (builds first if needed)
+2. Put the Seed in the chip's own DFU mode: hold **BOOT**, tap **RESET**,
+   release **BOOT**.
+3. `make program-boot`
+
+**To flash an app:**
+
+1. Tap **RESET**. The Seed's LED pulses for about 2.5 s while the bootloader
+   waits for DFU. Press **BOOT** during that time to keep it waiting (the LED
+   blinks quickly to confirm). With no app installed yet, it waits anyway.
+2. `make APP=<name> program-dfu` (builds first if needed)
 
 `dfu-util` may print `Error during download get_status` at the end. This is
 expected, because the board resets as soon as flashing finishes.
@@ -64,22 +78,26 @@ The Seed 3 has through-hole pads for the SWD debug header (an STLINK-V3MINIE
 is the usual probe).
 
 ```sh
-make APP=<name> program   # flash via OpenOCD
+make APP=<name> program   # flash via OpenOCD (BOOT_NONE apps only)
 make openocd              # terminal 1: start the GDB server
 make APP=<name> debug     # terminal 2: attach arm-none-eabi-gdb
 ```
+
+libDaisy's `program` rule refuses bootloader apps. To flash one with the
+probe, set `APP_TYPE = BOOT_NONE` in its `app.mk` (it must fit in 128 KB),
+which overwrites the bootloader.
 
 Build with `make DEBUG=1 OPT=-Og` for a debuggable binary. Run `make clean`
 first so every object is rebuilt with the new flags.
 
 ## Memory notes
 
-- Code goes in the 128 KB internal flash by default (`APP_TYPE = BOOT_NONE`).
-  If an app outgrows it, add `APP_TYPE = BOOT_SRAM` to `apps/<name>/app.mk`,
-  flash the Daisy bootloader once with `make program-boot`, then use
-  `make program-dfu` as usual. Flashing a `BOOT_NONE` app afterwards
-  overwrites the bootloader, so switching back to a `BOOT_SRAM` app means
-  running `make program-boot` again.
+- With `BOOT_SRAM`, code goes in SRAM (480 KB) and globals in the 128 KB
+  DTCM. The build prints both. Grainfall uses most of its DTCM, largely for
+  libDaisy's MIDI handlers, and the stack shares what's left, so keep new
+  state small and buffers in SDRAM.
+- An app can go back to the internal flash with `APP_TYPE = BOOT_NONE` in
+  `apps/<name>/app.mk`, but flashing it overwrites the bootloader.
 - Large audio buffers (grain/delay buffers) belong in the 64 MB SDRAM:
   `float DSY_SDRAM_BSS buffer[48000 * 10];`
 
