@@ -1,12 +1,12 @@
-// Tapeworn - output limiter
+// Output limiter
 //
-// Dry plus wet at full volume can reach twice full scale, and the codec
+// Dry plus wet at full volume can easily pass full scale, and the codec
 // clips hard. This stereo-linked peak limiter keeps the sum under a -1 dBFS
 // ceiling: the gain drops at once to hold any sample under it and recovers
 // smoothly, so loud passages get quieter rather than square. Both channels
 // share one gain, so the stereo image doesn't shift.
 //
-// Header only and libDaisy-free, like the rest of the DSP.
+// Header only and libDaisy-free, like dsp.h.
 
 #pragma once
 

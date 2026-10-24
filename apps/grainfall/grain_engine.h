@@ -10,6 +10,8 @@
 #include <cstddef>
 #include <cstdint>
 
+#include "dsp.h"
+
 class GrainEngine
 {
   public:
@@ -53,7 +55,6 @@ class GrainEngine
 
     void  StartGrain();
     float Read(const float *buf, float pos) const;
-    float Random(); // 0..1, cheap xorshift so it's ISR safe
 
     float  sample_rate_ = 48000.0f;
     float *buf_l_       = nullptr;
@@ -65,5 +66,5 @@ class GrainEngine
     Grain    grains_[kMaxGrains] = {};
     float    spawn_acc_          = 0.0f; // counts up to 1, then starts a grain
     float    norm_               = 1.0f; // output gain compensating for overlap
-    uint32_t rng_                = 0x9E3779B9u;
+    dsp::Rng rng_;
 };

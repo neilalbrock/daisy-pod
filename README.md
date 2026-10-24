@@ -9,7 +9,9 @@ a separate app under `apps/`, all built from `main`.
 | [tapeworn](apps/tapeworn/README.md) | Lo-fi tape machine: wow, flutter, hysteresis saturation, tape models, failures |
 | [starter](apps/starter/README.md) | Low-pass filter toolchain and hardware check; template for new apps |
 
-Code shared between apps goes in `common/` (currently `MidiClock` and `PagedKnobs`).
+Code shared between apps goes in `common/`: `MidiClock`, `PagedKnobs`,
+`PressHold` (tap vs hold on a button), `BypassFade`, `Limiter`, and the DSP
+helpers in `dsp.h` (`Rng`, `Biquad`, `DcBlock` and friends).
 
 ## Toolchain
 

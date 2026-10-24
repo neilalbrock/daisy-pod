@@ -2,9 +2,9 @@
 
 #include <cmath>
 
-#include "tape_dsp.h"
+#include "dsp.h"
 
-using namespace tape;
+using namespace dsp;
 
 namespace
 {

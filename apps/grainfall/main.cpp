@@ -16,6 +16,8 @@
 //   Button 1           - bypass (LED 1: green = active, red = bypassed)
 //   Button 2           - freeze the buffer (LED 1 turns blue while frozen)
 //
+// A limiter holds dry + wet under -1 dBFS.
+//
 // MIDI clock sync listens on both the Pod's TRS MIDI input and USB MIDI (the
 // Seed's own USB port). While it is on and clock is arriving, grains start on
 // a note-division grid locked to the clock (MIDI Start resets it to the
@@ -23,14 +25,15 @@
 // divisions (0 to 1 bar). LED 1 blinks off on each beat. Sync on with no clock
 // falls back to free running, and LED 1 flickers until clock arrives.
 
+#include "bypass_fade.h"
 #include "daisy_pod.h"
-#include "daisysp.h"
 #include "grain_engine.h"
+#include "limiter.h"
 #include "midi_clock.h"
 #include "paged_knobs.h"
+#include "press_hold.h"
 
 using namespace daisy;
-using namespace daisysp;
 
 constexpr size_t kBufferLen = 48000 * 10;
 float DSY_SDRAM_BSS buffer_l[kBufferLen];
@@ -40,6 +43,8 @@ DaisyPod       hw;
 MidiUsbHandler usb_midi;
 GrainEngine    grains;
 MidiClock      midi_clock;
+Limiter        limiter; // on dry + wet, so a loud wet signal doesn't clip
+BypassFade     bypass_fade;
 
 constexpr int kNumPages = 3;
 constexpr int kNumKnobs = 2;
@@ -66,10 +71,9 @@ const float kPositionDivs[] = {
     // 0, 1/32, 1/16, 1/8, dotted 1/8, 1/4, dotted 1/4, 1/2, 1 bar
 };
 
-constexpr uint32_t kLongPressMs = 600;
+PressHold encoder_press(600); // hold: MIDI clock sync
 
 bool     sync_on         = false;
-bool     long_press_done = false; // the current encoder hold toggled sync
 bool     was_synced      = false;
 int32_t  last_grid       = 0;     // grid step the last grain started on
 uint32_t sample_count    = 0;     // running timestamp for the MIDI clock
@@ -131,15 +135,11 @@ void AudioCallback(AudioHandle::InputBuffer  in,
 
     // Long press toggles sync as soon as the hold is long enough; a short
     // press changes page on release.
-    if(hw.encoder.Pressed() && hw.encoder.TimeHeldMs() >= kLongPressMs
-       && !long_press_done)
-    {
-        sync_on         = !sync_on;
-        long_press_done = true;
-    }
-    if(hw.encoder.FallingEdge() && long_press_done)
-        long_press_done = false;
-    else if(hw.encoder.FallingEdge())
+    PressHold::Event enc = encoder_press.Update(hw.encoder.Pressed(),
+                                                hw.encoder.TimeHeldMs());
+    if(enc == PressHold::Event::kHold)
+        sync_on = !sync_on;
+    else if(enc == PressHold::Event::kTap)
         pages.NextPage(knob);
     pages.Update(knob);
 
@@ -192,17 +192,19 @@ void AudioCallback(AudioHandle::InputBuffer  in,
             }
         }
 
-        float wet_l, wet_r;
+        float in_l = in[0][i];
+        float in_r = in[1][i];
+
         // Keep the engine running in bypass so the buffer stays current.
-        grains.Process(in[0][i], in[1][i], &wet_l, &wet_r);
-        if(bypass)
-        {
-            out[0][i] = in[0][i];
-            out[1][i] = in[1][i];
-            continue;
-        }
-        out[0][i] = in[0][i] * (1.0f - mix) + wet_l * mix;
-        out[1][i] = in[1][i] * (1.0f - mix) + wet_r * mix;
+        float wet_l, wet_r;
+        grains.Process(in_l, in_r, &wet_l, &wet_r);
+
+        float fx_l = in_l * (1.0f - mix) + wet_l * mix;
+        float fx_r = in_r * (1.0f - mix) + wet_r * mix;
+        limiter.Process(&fx_l, &fx_r);
+        bypass_fade.Process(bypass, in_l, in_r, &fx_l, &fx_r);
+        out[0][i] = fx_l;
+        out[1][i] = fx_r;
     }
     sample_count += size;
 }
@@ -215,6 +217,8 @@ int main(void)
 
     grains.Init(hw.AudioSampleRate(), buffer_l, buffer_r, kBufferLen);
     midi_clock.Init(hw.AudioSampleRate());
+    limiter.Init(hw.AudioSampleRate());
+    bypass_fade.Init(hw.AudioSampleRate());
 
     MidiUsbHandler::Config usb_cfg;
     usb_cfg.transport_config.periph = MidiUsbTransport::Config::INTERNAL;

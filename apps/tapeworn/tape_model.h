@@ -8,7 +8,7 @@
 
 #pragma once
 
-#include "tape_dsp.h"
+#include "dsp.h"
 
 class TapeModel
 {
@@ -41,7 +41,7 @@ class TapeModel
 
     struct Chain
     {
-        tape::Biquad hp, lp1, lp2, peak;
+        dsp::Biquad  hp, lp1, lp2, peak;
         float        gain = 1.0f;
         bool         off  = true;
 

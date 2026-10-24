@@ -15,8 +15,8 @@
 #include <cstddef>
 #include <cstdint>
 
+#include "dsp.h"
 #include "hysteresis.h"
-#include "tape_dsp.h"
 #include "tape_failure.h"
 #include "tape_model.h"
 #include "tape_wobble.h"
@@ -59,12 +59,12 @@ class TapeEngine
     {
         float      *buf = nullptr;
         Hysteresis  hysteresis;
-        tape::DcBlock dc;
+        dsp::DcBlock dc;
         Wow         wow;
         Flutter     flutter;
         TapeFailure failure;
         TapeModel   model;
-        tape::Rng   hiss_rng;
+        dsp::Rng    hiss_rng;
     };
 
     float Read(const float *buf, float delay) const;

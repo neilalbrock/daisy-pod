@@ -1,14 +1,14 @@
-// Tapeworn - small DSP helpers shared by the tape engine's parts
+// Small DSP helpers shared by the apps' engines
 //
-// Header only, no allocation, nothing that touches libDaisy, so the engine
-// also builds on a desktop for offline testing.
+// Header only, no allocation, nothing that touches libDaisy, so engines built
+// on it also compile on a desktop for offline testing.
 
 #pragma once
 
 #include <cmath>
 #include <cstdint>
 
-namespace tape
+namespace dsp
 {
 constexpr float kPi    = 3.14159265359f;
 constexpr float kTwoPi = 6.28318530718f;
@@ -171,4 +171,4 @@ class DcBlock
   private:
     float x1_ = 0.0f, y1_ = 0.0f;
 };
-} // namespace tape
+} // namespace dsp

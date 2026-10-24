@@ -27,6 +27,9 @@ until you move it, so values don't jump.
 | Button 1 | Bypass (LED 1: green = active, red = bypassed) |
 | Button 2 | Freeze the buffer (LED 1 blue while frozen) |
 
+A limiter on dry + wet holds the output under -1 dBFS. Bypass fades over 5 ms
+so it doesn't click, and the buffer keeps recording while bypassed.
+
 ## MIDI clock sync
 
 Grainfall follows MIDI clock from the Pod's TRS MIDI input or over USB MIDI.

@@ -58,11 +58,13 @@ Every app's `main.cpp` follows the standard libDaisy pattern:
 - The `while(1)` loop in `main()` handles slow, non-audio work: LEDs (`led1`/`led2.Set` followed by `hw.UpdateLeds()`).
 - State shared between the callback and the main loop is held in plain globals.
 - Apps with more parameters than knobs page them with `PagedKnobs` (`common/paged_knobs.h`): the encoder press calls `NextPage`, the callback calls `Update` each block, and `main()` calls `Latch` once before `StartAudio` so a knob does nothing until it moves.
+- Buttons that do one thing on a tap and another on a hold go through `PressHold` (`common/press_hold.h`). Bypass crossfades with `BypassFade`, after a `Limiter` on dry + wet (both in `common/`).
+- DSP code doesn't include libDaisy, so it also compiles on the host for offline tests. Shared helpers (`Rng`, `Biquad`, `DcBlock`, `Clamp`, `SmoothCoef`, `FastSin`…) are in `common/dsp.h`, namespace `dsp`.
 
 Memory: put large audio buffers (grain and delay lines) in the 64 MB external SDRAM with `DSY_SDRAM_BSS`, for example `float DSY_SDRAM_BSS buffer[48000 * 10];`. Internal RAM is small.
 
 Grainfall: `apps/grainfall/main.cpp` holds the hardware setup and paged control handling. The granular DSP is in `apps/grainfall/grain_engine.{h,cpp}` (`GrainEngine`). `common/midi_clock.{h,cpp}` (`MidiClock`) follows incoming MIDI clock for tempo sync. MIDI (Pod TRS and USB) is polled in the audio callback so ticks are timestamped to within a block.
 
-Tapeworn: `apps/tapeworn/main.cpp` holds the hardware setup and paged controls. `TapeEngine` (`tape_engine.{h,cpp}`) runs the chain, built from `Hysteresis` (Jiles-Atherton saturation, 2x oversampled), `Wow`/`Flutter` (`tape_wobble`), `TapeFailure` and `TapeModel` (EQ profiles). The DSP files don't include libDaisy, so they also compile on the host for offline tests.
+Tapeworn: `apps/tapeworn/main.cpp` holds the hardware setup and paged controls. `TapeEngine` (`tape_engine.{h,cpp}`) runs the chain, built from `Hysteresis` (Jiles-Atherton saturation, 2x oversampled), `Wow`/`Flutter` (`tape_wobble`), `TapeFailure` and `TapeModel` (EQ profiles).
 
 If you change an app's control mapping, update the control table in that app's `README.md` and the header comment in its `main.cpp`. When adding an app, add it to the app table in the top-level `README.md`.

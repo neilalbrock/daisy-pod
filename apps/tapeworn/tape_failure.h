@@ -16,7 +16,7 @@
 
 #include <cstdint>
 
-#include "tape_dsp.h"
+#include "dsp.h"
 
 class TapeFailure
 {
@@ -40,7 +40,7 @@ class TapeFailure
     void StartCrinkle();
 
     float     sample_rate_ = 48000.0f;
-    tape::Rng rng_;
+    dsp::Rng  rng_;
 
     float amount_      = 0.0f;
     float crinkle_hz_  = 0.0f;
@@ -68,5 +68,5 @@ class TapeFailure
     float   drop_ = 1.0f, drop_target_ = 1.0f, drop_coef_ = 0.0f;
 
     // Click shaping: a high-passed rustle and a resonant low pop
-    tape::Biquad rustle_filter_, pop_filter_;
+    dsp::Biquad rustle_filter_, pop_filter_;
 };

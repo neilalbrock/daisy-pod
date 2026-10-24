@@ -1,6 +1,6 @@
 #include "tape_wobble.h"
 
-using namespace tape;
+using namespace dsp;
 
 void Wow::Init(float sample_rate, uint32_t seed)
 {

@@ -1,6 +1,6 @@
 #include "tape_model.h"
 
-using namespace tape;
+using namespace dsp;
 
 // Imaginary machines, roughly in order of decay. gain_db is a partial level
 // match measured offline with pink noise, so narrow models still sound

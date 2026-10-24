@@ -8,7 +8,7 @@
 
 #include <cstdint>
 
-#include "tape_dsp.h"
+#include "dsp.h"
 
 class Wow
 {
@@ -18,7 +18,7 @@ class Wow
 
   private:
     float     sample_rate_ = 48000.0f;
-    tape::Rng rng_;
+    dsp::Rng  rng_;
     float     target_ = 0.0f, s1_ = 0.0f, s2_ = 0.0f; // smoothed random walk
     float     coef_   = 0.0f;
     int32_t   hold_   = 0; // samples until the next random target
@@ -33,7 +33,7 @@ class Flutter
 
   private:
     float     sample_rate_ = 48000.0f;
-    tape::Rng rng_;
+    dsp::Rng  rng_;
     float     phase1_ = 0.0f, phase2_ = 0.0f;
     float     inc1_ = 0.0f, inc2_ = 0.0f;
     float     drift_ = 1.0f, drift_target_ = 1.0f, drift_coef_ = 0.0f;

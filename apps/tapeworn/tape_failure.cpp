@@ -1,6 +1,6 @@
 #include "tape_failure.h"
 
-using namespace tape;
+using namespace dsp;
 
 namespace
 {

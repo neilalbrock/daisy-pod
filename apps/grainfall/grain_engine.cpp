@@ -2,18 +2,14 @@
 
 #include <cmath>
 
+using namespace dsp;
+
 namespace
 {
-constexpr float  kTwoPi      = 6.28318530718f;
 constexpr size_t kWindowSize = 512;
 
 // Hann window, one extra point so interpolation never wraps. Filled in Init().
 float window[kWindowSize + 1];
-
-float Clamp(float x, float lo, float hi)
-{
-    return x < lo ? lo : (x > hi ? hi : x);
-}
 } // namespace
 
 void GrainEngine::Init(float  sample_rate,
@@ -59,14 +55,6 @@ void GrainEngine::SetParams(const Params &p)
     norm_         = overlap > 1.0f ? 1.0f / sqrtf(overlap) : 1.0f;
 }
 
-float GrainEngine::Random()
-{
-    rng_ ^= rng_ << 13;
-    rng_ ^= rng_ >> 17;
-    rng_ ^= rng_ << 5;
-    return (float)(rng_ >> 8) * (1.0f / 16777216.0f);
-}
-
 float GrainEngine::Read(const float *buf, float pos) const
 {
     size_t i0   = (size_t)pos;
@@ -94,7 +82,7 @@ void GrainEngine::StartGrain()
     // Start far enough back that a grain played faster than real time never
     // overtakes the record head and reads the discontinuity there.
     float delay = params_.position_s * sample_rate_
-                  + Random() * params_.spray_s * sample_rate_;
+                  + rng_.Uni() * params_.spray_s * sample_rate_;
     if(params_.pitch > 1.0f)
         delay += length * (params_.pitch - 1.0f);
     delay += 1.0f; // stay clear of the sample being written
@@ -104,7 +92,7 @@ void GrainEngine::StartGrain()
         start += (float)len_;
 
     // Equal-power pan, centre +/- spread.
-    float pan = 0.5f + (Random() - 0.5f) * params_.spread;
+    float pan = 0.5f + (rng_.Uni() - 0.5f) * params_.spread;
 
     g->active    = true;
     g->pos       = start;

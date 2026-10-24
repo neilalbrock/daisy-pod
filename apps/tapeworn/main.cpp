@@ -25,8 +25,10 @@
 //                        white = filter
 
 #include "daisy_pod.h"
+#include "bypass_fade.h"
 #include "limiter.h"
 #include "paged_knobs.h"
+#include "press_hold.h"
 #include "tape_engine.h"
 
 using namespace daisy;
@@ -56,16 +58,12 @@ bool            aux_on   = false;
 bool            bypass   = false;
 bool            mono_in  = false;
 
-constexpr uint32_t kLongPressMs  = 600;  // encoder: AUX type
-constexpr uint32_t kMonoHoldMs   = 1000; // button 1: mono in
-constexpr uint32_t kMomentaryMs  = 400;  // button 2: held this long = momentary
-constexpr float    kBypassFadeS  = 0.005f;
+constexpr uint32_t kMomentaryMs = 400; // button 2: held this long = momentary
 
-bool     long_press_done = false; // the current encoder hold changed AUX type
-bool     mono_hold_done  = false; // the current button 1 hold toggled mono in
-uint32_t aux_held_ms     = 0;     // how long button 2 has been held
-float    bypass_mix      = 0.0f;  // 0 = effect, 1 = bypassed
-float    bypass_inc      = 0.0f;
+PressHold  encoder_press(600);  // hold: AUX type
+PressHold  button1_press(1000); // hold: mono in
+BypassFade bypass_fade;
+uint32_t   aux_held_ms = 0; // how long button 2 has been held
 
 // Read by the main loop for the LEDs: flash until these times (ms).
 volatile uint32_t model_flash_until = 0;
@@ -80,16 +78,14 @@ void AudioCallback(AudioHandle::InputBuffer  in,
     uint32_t now_ms = System::GetNow();
 
     // Button 1: a tap toggles bypass on release, a 1 s hold toggles mono in.
-    if(hw.button1.Pressed() && hw.button1.TimeHeldMs() >= kMonoHoldMs
-       && !mono_hold_done)
+    PressHold::Event b1 = button1_press.Update(hw.button1.Pressed(),
+                                               hw.button1.TimeHeldMs());
+    if(b1 == PressHold::Event::kHold)
     {
         mono_in          = !mono_in;
-        mono_hold_done   = true;
         mono_flash_until = now_ms + 500;
     }
-    if(hw.button1.FallingEdge() && mono_hold_done)
-        mono_hold_done = false;
-    else if(hw.button1.FallingEdge())
+    else if(b1 == PressHold::Event::kTap)
         bypass = !bypass;
 
     // Button 2: press toggles AUX; releasing after a hold turns it back off.
@@ -115,16 +111,14 @@ void AudioCallback(AudioHandle::InputBuffer  in,
 
     // Long press cycles the AUX type as soon as the hold is long enough; a
     // short press changes page on release.
-    if(hw.encoder.Pressed() && hw.encoder.TimeHeldMs() >= kLongPressMs
-       && !long_press_done)
+    PressHold::Event enc = encoder_press.Update(hw.encoder.Pressed(),
+                                                hw.encoder.TimeHeldMs());
+    if(enc == PressHold::Event::kHold)
     {
         aux_type = (TapeEngine::Aux)(((int)aux_type + 1) % TapeEngine::kNumAux);
-        long_press_done = true;
         aux_flash_until = now_ms + 600;
     }
-    if(hw.encoder.FallingEdge() && long_press_done)
-        long_press_done = false;
-    else if(hw.encoder.FallingEdge())
+    else if(enc == PressHold::Event::kTap)
         pages.NextPage(knob);
     pages.Update(knob);
 
@@ -152,14 +146,12 @@ void AudioCallback(AudioHandle::InputBuffer  in,
         float wet_l, wet_r;
         tape_engine.Process(in_l, in_r, &wet_l, &wet_r);
 
-        bypass_mix += bypass ? bypass_inc : -bypass_inc;
-        bypass_mix = bypass_mix < 0.0f ? 0.0f : (bypass_mix > 1.0f ? 1.0f : bypass_mix);
-
         float fx_l = wet_l * volume + in_l * dry;
         float fx_r = wet_r * volume + in_r * dry;
         limiter.Process(&fx_l, &fx_r);
-        out[0][i]  = fx_l + (in_l - fx_l) * bypass_mix;
-        out[1][i]  = fx_r + (in_r - fx_r) * bypass_mix;
+        bypass_fade.Process(bypass, in_l, in_r, &fx_l, &fx_r);
+        out[0][i] = fx_l;
+        out[1][i] = fx_r;
     }
 }
 
@@ -180,7 +172,7 @@ int main(void)
 
     tape_engine.Init(hw.AudioSampleRate(), buffer_l, buffer_r, kBufferLen);
     limiter.Init(hw.AudioSampleRate());
-    bypass_inc = 1.0f / (kBypassFadeS * hw.AudioSampleRate());
+    bypass_fade.Init(hw.AudioSampleRate());
 
     // Every knob starts "not live" so the defaults above hold until a knob moves.
     hw.StartAdc();

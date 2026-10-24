@@ -1,6 +1,6 @@
 #include "tape_engine.h"
 
-using namespace tape;
+using namespace dsp;
 
 namespace
 {
