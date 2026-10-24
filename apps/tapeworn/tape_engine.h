@@ -54,6 +54,15 @@ class TapeEngine
 
     void Process(float in_l, float in_r, float *out_l, float *out_r);
 
+    // For the web view: the latest values, updated each sample.
+    struct Probe
+    {
+        float speed[2];        // tape speed per channel, 1 = normal
+        float level[2];        // gain after drops and the tape stop, 0..1
+        float sat_in, sat_out; // left channel, into and out of the saturator
+    };
+    const Probe &GetProbe() const { return probe_; }
+
   private:
     struct Channel
     {
@@ -97,4 +106,7 @@ class TapeEngine
     float catchup_excess_ = 0.0f, catchup_ = 1.0f, catchup_inc_ = 0.0f;
 
     float hum_phase_ = 0.0f, hum_inc_ = 0.0f;
+
+    Probe probe_         = {};
+    float last_delay_[2] = {}; // wobble part of the delay, for the probe's speed
 };

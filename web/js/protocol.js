@@ -18,7 +18,7 @@ export const Msg = {
 
 export const Kind = { CONTINUOUS: 0, CHOICE: 1, TOGGLE: 2, TRIGGER: 3 };
 
-const Section = { TEMPO: 1, LEVELS: 2, CPU: 3, BUFFER: 4, OVERVIEW: 5 };
+const Section = { TEMPO: 1, LEVELS: 2, CPU: 3, BUFFER: 4, OVERVIEW: 5, TRACES: 6, XY: 7 };
 
 export const UNIT_MAX = 16383;
 
@@ -104,6 +104,24 @@ function readFrame(r) {
         frame.overview = { first, values };
         break;
       }
+      case Section.TRACES: {
+        // Raw 0..1 across each trace's range; the hello has the ranges.
+        const points = r.u7();
+        const traces = r.u7();
+        frame.traces = [];
+        for (let i = 0; i < points; i++) {
+          const p = [];
+          for (let k = 0; k < traces; k++) p.push(r.u14() / UNIT_MAX);
+          frame.traces.push(p);
+        }
+        break;
+      }
+      case Section.XY: {
+        const n = r.u7();
+        frame.xy = [];
+        for (let i = 0; i < n; i++) frame.xy.push([(r.u7() - 63) / 63, (r.u7() - 63) / 63]);
+        break;
+      }
       default:
         // A section this page doesn't know: the rest can't be read.
         return frame;
@@ -133,6 +151,17 @@ export function decode(bytes) {
       hello.meters = [];
       for (let i = r.u7(); i > 0; i--) hello.meters.push(r.str());
       hello.numParams = r.u7();
+      // Added later: traces and an X-Y plot, if the app has them.
+      hello.traces = [];
+      hello.tracePeriodMs = 1;
+      hello.xy = "";
+      if (r.more) {
+        const n = r.u7();
+        hello.tracePeriodMs = r.u7();
+        for (let i = 0; i < n; i++)
+          hello.traces.push({ name: r.str(), unit: r.str(), min: r.u14() - 8192, max: r.u14() - 8192 });
+        hello.xy = r.str();
+      }
       return hello;
     }
     case Msg.PARAM: {

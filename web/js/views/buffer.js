@@ -243,7 +243,7 @@ export class BufferView {
     ctx.textAlign = "center";
     for (let s = every; s < secs; s += every) {
       const x = w - (s / secs) * w;
-      ctx.fillText(`−${s % 1 ? s.toFixed(2) : s} s`, x, bottom + 13);
+      ctx.fillText(`−${Number(s.toFixed(2))} s`, x, bottom + 13);
     }
     ctx.textAlign = "right";
     ctx.fillText("now", w - 4, bottom + 13);

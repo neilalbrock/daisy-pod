@@ -6,6 +6,7 @@ import { Link } from "./link.js";
 import { set } from "./protocol.js";
 import { BufferView } from "./views/buffer.js";
 import { CpuView, Meters, TempoView } from "./views/readouts.js";
+import { TraceView, XYView } from "./views/traces.js";
 
 const $ = (sel) => document.querySelector(sel);
 
@@ -14,6 +15,8 @@ const view = new BufferView($("#buffer"));
 const tempo = new TempoView($("#tempo"));
 const meters = new Meters($("#levels"));
 const cpu = new CpuView($("#cpu"));
+const traces = new TraceView($("#traces"));
+const xy = new XYView($("#xy canvas"));
 const controls = new Controls($("#controls"), (index, raw) => link.send(set(index, raw)));
 
 let hello = null;
@@ -44,8 +47,19 @@ link.addEventListener("message", async (e) => {
       $("#app-name").textContent = msg.app;
       document.title = `${msg.app} · Daisy Pod`;
       view.setLayout(msg);
+      traces.setLayout(msg);
+      xy.clear();
       meters.setNames(msg.meters);
       $("#controls").replaceChildren();
+      // Show the views this app has data for.
+      $("#scope").hidden = msg.bufferFrames === 0;
+      $("#trace-panel").hidden = msg.traces.length === 0;
+      $("#xy").hidden = !msg.xy;
+      $("#xy-title").textContent = msg.xy;
+      $("#tempo").hidden = true; // until a frame brings a tempo
+      app.then((extras) => {
+        if (msg === hello) $("#trace-title").textContent = extras.tracesTitle || "Traces";
+      });
       break;
     case "param":
       if (!hello) return;
@@ -66,7 +80,12 @@ link.addEventListener("message", async (e) => {
     case "frame":
       view.setFrame(msg, now);
       if (msg.overview) view.addOverview(msg.overview);
-      if (msg.tempo) tempo.update(msg.tempo, now);
+      if (msg.tempo) {
+        $("#tempo").hidden = false;
+        tempo.update(msg.tempo, now);
+      }
+      if (msg.traces) traces.add(msg.traces, now);
+      if (msg.xy) xy.add(msg.xy);
       if (msg.levels) meters.update(msg.levels, now);
       if (msg.cpu) cpu.update(msg.cpu, now);
       break;
@@ -105,12 +124,17 @@ $("#connect").addEventListener("click", () => {
 for (const sel of [inputSel, outputSel])
   sel.addEventListener("change", () => link.connected && link.connect(inputSel.value, outputSel.value));
 
-for (const b of document.querySelectorAll("[data-span]"))
-  b.addEventListener("click", () => {
-    view.spanSeconds = Number(b.dataset.span);
-    for (const o of document.querySelectorAll("[data-span]"))
-      o.setAttribute("aria-pressed", String(o === b));
-  });
+// The time-span buttons over the buffer and trace views.
+function spanButtons(attr, target) {
+  const buttons = document.querySelectorAll(`[${attr}]`);
+  for (const b of buttons)
+    b.addEventListener("click", () => {
+      target.spanSeconds = Number(b.getAttribute(attr));
+      for (const o of buttons) o.setAttribute("aria-pressed", String(o === b));
+    });
+}
+spanButtons("data-span", view);
+spanButtons("data-trace-span", traces);
 
 link.addEventListener("status", showStatus);
 link.addEventListener("ports", fillPorts);
@@ -141,11 +165,15 @@ async function start() {
 
 // ---------------------------------------------------------------- Drawing
 
+const panels = { scope: $("#scope"), traces: $("#trace-panel"), xy: $("#xy") };
+
 function frame() {
   // performance.now(), the clock the frames were stamped with (the
   // callback's own timestamp can lag it).
   const now = performance.now();
-  view.draw(now);
+  if (!panels.scope.hidden) view.draw(now);
+  if (!panels.traces.hidden) traces.draw(now);
+  if (!panels.xy.hidden) xy.draw();
   tempo.draw(now);
   meters.draw();
   cpu.draw(now);

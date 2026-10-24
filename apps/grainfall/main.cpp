@@ -531,6 +531,12 @@ int main(void)
     usb_cfg.transport_config.tx_retry_count = 20;
     usb_midi.Init(usb_cfg);
     usb_midi.StartReceive();
+    // libDaisy gives USB the same interrupt priority as the audio DMA, so
+    // while the page streams, a USB interrupt could delay the audio callback
+    // past its deadline. Let audio interrupt USB instead.
+    HAL_NVIC_SetPriority(OTG_FS_IRQn, 1, 0);
+    HAL_NVIC_SetPriority(OTG_FS_EP1_OUT_IRQn, 1, 0);
+    HAL_NVIC_SetPriority(OTG_FS_EP1_IN_IRQn, 1, 0);
     hw.midi.StartReceive();
 
     // Every knob starts "not live" so the defaults above hold until a knob moves.

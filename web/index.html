@@ -25,7 +25,7 @@
     <main>
       <p class="notice" id="notice" hidden></p>
 
-      <section class="scope" aria-label="Sample buffer">
+      <section class="scope" id="scope" aria-label="Sample buffer">
         <div class="scope-head">
           <h2>Buffer</h2>
           <div class="legend" aria-hidden="true">
@@ -45,8 +45,24 @@
           aria-label="The sample buffer over time, with the voices and delay taps reading from it"></canvas>
       </section>
 
+      <section class="scope" id="trace-panel" aria-label="Traces" hidden>
+        <div class="scope-head">
+          <h2 id="trace-title">Traces</h2>
+          <div class="span" role="group" aria-label="Time shown">
+            <button type="button" data-trace-span="2" aria-pressed="false">2 s</button>
+            <button type="button" data-trace-span="8" aria-pressed="true">8 s</button>
+            <button type="button" data-trace-span="20" aria-pressed="false">20 s</button>
+          </div>
+        </div>
+        <canvas id="traces" class="traces" role="img" aria-label="Values over time"></canvas>
+      </section>
+
       <section class="readouts">
-        <div class="readout" id="tempo"></div>
+        <div class="readout" id="tempo" hidden></div>
+        <div class="readout" id="xy" hidden>
+          <div class="readout-title" id="xy-title"></div>
+          <canvas class="xy-plot" role="img" aria-label="Input against output"></canvas>
+        </div>
         <div class="readout" id="levels"><div class="readout-title">Levels</div></div>
         <div class="readout" id="cpu"></div>
       </section>

@@ -82,5 +82,4 @@ libs:
 # Serve the web control surface (web/) on localhost, where Web MIDI is allowed
 WEB_PORT ?= 8000
 web:
-	@echo "Open http://localhost:$(WEB_PORT) in Chrome or Edge (Ctrl-C to stop)"
-	@python3 -m http.server $(WEB_PORT) --bind 127.0.0.1 --directory web
+	@python3 web/serve.py $(WEB_PORT)

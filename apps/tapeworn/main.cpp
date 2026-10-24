@@ -23,6 +23,10 @@
 //   Button 2           - AUX on/off; hold for momentary. LED 1 shows the AUX
 //                        colour while on: blue = stop, orange = fail,
 //                        white = filter
+//
+// Over USB MIDI it talks to the web control surface (web/, `make web`),
+// streaming levels, CPU, tape speed and the saturator's loop while the page
+// is open.
 
 #include "daisy_pod.h"
 #include "bypass_fade.h"
@@ -31,6 +35,9 @@
 #include "paged_knobs.h"
 #include "press_hold.h"
 #include "tape_engine.h"
+#include "util/CpuLoadMeter.h"
+#include "web_link.h"
+#include "web_view.h"
 
 using namespace daisy;
 
@@ -38,9 +45,11 @@ constexpr size_t kBufferLen = 1 << 17; // 2.7 s: room for the tape stop
 float DSY_SDRAM_BSS buffer_l[kBufferLen];
 float DSY_SDRAM_BSS buffer_r[kBufferLen];
 
-DaisyPod   hw;
-TapeEngine tape_engine;
-Limiter    limiter; // on dry + wet, so turning both up doesn't clip
+DaisyPod       hw;
+MidiUsbHandler usb_midi;
+TapeEngine     tape_engine;
+Limiter        limiter; // on dry + wet, so turning both up doesn't clip
+CpuLoadMeter   cpu_meter;
 
 constexpr int kNumPages = 4;
 constexpr int kNumKnobs = 2;
@@ -71,12 +80,199 @@ volatile uint32_t model_flash_until = 0;
 volatile uint32_t aux_flash_until   = 0;
 volatile uint32_t mono_flash_until  = 0;
 
+// ---------------------------------------------------------------- Web link
+//
+// The page in web/ (see web_view.h). It sets values through SysEx, read in
+// the audio callback; the main loop sends it what it needs.
+
+using namespace web_view;
+
+uint8_t DSY_SDRAM_BSS web_buffer[weblink::kMaxMessage];
+weblink::Session      web;
+weblink::Writer       web_out;
+int                   web_state[kNumParams]; // values in the last state sent
+
+// The audio callback appends to these rings; the main loop reads what's new
+// for each frame, so the callback never does more than append. The rings
+// are powers of two, longer than a frame takes.
+constexpr uint32_t  kTraceRing = 64;
+constexpr uint32_t  kXYRing    = 128;
+float DSY_SDRAM_BSS trace_ring[kTraceRing][kNumTraces];
+float DSY_SDRAM_BSS xy_ring[kXYRing][2];
+volatile uint32_t   trace_written = 0, xy_written = 0; // points so far
+uint32_t            trace_read    = 0;                 // main loop: points sent
+float               trace_sum[2] = {}, trace_min[2] = {1.0f, 1.0f};
+int                 trace_samples = 0, trace_period = 48;
+
+volatile float peaks[3]    = {}; // in, wet, out
+volatile bool  reset_peaks = false;
+
+Telemetry DSY_SDRAM_BSS telemetry; // the main loop's copy
+
+void SetModel(int m, uint32_t now_ms)
+{
+    model             = m < 0 ? 0 : (m >= TapeModel::kNumModels ? TapeModel::kNumModels - 1 : m);
+    model_flash_until = now_ms + 1000;
+}
+
+// A value from the page, in the audio callback.
+void SetParam(int index, int raw, uint32_t now_ms)
+{
+    switch(index)
+    {
+        case kParamModel: SetModel(raw, now_ms); break;
+        case kParamAuxType:
+            aux_type        = (TapeEngine::Aux)(raw % TapeEngine::kNumAux);
+            aux_flash_until = now_ms + 600;
+            break;
+        case kParamAux: aux_on = raw != 0; break;
+        case kParamBypass: bypass = raw != 0; break;
+        case kParamMono: mono_in = raw != 0; break;
+        default:
+            if(index >= kParamWow && index <= kParamSpread)
+                pages.Set((index - 1) / 2, (index - 1) % 2, raw / 16383.0f);
+            break;
+    }
+}
+
+// A value for the page, in the main loop.
+int ParamRaw(int index)
+{
+    switch(index)
+    {
+        case kParamModel: return model;
+        case kParamAuxType: return (int)aux_type;
+        case kParamAux: return aux_on;
+        case kParamBypass: return bypass;
+        case kParamMono: return mono_in;
+        default:
+            return (int)(pages.Value((index - 1) / 2, (index - 1) % 2) * 16383.0f + 0.5f);
+    }
+}
+
+// Once per block, in the audio callback: the saturator every block, and a
+// trace point every millisecond, averaging speed and keeping the lowest
+// level over it.
+void Collect(size_t size)
+{
+    const TapeEngine::Probe &p = tape_engine.GetProbe();
+    float *xy                  = xy_ring[xy_written & (kXYRing - 1)];
+    xy[0]                      = p.sat_in;
+    xy[1]                      = p.sat_out;
+    xy_written                 = xy_written + 1;
+
+    for(int c = 0; c < 2; c++)
+    {
+        trace_sum[c] += p.speed[c];
+        trace_min[c] = fminf(trace_min[c], p.level[c]);
+    }
+    trace_samples += (int)size;
+    if(trace_samples >= trace_period)
+    {
+        int    blocks       = trace_samples / (int)size;
+        float *point        = trace_ring[trace_written & (kTraceRing - 1)];
+        point[kTraceSpeedL] = SpeedCents(trace_sum[0] / blocks);
+        point[kTraceSpeedR] = SpeedCents(trace_sum[1] / blocks);
+        point[kTraceLevelL] = 100.0f * trace_min[0];
+        point[kTraceLevelR] = 100.0f * trace_min[1];
+        trace_written       = trace_written + 1; // after the point is in place
+        trace_sum[0] = trace_sum[1] = 0.0f;
+        trace_min[0] = trace_min[1] = 1.0f;
+        trace_samples = 0;
+    }
+}
+
+// In the main loop: what's new since the last frame. The callback only
+// overwrites ring entries far older than these.
+void ReadTelemetry()
+{
+    Telemetry &t = telemetry;
+    for(int i = 0; i < 3; i++)
+        t.peaks[i] = peaks[i];
+    reset_peaks = true;
+
+    uint32_t written = trace_written;
+    uint32_t n       = written - trace_read;
+    if(n > (uint32_t)kTracePoints)
+        n = kTracePoints; // the page fell behind: skip the oldest
+    for(uint32_t i = 0; i < n; i++)
+    {
+        const float *src = trace_ring[(written - n + i) & (kTraceRing - 1)];
+        for(int k = 0; k < kNumTraces; k++)
+            t.trace[i][k] = src[k];
+    }
+    t.num_points = (int)n;
+    trace_read   = written;
+
+    written = xy_written;
+    for(uint32_t i = 0; i < (uint32_t)kXYPoints; i++)
+    {
+        const float *src = xy_ring[(written - kXYPoints + i) & (kXYRing - 1)];
+        t.xy[i][0]       = src[0];
+        t.xy[i][1]       = src[1];
+    }
+}
+
+// From the main loop: sends the page the next message it needs, if any.
+void SendWeb(uint32_t now_ms)
+{
+    int  raw[kNumParams];
+    bool changed = false;
+    for(int i = 0; i < kNumParams; i++)
+    {
+        raw[i] = ParamRaw(i);
+        if(raw[i] != web_state[i])
+            changed = true;
+    }
+
+    weblink::Writer &w     = web_out;
+    int              param = 0;
+    switch(web.Next(now_ms, changed, &param))
+    {
+        case weblink::Session::Send::kHello: WriteHello(w, hw.AudioSampleRate()); break;
+        case weblink::Session::Send::kParam: weblink::WriteParam(w, param, kParams[param]); break;
+        case weblink::Session::Send::kState:
+            w.Begin(weblink::Msg::kState);
+            w.U7(kNumParams);
+            for(int i = 0; i < kNumParams; i++)
+            {
+                w.U14((uint32_t)raw[i]);
+                web_state[i] = raw[i];
+            }
+            break;
+        case weblink::Session::Send::kFrame:
+            ReadTelemetry();
+            WriteFrame(w, telemetry, cpu_meter.GetAvgCpuLoad(), cpu_meter.GetMaxCpuLoad());
+            cpu_meter.Reset();
+            web.TakeRestart(); // no buffer overview to restart
+            break;
+        default: return;
+    }
+    size_t size = w.End();
+    if(size > 0)
+        usb_midi.SendMessage(w.Data(), size);
+}
+
+// ---------------------------------------------------------------- Audio
+
 void AudioCallback(AudioHandle::InputBuffer  in,
                    AudioHandle::OutputBuffer out,
                    size_t                    size)
 {
+    cpu_meter.OnBlockStart();
     hw.ProcessAllControls();
     uint32_t now_ms = System::GetNow();
+
+    // The web page's settings, over USB MIDI SysEx.
+    usb_midi.Listen();
+    while(usb_midi.HasEvents())
+    {
+        MidiEvent e = usb_midi.PopEvent();
+        weblink::Command c;
+        if(e.type == SystemCommon && e.sc_type == SystemExclusive
+           && web.Receive(e.sysex_data, e.sysex_message_len, now_ms, &c))
+            SetParam(c.index, c.raw, now_ms);
+    }
 
     // Button 1: a tap toggles bypass on release, a 1 s hold toggles mono in.
     PressHold::Event b1 = button1_press.Update(hw.button1.Pressed(),
@@ -99,11 +295,7 @@ void AudioCallback(AudioHandle::InputBuffer  in,
 
     int inc = hw.encoder.Increment();
     if(inc != 0)
-    {
-        model += inc;
-        model = model < 0 ? 0 : (model >= TapeModel::kNumModels ? TapeModel::kNumModels - 1 : model);
-        model_flash_until = now_ms + 1000;
-    }
+        SetModel(model + inc, now_ms);
 
     const DaisyPod::Knob knob_ids[kNumKnobs] = {DaisyPod::KNOB_1, DaisyPod::KNOB_2};
     float                knob[kNumKnobs];
@@ -138,6 +330,14 @@ void AudioCallback(AudioHandle::InputBuffer  in,
     float dry    = pages.Value(2, 0) * pages.Value(2, 0);
     float volume = pages.Value(2, 1) * 2.0f;
 
+    // Peaks for the web page's meters, since it last read them.
+    if(reset_peaks)
+    {
+        peaks[0] = peaks[1] = peaks[2] = 0.0f;
+        reset_peaks                    = false;
+    }
+    float peak_in = peaks[0], peak_wet = peaks[1], peak_out = peaks[2];
+
     for(size_t i = 0; i < size; i++)
     {
         float in_l = in[0][i];
@@ -153,18 +353,46 @@ void AudioCallback(AudioHandle::InputBuffer  in,
         bypass_fade.Process(bypass, in_l, in_r, &fx_l, &fx_r);
         out[0][i] = fx_l;
         out[1][i] = fx_r;
+
+        peak_in  = fmaxf(peak_in, fmaxf(fabsf(in_l), fabsf(in_r)));
+        peak_wet = fmaxf(peak_wet, fmaxf(fabsf(wet_l), fabsf(wet_r)));
+        peak_out = fmaxf(peak_out, fmaxf(fabsf(fx_l), fabsf(fx_r)));
     }
+    peaks[0] = peak_in;
+    peaks[1] = peak_wet;
+    peaks[2] = peak_out;
+
+    Collect(size);
+    cpu_meter.OnBlockEnd();
 }
 
 int main(void)
 {
-    hw.Init();
+    hw.Init(true); // 480 MHz: the hysteresis solver needs the headroom
     hw.SetAudioBlockSize(4);
     hw.SetAudioSampleRate(SaiHandle::Config::SampleRate::SAI_48KHZ);
 
     tape_engine.Init(hw.AudioSampleRate(), buffer_l, buffer_r, kBufferLen);
     limiter.Init(hw.AudioSampleRate());
     bypass_fade.Init(hw.AudioSampleRate());
+    cpu_meter.Init(hw.AudioSampleRate(), hw.AudioBlockSize());
+    web.Init(kNumParams);
+    web_out.Init(web_buffer);
+
+    MidiUsbHandler::Config usb_cfg;
+    usb_cfg.transport_config.periph = MidiUsbTransport::Config::INTERNAL;
+    // A long SysEx message to the web page can still be going out when the
+    // next one is ready; wait up to 2 ms for it (in the main loop).
+    usb_cfg.transport_config.tx_retry_count = 20;
+    usb_midi.Init(usb_cfg);
+    usb_midi.StartReceive();
+    // libDaisy gives USB the same interrupt priority as the audio DMA, so
+    // while the page streams, a USB interrupt could delay the audio callback
+    // past its deadline. Let audio interrupt USB instead.
+    HAL_NVIC_SetPriority(OTG_FS_IRQn, 1, 0);
+    HAL_NVIC_SetPriority(OTG_FS_EP1_OUT_IRQn, 1, 0);
+    HAL_NVIC_SetPriority(OTG_FS_EP1_IN_IRQn, 1, 0);
+    trace_period = (int)(hw.AudioSampleRate() * kTracePeriodMs / 1000.0f);
 
     // Every knob starts "not live" so the defaults above hold until a knob moves.
     hw.StartAdc();
@@ -224,6 +452,8 @@ int main(void)
             hw.led2.Set(c[0], c[1], c[2]);
         }
         hw.UpdateLeds();
-        System::Delay(20);
+
+        SendWeb(now);
+        System::Delay(10);
     }
 }

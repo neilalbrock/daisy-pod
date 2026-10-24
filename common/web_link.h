@@ -33,7 +33,7 @@ constexpr size_t kMaxMessage = 720;
 enum class Msg : uint8_t
 {
     // App to page
-    kHello = 0x01, // app name, layout, group and meter names
+    kHello = 0x01, // a Hello
     kParam = 0x02, // one parameter's description
     kState = 0x03, // every parameter's value
     kFrame = 0x04, // telemetry sections, below
@@ -61,6 +61,35 @@ enum class Section : uint8_t
     kBuffer   = 4, // write head (21), onsets: count (7) + frame (21) each,
                    // heads: count (7) + Head each
     kOverview = 5, // first column (14), count (7), sqrt(peak) x 127 (7) each
+    kTraces   = 6, // points (7), traces (7), then each point's value per
+                   // trace, 0..16383 across the trace's range (14), oldest first
+    kXY       = 7, // count (7), then x, y pairs, -1..1 as 0..126 (7 each)
+};
+
+// A value plotted over time, described in the hello.
+struct Trace
+{
+    const char *name;
+    const char *unit;
+    int16_t     min, max; // the range shown (-8192..8191)
+};
+
+// What the page needs to know about the app, sent first.
+struct Hello
+{
+    const char        *app;
+    uint32_t           sample_rate;
+    uint32_t           buffer_frames;    // 0: no buffer to show
+    uint32_t           overview_columns; // 0: no buffer overview
+    const char *const *groups; // control groups, by Param::group
+    uint8_t            num_groups;
+    const char *const *meters; // kLevels, in order
+    uint8_t            num_meters;
+    uint8_t            num_params;
+    const Trace       *traces; // kTraces, in order
+    uint8_t            num_traces;
+    uint8_t            trace_period_ms; // between points
+    const char        *xy;              // the kXY plot's title, or nullptr
 };
 
 // One read head in the buffer, for the kBuffer section.
@@ -117,8 +146,13 @@ class Writer
 };
 
 // Standard messages.
+void WriteHello(Writer &w, const Hello &h);
 void WriteParam(Writer &w, int index, const Param &p);
 void WriteHead(Writer &w, const Head &h);
+
+// Values for the kTraces and kXY sections.
+void WriteTraceValue(Writer &w, const Trace &t, float v); // clamped to its range
+void WriteXY(Writer &w, float x, float y);                // each -1..1
 
 // What a command from the page asks for.
 struct Command

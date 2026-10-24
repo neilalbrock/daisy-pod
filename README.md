@@ -17,10 +17,12 @@ friends), and the web link protocol (`web_link.h`).
 ## Web control surface
 
 `web/` is a page that connects to the Pod over USB MIDI and shows what the
-app is doing (the buffer with every voice and delay tap, the beat grid, note
-onsets, levels and CPU) next to all its controls. Run `make web` and open
-http://localhost:8000 in Chrome or Edge. So far grainfall supports it; see
-[web/README.md](web/README.md).
+app is doing (for grainfall, the buffer with every voice and delay tap, the
+beat grid and note onsets; for tapeworn, tape speed, dropouts and the
+saturator's hysteresis loop; for both, levels and CPU) next to all its
+controls. Run `make web` and open
+http://localhost:8000 in Chrome or Edge. Grainfall and tapeworn support it;
+see [web/README.md](web/README.md).
 
 ## Toolchain
 

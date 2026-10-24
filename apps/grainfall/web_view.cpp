@@ -71,18 +71,17 @@ void WriteHello(weblink::Writer &w,
                 uint32_t         buffer_frames,
                 size_t           overview_columns)
 {
-    w.Begin(weblink::Msg::kHello);
-    w.Str("grainfall");
-    w.U21((uint32_t)sample_rate);
-    w.U21(buffer_frames);
-    w.U14((uint32_t)overview_columns);
-    w.U7(Count(kGroupNames));
-    for(const char *g : kGroupNames)
-        w.Str(g);
-    w.U7(Count(kMeterNames));
-    for(const char *m : kMeterNames)
-        w.Str(m);
-    w.U7(kNumParams);
+    weblink::Hello h = {};
+    h.app              = "grainfall";
+    h.sample_rate      = (uint32_t)sample_rate;
+    h.buffer_frames    = buffer_frames;
+    h.overview_columns = (uint32_t)overview_columns;
+    h.groups           = kGroupNames;
+    h.num_groups       = Count(kGroupNames);
+    h.meters           = kMeterNames;
+    h.num_meters       = Count(kMeterNames);
+    h.num_params       = kNumParams;
+    weblink::WriteHello(w, h);
 }
 
 void WriteFrame(weblink::Writer &w,

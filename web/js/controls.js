@@ -102,7 +102,9 @@ export class Controls {
       const card = document.createElement("section");
       // A big grid of options (grainfall's effects) gets room of its own.
       const big = members.some((m) => m.kind === Kind.CHOICE && matrixRows(m.options, m.columns));
-      card.className = big ? "group group-wide" : "group";
+      // A long list (tapeworn's tape models) runs down beside the others.
+      const tall = !big && members.some((m) => m.kind === Kind.CHOICE && m.options.length > 8);
+      card.className = big ? "group group-wide" : tall ? "group group-tall" : "group";
       const colour = app.groupColour?.(groupName);
       if (colour) card.style.setProperty("--accent", colour);
       const title = document.createElement("h2");

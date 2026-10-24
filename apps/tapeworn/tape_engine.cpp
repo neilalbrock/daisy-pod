@@ -71,6 +71,7 @@ void TapeEngine::Init(float  sample_rate,
     wow_depth_     = wow_depth_target_;
     flutter_depth_ = flutter_depth_target_;
     centre_        = centre_target_;
+    last_delay_[0] = last_delay_[1] = centre_;
 }
 
 void TapeEngine::SetParams(const Params &p)
@@ -188,11 +189,23 @@ void TapeEngine::Process(float in_l, float in_r, float *out_l, float *out_r)
         Channel &ch = ch_[c];
 
         // Record
-        ch.buf[write_] = ch.dc.Process(ch.hysteresis.Process(in[c]));
+        float sat      = ch.hysteresis.Process(in[c]);
+        ch.buf[write_] = ch.dc.Process(sat);
+        if(c == 0)
+        {
+            probe_.sat_in  = in[c];
+            probe_.sat_out = sat;
+        }
 
         // Play back
-        float delay = centre_ + wow_depth_ * wow[c] + flutter_depth_ * flutter[c]
-                      + fail[c].delay + excess_;
+        float wobble = centre_ + wow_depth_ * wow[c] + flutter_depth_ * flutter[c]
+                       + fail[c].delay;
+        float delay = wobble + excess_;
+
+        // Wobble slows the tape as its delay grows, on top of the stop.
+        probe_.speed[c] = speed - (wobble - last_delay_[c]);
+        probe_.level[c] = fail[c].gain * stop_gain;
+        last_delay_[c]  = wobble;
         float y = Read(ch.buf, delay);
         if(catchup_ < 1.0f)
             y = Lerp(Read(ch.buf, delay + catchup_excess_), y, catchup_);

@@ -71,6 +71,35 @@ size_t Writer::End()
     return overflow_ ? 0 : n_;
 }
 
+void WriteHello(Writer &w, const Hello &h)
+{
+    w.Begin(Msg::kHello);
+    w.Str(h.app);
+    w.U21(h.sample_rate);
+    w.U21(h.buffer_frames);
+    w.U14(h.overview_columns);
+    w.U7(h.num_groups);
+    for(int i = 0; i < h.num_groups; i++)
+        w.Str(h.groups[i]);
+    w.U7(h.num_meters);
+    for(int i = 0; i < h.num_meters; i++)
+        w.Str(h.meters[i]);
+    w.U7(h.num_params);
+
+    // Added after the first version; the page reads them if present.
+    w.U7(h.num_traces);
+    w.U7(h.trace_period_ms);
+    for(int i = 0; i < h.num_traces; i++)
+    {
+        const Trace &t = h.traces[i];
+        w.Str(t.name);
+        w.Str(t.unit);
+        w.U14((uint32_t)(t.min + 8192));
+        w.U14((uint32_t)(t.max + 8192));
+    }
+    w.Str(h.xy != nullptr ? h.xy : "");
+}
+
 void WriteParam(Writer &w, int index, const Param &p)
 {
     w.Begin(Msg::kParam);
@@ -93,6 +122,18 @@ void WriteHead(Writer &w, const Head &h)
     w.U7((h.reverse ? 1u : 0u) | (h.tap ? 2u : 0u));
     w.U7((uint32_t)(Unit(h.amp) * 127.0f + 0.5f));
     w.U7((uint32_t)(Unit(h.pan) * 127.0f + 0.5f));
+}
+
+void WriteTraceValue(Writer &w, const Trace &t, float v)
+{
+    w.Unit((v - (float)t.min) / (float)(t.max - t.min));
+}
+
+void WriteXY(Writer &w, float x, float y)
+{
+    auto raw = [](float v) { return (uint32_t)((v < -1.0f ? -1.0f : (v > 1.0f ? 1.0f : v)) * 63.0f + 63.5f); };
+    w.U7(raw(x));
+    w.U7(raw(y));
 }
 
 bool Parse(const uint8_t *data, int length, Command *out)

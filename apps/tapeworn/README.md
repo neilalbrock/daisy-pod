@@ -87,3 +87,15 @@ measurements of real ones.
   Bypass skips it and passes the input straight through.
 - The Pod's input is stereo. With a mono source on the left channel only, hold
   button 1 to turn on mono in.
+
+## Web control surface
+
+With the Pod plugged in by USB, `make web` and http://localhost:8000 (Chrome
+or Edge) show each channel's tape speed and level over time (wow, flutter,
+snags, dropouts and the tape stop), the saturator's hysteresis loop, levels
+and CPU load, next to all the controls: the tape model, the four knob pages,
+the AUX type and switch, bypass and mono in. See
+[web/README.md](../../web/README.md).
+
+Tapeworn listens to USB MIDI only for the page; it has no MIDI CC map.
+
