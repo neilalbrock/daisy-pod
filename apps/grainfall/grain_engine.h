@@ -24,6 +24,7 @@
 #include "fx_cloud.h"
 #include "fx_granules.h"
 #include "fx_micro_loop.h"
+#include "fx_multidelay.h"
 #include "hold.h"
 #include "onset.h"
 #include "post_fx.h"
@@ -70,14 +71,16 @@ class GrainEngine
         PostFx::Params post;
     };
 
-    // buffer: buffer_frames * 2 floats; hold_buffer: hold_frames * 2 floats.
+    // buffer: buffer_frames * 2 floats; hold_buffer: hold_frames * 2 floats;
+    // mod_buffer: 2 * PostFx::kModLen floats.
     // Both frame counts must be powers of two. The hold buffer must be
     // longer than the longest hold (2 s) plus 20 ms.
     void Init(float  sample_rate,
               float *buffer,
               size_t buffer_frames,
               float *hold_buffer,
-              size_t hold_frames);
+              size_t hold_frames,
+              float *mod_buffer);
 
     // Once per block, before Process(): takes the controls and lets the
     // current effect schedule its voices.
@@ -107,6 +110,8 @@ class GrainEngine
     FxHaze   haze_;
     FxTunnel tunnel_;
     FxStrum  strum_;
+    FxPattern pattern_;
+    FxWarp    warp_;
 
     // Feedback path
     float        fb_ = 0.0f, fb_target_ = 0.0f, fb_coef_ = 0.0f;

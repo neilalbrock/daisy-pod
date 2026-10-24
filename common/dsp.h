@@ -44,6 +44,13 @@ inline float FastSin(float phase)
     return -y;
 }
 
+// tanh-like soft clip: close to tanh up to |x| = 3, clamped beyond.
+inline float SoftClip(float x)
+{
+    x = Clamp(x, -3.0f, 3.0f);
+    return x * (27.0f + x * x) / (27.0f + 9.0f * x * x);
+}
+
 inline float WrapPhase(float phase)
 {
     return phase >= 1.0f ? phase - 1.0f : phase;

@@ -8,9 +8,10 @@ modulation, a resonant low-pass and the dry/wet mix.
 make APP=grainfall program-dfu
 ```
 
-**Work in progress.** The Micro Loop (Mosaic, Seq, Glide) and Granules (Haze,
-Tunnel, Strum) effects are written. The other slots play a placeholder grain
-cloud (see below) until theirs are.
+**Work in progress.** The Micro Loop (Mosaic, Seq, Glide), Granules (Haze,
+Tunnel, Strum) and Multidelay (Pattern, Warp) effects are written. The Glitch
+slots (Blocks, Interrupt, Arp) play a placeholder grain cloud (see below)
+until theirs are.
 
 ## Signal flow
 
@@ -20,9 +21,9 @@ in -> Hold (live, or the held loop) -> + feedback -> 22 s buffer
    -> + dry -> limiter -> out
 ```
 
-Where an effect uses feedback (Haze), part of its output is recorded back
-into the buffer, a little darker each time round, so grains are made of
-earlier grains.
+Where an effect uses feedback (Haze, Pattern, Warp), part of its output is
+recorded back into the buffer, a little darker each time round, so grains are
+made of earlier grains and delays repeat.
 
 ## Controls
 
@@ -179,6 +180,39 @@ overlap, and the oldest fades out to make room.
 | B | Overlapping, slightly detuned copies of the most recent note phase against each other |
 | C | Cascades through the last few notes in turn |
 | D | As C, with double-speed grains of recent notes mixed in |
+
+### Multidelay
+
+Up to eight delay taps at multiples of the Time step, read straight from the
+buffer. The last active tap feeds back, so the whole pattern repeats, a
+little darker each time. Changing Time or tempo glides the delay times, like
+tape.
+
+| Control | Effect |
+|---|---|
+| Activity | How many taps play, 1 to 8 |
+| Repeats | Feedback from the last tap, from a single pass to nearly endless |
+| Shape | Tap levels across the pattern: square even, ramp up swelling, triangle loudest in the middle, ramp down fading |
+| Time | The step the tap times are counted in |
+| Reverse | Every tap plays backwards, in windows of up to one step (half a second at most) |
+
+**Pattern**: tap rhythms, in steps.
+
+| Variation | Taps |
+|---|---|
+| A | 1, 2, 3 ... 8: a classic delay. One tap plus Repeats is a plain echo |
+| B | Every 3/4 step: dotted |
+| C | Every 2/3 step: triplets |
+| D | Clusters: 1/4, 1/2, 3/4, then 2, 2 1/4, 2 1/2, then 4, 4 1/4 |
+
+**Warp**: taps half a step apart, each changed on the way out.
+
+| Variation | |
+|---|---|
+| A | Each tap's low-pass opens as you play harder, the later taps less |
+| B | Each tap through a resonant band-pass, rising tap by tap from 300 Hz to 3.4 kHz |
+| C | Taps pitch-shifted: +12, +7, -12, +5, +12, -5, -7, -12 semitones. With Repeats up, the last tap's shift builds on itself |
+| D | Each tap swaps between itself and an octave up every two beats, fading across |
 
 ### Placeholder cloud
 

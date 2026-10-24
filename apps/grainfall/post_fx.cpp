@@ -11,9 +11,13 @@ constexpr float kMinCutoff = 20.0f;
 constexpr float kMaxCutoff = 20000.0f;
 } // namespace
 
-void PostFx::Init(float sample_rate)
+void PostFx::Init(float sample_rate, float *mod_buffer)
 {
     sample_rate_ = sample_rate;
+    mod_buf_l_   = mod_buffer;
+    mod_buf_r_   = mod_buffer + kModLen;
+    for(size_t i = 0; i < 2 * kModLen; i++)
+        mod_buffer[i] = 0.0f;
     depth_coef_  = SmoothCoef(0.05f, sample_rate);
     gain_coef_   = SmoothCoef(0.02f, sample_rate);
     block_coef_  = 0.1f; // per block: about 1 ms at block size 4

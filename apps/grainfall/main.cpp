@@ -50,6 +50,7 @@ constexpr size_t kBufferFrames = 1 << 20; // 21.8 s
 constexpr size_t kHoldFrames   = 1 << 17; // 2.7 s: the longest hold plus its crossfade
 float DSY_SDRAM_BSS buffer[kBufferFrames * 2];
 float DSY_SDRAM_BSS hold_buffer[kHoldFrames * 2];
+float DSY_SDRAM_BSS mod_buffer[PostFx::kModLen * 2]; // pitch mod delay
 
 DaisyPod       hw;
 MidiUsbHandler usb_midi;
@@ -332,11 +333,12 @@ void AudioCallback(AudioHandle::InputBuffer  in,
 
 int main(void)
 {
-    hw.Init();
+    hw.Init(true); // 480 MHz: the delay taps need the headroom
     hw.SetAudioBlockSize(4);
     hw.SetAudioSampleRate(SaiHandle::Config::SampleRate::SAI_48KHZ);
 
-    engine.Init(hw.AudioSampleRate(), buffer, kBufferFrames, hold_buffer, kHoldFrames);
+    engine.Init(hw.AudioSampleRate(), buffer, kBufferFrames, hold_buffer,
+                kHoldFrames, mod_buffer);
     tempo.Init(hw.AudioSampleRate());
     limiter.Init(hw.AudioSampleRate());
     bypass_fade.Init(hw.AudioSampleRate());

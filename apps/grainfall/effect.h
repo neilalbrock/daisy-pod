@@ -34,6 +34,7 @@ struct EffectContext
     // Input
     bool            onset = false; // a note started since the last block
     const OnsetLog *onsets = nullptr;
+    float           input_level = 0.0f; // envelope of the effect input
     uint32_t        write_pos = 0; // sample buffer write head
     uint32_t        buffer_frames = 0;
 
@@ -62,8 +63,11 @@ class Effect
     // effect that scales its voices down may ask for more than 1 (up to 1.5).
     virtual float Feedback(float) const { return 0.0f; }
 
-    // Adds to *l and *r. Called once per sample with the effect input.
-    virtual void Process(float, float, float *, float *) {}
+    // Once per sample, for effects that work on the signal directly (the
+    // delays): reads `buf` and the effect input, adds to *l and *r, and may
+    // add its own feedback to *fb_l and *fb_r, which are recorded into the
+    // buffer with this sample.
+    virtual void Process(const SampleBuffer &, float, float, float *, float *, float *, float *) {}
 
   protected:
     ~Effect() = default;

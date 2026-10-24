@@ -26,7 +26,10 @@ class PostFx
         float volume    = 0.5f; // 0..1, noon is unity, max x2
     };
 
-    void Init(float sample_rate);
+    static constexpr size_t kModLen = 1024; // 21 ms, a power of two
+
+    // mod_buffer: 2 * kModLen floats, the pitch mod delay (SDRAM is fine).
+    void Init(float sample_rate, float *mod_buffer);
 
     // Once per block.
     void SetParams(const Params &p);
@@ -34,13 +37,11 @@ class PostFx
     void Process(float *l, float *r);
 
   private:
-    static constexpr size_t kModLen = 1024; // 21 ms, a power of two
-
     float ReadMod(const float *buf, float delay) const;
 
     float sample_rate_ = 48000.0f;
 
-    float  mod_buf_l_[kModLen] = {}, mod_buf_r_[kModLen] = {};
+    float *mod_buf_l_ = nullptr, *mod_buf_r_ = nullptr;
     size_t mod_write_ = 0;
     float  lfo_phase_ = 0.0f, lfo_inc_ = 0.0f;
     float  depth_ = 0.0f, depth_target_ = 0.0f; // swing in samples
