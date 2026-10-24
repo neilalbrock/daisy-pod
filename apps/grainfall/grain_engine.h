@@ -23,6 +23,7 @@
 #include "effect.h"
 #include "fx_cloud.h"
 #include "fx_granules.h"
+#include "fx_micro_loop.h"
 #include "hold.h"
 #include "onset.h"
 #include "post_fx.h"
@@ -100,6 +101,9 @@ class GrainEngine
     dsp::Rng      rng_;
 
     FxCloud  cloud_;
+    FxMosaic mosaic_;
+    FxSeq    seq_;
+    FxGlide  glide_;
     FxHaze   haze_;
     FxTunnel tunnel_;
     FxStrum  strum_;

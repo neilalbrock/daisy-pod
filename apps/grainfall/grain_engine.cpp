@@ -47,6 +47,9 @@ Effect *GrainEngine::EffectFor(EffectId id)
 {
     switch(id)
     {
+        case EffectId::kMosaic: return &mosaic_;
+        case EffectId::kSeq: return &seq_;
+        case EffectId::kGlide: return &glide_;
         case EffectId::kHaze: return &haze_;
         case EffectId::kTunnel: return &tunnel_;
         case EffectId::kStrum: return &strum_;

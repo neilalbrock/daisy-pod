@@ -8,8 +8,9 @@ modulation, a resonant low-pass and the dry/wet mix.
 make APP=grainfall program-dfu
 ```
 
-**Work in progress.** The Granules effects (Haze, Tunnel, Strum) are written.
-The other slots play a placeholder grain cloud (see below) until theirs are.
+**Work in progress.** The Micro Loop (Mosaic, Seq, Glide) and Granules (Haze,
+Tunnel, Strum) effects are written. The other slots play a placeholder grain
+cloud (see below) until theirs are.
 
 ## Signal flow
 
@@ -78,6 +79,54 @@ them differently.
 | Arp | 1-4 | Recent notes sequenced into arpeggios |
 | Pattern | 37-40 | Multi-tap delay rhythms |
 | Warp | 41-44 | Delay taps with filters and pitch shift |
+
+### Micro Loop
+
+Loops of the last Time step, locked to the grid. A loop at 2x reads two
+steps' worth of audio in one step, and one at 0.5x half a step, so every layer
+repeats once per step whatever its speed. **Repeats** sets how long a loop is
+kept before fresh audio replaces it: 1 to 32 steps, but never more than about
+15 s.
+
+**Mosaic**: overlapping loops at several speeds.
+
+| Control | Effect |
+|---|---|
+| Activity | How many loopers play, 1 to 4. They take turns to capture |
+| Shape | Contour of each pass round the loop |
+
+| Variation | Speeds |
+|---|---|
+| A | Normal and double (an octave up) |
+| B | Normal and half (an octave down) |
+| C | All double |
+| D | Half, normal, double and quadruple |
+
+**Seq**: steps of recent audio rearranged into an 8-step sequence. Repeats
+counts the steps before fresh material replaces it.
+
+| Variation | Activity |
+|---|---|
+| A | Shuffled slices with rests. Activity varies each slice's low-pass |
+| B | Slices bounce between normal and half speed (Activity: how often). At full Activity a soft half-speed pad sits underneath |
+| C | Overlapping two-step slices in up to three layers (Activity), with a low-pass sweep over each sequence |
+| D | Interlocking layers on the half-step (Activity). At full, a bit-crushed octave-down layer joins |
+
+Shape is the contour of each slice.
+
+**Glide**: two overlapping loops whose speed glides between two settings.
+
+| Control | Effect |
+|---|---|
+| Activity | Glide rate, one sweep per 16 beats to two per beat |
+| Shape | The glide's path: square jumps between the speeds, ramp up rises and drops back, triangle rises and falls, ramp down falls and jumps back |
+
+| Variation | Speeds |
+|---|---|
+| A | Half to normal |
+| B | Double to half |
+| C | Normal to double |
+| D | One loop glides up while the other glides down, half to double |
 
 ### Granules
 
