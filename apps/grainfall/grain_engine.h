@@ -21,7 +21,7 @@
 
 #include "dsp.h"
 #include "effect.h"
-#include "fx_cloud.h"
+#include "fx_glitch.h"
 #include "fx_granules.h"
 #include "fx_micro_loop.h"
 #include "fx_multidelay.h"
@@ -103,15 +103,17 @@ class GrainEngine
     PostFx        post_;
     dsp::Rng      rng_;
 
-    FxCloud  cloud_;
-    FxMosaic mosaic_;
-    FxSeq    seq_;
-    FxGlide  glide_;
-    FxHaze   haze_;
-    FxTunnel tunnel_;
-    FxStrum  strum_;
-    FxPattern pattern_;
-    FxWarp    warp_;
+    FxMosaic    mosaic_;
+    FxSeq       seq_;
+    FxGlide     glide_;
+    FxHaze      haze_;
+    FxTunnel    tunnel_;
+    FxStrum     strum_;
+    FxBlocks    blocks_;
+    FxInterrupt interrupt_;
+    FxArp       arp_;
+    FxPattern   pattern_;
+    FxWarp      warp_;
 
     // Feedback path
     float        fb_ = 0.0f, fb_target_ = 0.0f, fb_coef_ = 0.0f;

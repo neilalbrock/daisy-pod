@@ -49,11 +49,13 @@ Effect *GrainEngine::EffectFor(EffectId id)
         case EffectId::kHaze: return &haze_;
         case EffectId::kTunnel: return &tunnel_;
         case EffectId::kStrum: return &strum_;
+        case EffectId::kBlocks: return &blocks_;
+        case EffectId::kInterrupt: return &interrupt_;
+        case EffectId::kArp: return &arp_;
         case EffectId::kPattern: return &pattern_;
         case EffectId::kWarp: return &warp_;
-        // The placeholder cloud until these are written.
-        default: return &cloud_;
     }
+    return &haze_;
 }
 
 void GrainEngine::BeginBlock(const Params &p, int block_frames)

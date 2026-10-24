@@ -8,11 +8,6 @@ modulation, a resonant low-pass and the dry/wet mix.
 make APP=grainfall program-dfu
 ```
 
-**Work in progress.** The Micro Loop (Mosaic, Seq, Glide), Granules (Haze,
-Tunnel, Strum) and Multidelay (Pattern, Warp) effects are written. The Glitch
-slots (Blocks, Interrupt, Arp) play a placeholder grain cloud (see below)
-until theirs are.
-
 ## Signal flow
 
 ```
@@ -214,16 +209,61 @@ tape.
 | C | Taps pitch-shifted: +12, +7, -12, +5, +12, -5, -7, -12 semitones. With Repeats up, the last tap's shift builds on itself |
 | D | Each tap swaps between itself and an octave up every two beats, fading across |
 
-### Placeholder cloud
+### Glitch
 
-Until the rest are written, their slots play this:
+**Blocks**: each note you play sets off a burst of blocks: half-step slices
+of the last two steps, played back rearranged on the grid. Every four blocks,
+fresh ones are taken from what you just played. A burst starts a block after
+the note, so the note is in it.
 
-- **Grains:** grains start on each Time step, and at random in between.
-- **Activity:** extra grains, 2 to 60 a second.
-- **Repeats:** grain length, 20 ms to 1 s.
-- **Shape:** the grain envelope.
-- **Variation:** the playback speeds. A plays at 1x; B at 1x and 2x; C at 1x and 0.5x; D at 0.5x, 1x and 2x.
-- **Reach:** grains reach up to one step back in time.
+| Control | Effect |
+|---|---|
+| Activity | How far the blocks stray from a steady, repeating order: reshuffles, stutters, reversed blocks and each variation's manipulation |
+| Repeats | How long a burst goes on: 2 to 32 half-steps. At the top of the knob it never stops |
+| Shape | Each block's contour |
+| Time | The grid: a block is half a step (40 ms to 1 s) |
+
+| Variation | |
+|---|---|
+| A | Bursts of quick runs through the last four notes break in |
+| B | Blocks pitch-shifted an octave down, a fifth up or an octave up |
+| C | Longer blocks overlap, low-pass filtered and fading out: a softer glitch |
+| D | Pitch-shifted and bit-crushed (more crush with Activity) |
+
+**Interrupt**: glitches cut into the live signal, which the effect passes
+through between them. The dry signal isn't touched, so at 100% Mix the
+glitches truly interrupt your playing. Below that, the live signal is heard
+both dry and through the effect between glitches.
+
+| Control | Effect |
+|---|---|
+| Activity | How much each glitch is chopped up (1 to 4 chops, D 2 to 8) and manipulated; glitches sometimes run half or twice as long |
+| Repeats | How often glitches come: a 4% chance each step, up to every other step |
+| Shape | Each chop's contour |
+| Time | The grid, and the glitch length (one step, 60 ms to 1.5 s) |
+
+| Variation | |
+|---|---|
+| A | Chops of your recent playing, rearranged and sometimes reversed |
+| B | Chops pitch-shifted: an octave down, a fourth down, a fifth up, an octave up |
+| C | A slice echoing through a band-pass that falls from 4 kHz to 300 Hz |
+| D | Bit-crushed chops at drastic speeds (two octaves down to two up), and tiny stutters |
+
+**Arp**: the last few notes you played, sequenced two to a step.
+
+| Control | Effect |
+|---|---|
+| Activity | Steps in the arpeggio, 2 to 8: the recent notes oldest to newest, round again if there are fewer |
+| Repeats | How long it plays on after you play: it fades over 0.3 s to 12 s, and at the top of the knob never stops |
+| Shape | Each note's contour |
+| Time | The grid: notes are half a step apart and long (40 ms to 500 ms) |
+
+| Variation | |
+|---|---|
+| A | The notes as played |
+| B | Each step at its own speed, so the pattern climbs and falls a major arpeggio |
+| C | Each step through its own random low-pass or band-pass, new with each note you play |
+| D | Each step bit-crushed by its own amount |
 
 ## MIDI
 
