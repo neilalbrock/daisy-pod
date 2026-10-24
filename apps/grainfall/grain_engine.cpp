@@ -11,6 +11,17 @@ constexpr float kSubdivMult[GrainEngine::kNumSubdivs] = {0.25f, 0.5f, 1.0f, 2.0f
 
 constexpr float kMinHoldS = 0.25f;
 constexpr float kMaxHoldS = 2.0f;
+
+// Each trip round the feedback loop loses a little top end, like a tape
+// echo, so long tails darken instead of turning harsh.
+constexpr float kFeedbackToneHz = 6000.0f;
+
+// tanh-like soft clip, exact enough up to |x| = 3 and clamped beyond.
+float SoftClip(float x)
+{
+    x = Clamp(x, -3.0f, 3.0f);
+    return x * (27.0f + x * x) / (27.0f + 9.0f * x * x);
+}
 } // namespace
 
 void GrainEngine::Init(float  sample_rate,
@@ -28,12 +39,20 @@ void GrainEngine::Init(float  sample_rate,
     post_.Init(sample_rate);
     preroll_ = (uint32_t)(0.005f * sample_rate);
     first_   = true;
+    fb_coef_ = SmoothCoef(0.05f, sample_rate);
+    fb_tone_ = 1.0f - expf(-kTwoPi * kFeedbackToneHz / sample_rate);
 }
 
-Effect *GrainEngine::EffectFor(EffectId)
+Effect *GrainEngine::EffectFor(EffectId id)
 {
-    // Every slot plays the placeholder cloud until its effect is written.
-    return &cloud_;
+    switch(id)
+    {
+        case EffectId::kHaze: return &haze_;
+        case EffectId::kTunnel: return &tunnel_;
+        case EffectId::kStrum: return &strum_;
+        // The placeholder cloud until these are written.
+        default: return &cloud_;
+    }
 }
 
 void GrainEngine::BeginBlock(const Params &p, int block_frames)
@@ -56,7 +75,8 @@ void GrainEngine::BeginBlock(const Params &p, int block_frames)
     ctx.block_frames  = block_frames;
     ctx.beat_frames   = p.samples_per_beat;
     ctx.step_frames   = p.samples_per_beat / mult;
-    ctx.step_index    = (int32_t)floorf(p.beat_pos * mult);
+    ctx.step_pos      = p.beat_pos * mult;
+    ctx.step_index    = (int32_t)floorf(ctx.step_pos);
     ctx.step          = ctx.step_index != last_step_;
     ctx.onset         = onset_;
     ctx.onsets        = &onsets_;
@@ -76,6 +96,7 @@ void GrainEngine::BeginBlock(const Params &p, int block_frames)
         effect_->Reset();
     }
     effect_->Block(ctx);
+    fb_target_ = Clamp(effect_->Feedback(ctx.repeats), 0.0f, 1.5f);
 
     post_.SetParams(p.post);
 }
@@ -90,11 +111,20 @@ void GrainEngine::Process(float in_l, float in_r, float *out_l, float *out_r)
         onsets_.Add(buffer_.WritePos() - preroll_);
         onset_ = true;
     }
-    buffer_.Write(src_l, src_r);
 
+    // Voices only read frames that are already recorded, so this frame can
+    // be written after them, with their output fed back in.
     float l, r;
     voices_.Process(buffer_, &l, &r);
     effect_->Process(src_l, src_r, &l, &r);
+
+    fb_ += fb_coef_ * (fb_target_ - fb_);
+    fb_lp_l_ += fb_tone_ * (l - fb_lp_l_);
+    fb_lp_r_ += fb_tone_ * (r - fb_lp_r_);
+    float fb_l = SoftClip(fb_dc_l_.Process(fb_lp_l_) * fb_);
+    float fb_r = SoftClip(fb_dc_r_.Process(fb_lp_r_) * fb_);
+    buffer_.Write(src_l + fb_l, src_r + fb_r);
+
     post_.Process(&l, &r);
 
     *out_l = l;

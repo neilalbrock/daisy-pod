@@ -29,6 +29,7 @@ struct EffectContext
     float   step_frames  = 24000.0f; // one subdivision step (Time)
     bool    step         = false;    // a step starts in this block
     int32_t step_index   = 0;        // steps since the tempo's wrap point
+    float   step_pos     = 0.0f;     // the same, with the fraction through the step
 
     // Input
     bool            onset = false; // a note started since the last block
@@ -55,6 +56,11 @@ class Effect
     virtual void Reset() {}
 
     virtual void Block(const EffectContext &ctx) = 0;
+
+    // How much of the wet output to record back into the buffer for a
+    // given Repeats setting. What matters is the gain round the loop, so an
+    // effect that scales its voices down may ask for more than 1 (up to 1.5).
+    virtual float Feedback(float) const { return 0.0f; }
 
     // Adds to *l and *r. Called once per sample with the effect input.
     virtual void Process(float, float, float *, float *) {}

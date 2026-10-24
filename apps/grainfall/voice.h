@@ -23,6 +23,10 @@ enum class Env
     kHann, // smooth grain window
 };
 
+// Mean power of an envelope over a pass (1 = a flat one), for keeping
+// overlapping grains at a steady level whatever their shape.
+float EnvPower(Env env, float soft);
+
 enum class VoiceFilter
 {
     kNone,
@@ -39,6 +43,7 @@ struct VoiceParams
     int         passes     = 1;       // times through the slice; 0 = until released
     float       pass_gain  = 1.0f;    // level multiplier per pass, for decays
     Env         env        = Env::kHann;
+    float       soft       = 0.0f; // edge fades of at least this fraction of a pass
     float       gain       = 1.0f;
     float       pan        = 0.5f; // 0 = left, 1 = right
     VoiceFilter filter     = VoiceFilter::kNone;
@@ -66,6 +71,8 @@ class VoicePool
 
     bool Active(Handle h) const;
     void SetRate(Handle h, float rate);
+    void SetLength(Handle h, float length); // takes effect on the next pass
+    void SetPassGain(Handle h, float pass_gain);
     void SetGain(Handle h, float gain);
     void SetFilter(Handle h, float cutoff, float q);
     void Release(Handle h); // fade out over a few milliseconds
@@ -93,6 +100,8 @@ class VoicePool
         float    gain = 1.0f;
         float    level = 1.0f, pass_gain = 1.0f; // level drops by pass_gain each pass
         Env      env = Env::kHann;
+        float    soft = 0.0f;
+        float    next_length = 0.0f; // > 0: length to switch to at the next pass
         float    inv_fade = 1.0f; // 1 / anti-click fade, as a fraction of a pass
         float    pan_l = 1.0f, pan_r = 1.0f;
         float    release = 1.0f;

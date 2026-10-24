@@ -2,10 +2,14 @@
 //
 // Signal flow, in stereo:
 //
-//   in -> Hold (live, or the held loop) -> sample buffer -> effect voices
-//      -> pitch mod -> low-pass -> effect volume -> wet out
+//   in -> Hold (live, or the held loop) -> + feedback -> sample buffer
+//      -> effect voices -> pitch mod -> low-pass -> effect volume -> wet out
+//                       \-> darkened, soft-clipped -> feedback
 //
-// The input also feeds an onset detector, so effects can pick out notes.
+// The effect decides how much feedback its Repeats setting means. The input
+// (not the feedback) also feeds an onset detector, so effects can pick out
+// notes.
+//
 // Dry/wet mix is left to the caller. All memory is supplied by the caller
 // (the buffers belong in SDRAM) and nothing allocates, so it is safe to run
 // from the audio callback. libDaisy-free, so it also builds on a desktop.
@@ -18,6 +22,7 @@
 #include "dsp.h"
 #include "effect.h"
 #include "fx_cloud.h"
+#include "fx_granules.h"
 #include "hold.h"
 #include "onset.h"
 #include "post_fx.h"
@@ -94,7 +99,16 @@ class GrainEngine
     PostFx        post_;
     dsp::Rng      rng_;
 
-    FxCloud cloud_;
+    FxCloud  cloud_;
+    FxHaze   haze_;
+    FxTunnel tunnel_;
+    FxStrum  strum_;
+
+    // Feedback path
+    float        fb_ = 0.0f, fb_target_ = 0.0f, fb_coef_ = 0.0f;
+    float        fb_tone_ = 0.0f; // one-pole low-pass coefficient
+    float        fb_lp_l_ = 0.0f, fb_lp_r_ = 0.0f;
+    dsp::DcBlock fb_dc_l_, fb_dc_r_;
 
     Params  params_;
     Effect *effect_     = nullptr;

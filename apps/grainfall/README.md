@@ -8,16 +8,20 @@ modulation, a resonant low-pass and the dry/wet mix.
 make APP=grainfall program-dfu
 ```
 
-**Work in progress.** The controls, tempo, Hold, reverse, post chain and MIDI
-map are in place, but every effect slot currently plays the same placeholder
-grain cloud (see below) until the real effects are written.
+**Work in progress.** The Granules effects (Haze, Tunnel, Strum) are written.
+The other slots play a placeholder grain cloud (see below) until theirs are.
 
 ## Signal flow
 
 ```
-in -> Hold (live, or the held loop) -> 22 s buffer -> effect voices
-   -> pitch mod -> low-pass -> effect volume -> + dry -> limiter -> out
+in -> Hold (live, or the held loop) -> + feedback -> 22 s buffer
+   -> effect voices -> pitch mod -> low-pass -> effect volume
+   -> + dry -> limiter -> out
 ```
+
+Where an effect uses feedback (Haze), part of its output is recorded back
+into the buffer, a little darker each time round, so grains are made of
+earlier grains.
 
 ## Controls
 
@@ -75,9 +79,61 @@ them differently.
 | Pattern | 37-40 | Multi-tap delay rhythms |
 | Warp | 41-44 | Delay taps with filters and pitch shift |
 
+### Granules
+
+**Haze**: clusters of grains wash the sound out.
+
+| Control | Effect |
+|---|---|
+| Activity | Grain density and spread, in stereo and in time |
+| Repeats | Feedback: from a dry cloud to a long, regenerating wash |
+| Shape | Each grain's contour (soft-edged) |
+| Time | How far back grains reach: one step, 50 ms to 2 s |
+
+| Variation | |
+|---|---|
+| A | Long overlapping grains from a play head moving at half speed: the sound is stretched |
+| B | Many short grains scattered at random |
+| C | Normal and double-speed grains. With Repeats high, the octaves climb into a shimmer |
+| D | Normal and half-speed grains |
+
+**Tunnel**: each new note captures a micro-loop that drones on. Up to four
+overlap, and the oldest fades out to make room.
+
+| Control | Effect |
+|---|---|
+| Activity | Depth of the variation's modifier |
+| Repeats | How long drones take to fade, 1 s to 30 s. At the top of the knob they never fade |
+| Shape | Contour of each pass round the loop, so square is the smoothest drone and the others pulse at the loop rate |
+| Time | Loop length, an eighth of a step (20 ms to 400 ms) |
+
+| Variation | |
+|---|---|
+| A | Loop lengths slowly compress and stretch |
+| B | An octave down, with low-pass sweeps every two beats |
+| C | Each drone through a resonant band-pass at its own frequency (300 Hz - 3 kHz) |
+| D | Each new note squeezes the loops short, then they relax back |
+
+**Strum**: recent notes are replayed on the Time grid. Notes older than about
+15 s are forgotten.
+
+| Control | Effect |
+|---|---|
+| Activity | Density, from one note every four steps to two a step. In B, how many copies overlap |
+| Repeats | How long the repeats go on after you play: they fade over 0.3 s to 12 s, and at the top of the knob never stop |
+| Shape | Each note's contour |
+| Time | The grid, and the note length (one step, 80 ms to 600 ms) |
+
+| Variation | |
+|---|---|
+| A | Repeats the most recent note |
+| B | Overlapping, slightly detuned copies of the most recent note phase against each other |
+| C | Cascades through the last few notes in turn |
+| D | As C, with double-speed grains of recent notes mixed in |
+
 ### Placeholder cloud
 
-Until each effect is written, its slot plays this:
+Until the rest are written, their slots play this:
 
 - **Grains:** grains start on each Time step, and at random in between.
 - **Activity:** extra grains, 2 to 60 a second.

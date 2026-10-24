@@ -27,6 +27,17 @@ float Shape(Env env, float p)
 }
 } // namespace
 
+float EnvPower(Env env, float soft)
+{
+    switch(env)
+    {
+        // Linear fades over `soft` at each end keep a third of the power.
+        case Env::kSquare: return 1.0f - 4.0f * Clamp(soft, 0.0f, 0.5f) / 3.0f;
+        case Env::kHann: return 0.375f;
+        default: return 1.0f / 3.0f; // ramps and triangle
+    }
+}
+
 void VoicePool::Init(float sample_rate)
 {
     sample_rate_ = sample_rate;
@@ -75,6 +86,8 @@ VoicePool::Handle VoicePool::Start(const VoiceParams &p)
     v.level      = 1.0f;
     v.pass_gain  = p.pass_gain;
     v.env        = p.env;
+    v.soft        = p.soft;
+    v.next_length = 0.0f;
     v.release    = 1.0f;
     v.tag        = p.tag;
     SetFade(v);
@@ -121,7 +134,7 @@ void VoicePool::SetFade(Voice &v)
 {
     // The fade is fixed in time, so as a fraction of a pass it depends on
     // the rate. Never more than half a pass.
-    float frac = fade_frames_ * v.rate * v.inv_length;
+    float frac = fmaxf(fade_frames_ * v.rate * v.inv_length, v.soft);
     v.inv_fade = frac < 0.5f ? 1.0f / frac : 2.0f;
 }
 
@@ -132,6 +145,20 @@ void VoicePool::SetRate(Handle h, float rate)
         v->rate = rate > 0.01f ? rate : 0.01f;
         SetFade(*v);
     }
+}
+
+void VoicePool::SetLength(Handle h, float length)
+{
+    // Changing the length mid-pass would jump the envelope, so wait for the
+    // end of the pass.
+    if(Voice *v = Find(h))
+        v->next_length = length > 2.0f ? length : 2.0f;
+}
+
+void VoicePool::SetPassGain(Handle h, float pass_gain)
+{
+    if(Voice *v = Find(h))
+        v->pass_gain = pass_gain;
 }
 
 void VoicePool::SetGain(Handle h, float gain)
@@ -244,6 +271,15 @@ void VoicePool::Process(const SampleBuffer &buf, float *out_l, float *out_r)
             v.level *= v.pass_gain;
             if(v.passes > 0 && v.pass >= v.passes)
                 v.active = false;
+            if(v.next_length > 0.0f)
+            {
+                v.length      = v.next_length;
+                v.inv_length  = 1.0f / v.length;
+                v.next_length = 0.0f;
+                if(v.offset >= v.length)
+                    v.offset = 0.0f;
+                SetFade(v);
+            }
         }
     }
     *out_l = sum_l;
