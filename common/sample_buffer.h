@@ -1,9 +1,11 @@
-// Grainfall - stereo circular recorder
+// Stereo circular recorder
 //
 // Frames are interleaved L/R so one cache line holds both channels of a
 // read. The length is a power of two and positions are plain uint32_t frame
 // counts that wrap with the mask, so a slice's start stays exact however far
 // the write head has moved on. The memory belongs to the caller (SDRAM).
+//
+// Header only and libDaisy-free, like dsp.h.
 
 #pragma once
 
@@ -34,6 +36,11 @@ class SampleBuffer
     // The frame the next Write() fills. Everything before it is recorded.
     uint32_t WritePos() const { return write_; }
     uint32_t Frames() const { return mask_ + 1; }
+
+    // A frame's two samples, to read or overwrite in place; any frame number
+    // works, it wraps.
+    float       *At(uint32_t frame) { return data_ + 2 * (frame & mask_); }
+    const float *At(uint32_t frame) const { return data_ + 2 * (frame & mask_); }
 
     // Linear interpolation between `frame` and the one after; any frame
     // number works, it wraps.
