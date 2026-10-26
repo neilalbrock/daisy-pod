@@ -13,8 +13,8 @@ make APP=driftnet program-dfu
 Everything the pedal hides behind its toggles, DIP switches and hidden menu
 is here too: over MIDI with MOOD's own CC map, or from the
 [web page](#the-web-page). The Pod's controls cover the knobs, toggles and
-footswitches. Nothing is saved: presets and saved options may come later,
-and for now everything starts from the defaults at power-up.
+footswitches. Eight [presets](#presets) are kept in flash, and the hidden
+options and DIP switches are saved as you set them.
 
 ## The CLOCK
 
@@ -61,7 +61,8 @@ A limiter holds dry plus wet under -1 dBFS.
 | Button 2 | Micro-Looper: play the last moments; tap again to go back to listening |
 | Button 2 hold | Overdub while held (with LATCH, until held again) |
 | Encoder press | Next page |
-| Encoder long press | Mono in (the MISO DIP switch): the left input feeds both channels (LED 1 flashes cyan for on, dark for off) |
+| Encoder long press | Mono in (the MISO DIP switch): the left input feeds both channels (LED 1 flashes cyan for on, dark for off). On the preset page, it saves instead |
+| Page 4 (LED 2: the slot) | Presets: the encoder turn selects a slot (see [Presets](#presets)) |
 
 **LED 1** is green while the Wet Channel is on and white while it's frozen,
 with red added while the loop plays (so both on shows yellow). It blinks
@@ -300,9 +301,37 @@ it.
 | True bypass | 55 | 0 buffered, 1+ true |
 | MIDI reset: follow clock, quarter-note divisions, octave 3, no portamento, open output | 110 | any |
 
-The hidden options, DIP switches, ramping and Synth Mode CCs are above. Not
-used: presets and program changes, factory reset (56), the hidden menu
-switch (104) and choosing a MIDI channel.
+The hidden options, DIP switches, ramping and Synth Mode CCs are above.
+**Program change** 1-8 recalls preset 1-8, as on MOOD; 0 does nothing.
+**Factory reset** (CC 56, any value) erases the presets and saved settings
+(see [Presets](#presets)). Not used: saving a preset over MIDI, the hidden
+menu switch (104) and choosing a MIDI channel.
+
+## Presets
+
+Eight preset slots, kept in the Seed's flash, so they survive power-off and
+reflashing. Every app keeps its own.
+
+- **On the Pod:** page 4 is the preset page. Turning the encoder there
+  selects a slot and loads its preset; an empty slot is only selected,
+  keeping the sound, ready to save into. A long press on the encoder saves
+  the current settings to the slot. The knobs do nothing on this page.
+  LED 2 shows the slot: a colour each, dim if empty, blinking off while the
+  sound differs from what's saved, and flickering white on a save. Before
+  any slot is selected it's dim white.
+- **Over MIDI:** program change 1-8 recalls preset 1-8, as on MOOD; 0 does nothing.
+- **On the web page:** a button per slot, and Save. Selecting the slot
+  already selected reloads it, dropping any changes.
+
+A preset holds the knobs, the three toggles, ramping (its settings and whether it runs), the TIME and LENGTH clock divisions, and Synth Mode's settings. The hidden options, the DIP switches, TRUE BYPASS and Follow MIDI clock are saved on their own, a few seconds
+after they last change. At power-up they come back, then the preset last
+selected. The channels, freeze, overdub, tempo, expression and Synth Mode itself always start from scratch.
+
+**Factory reset:** hold both buttons while powering up the Pod (through
+the bootloader's 2.5 s wait) until both LEDs flash white, then let go. Or
+press Factory reset on the web page, or send CC 56 (any value), as on MOOD. Every preset and saved setting
+for this app is erased (the other apps keep theirs) and everything goes
+back to its defaults.
 
 ## The web page
 

@@ -39,9 +39,12 @@ enum class Msg : uint8_t
     kFrame = 0x04, // telemetry sections, below
 
     // Page to app
-    kRequest   = 0x40, // send everything from the start
-    kSet       = 0x41, // index (7), value (14)
-    kKeepAlive = 0x42,
+    kRequest      = 0x40, // send everything from the start
+    kSet          = 0x41, // index (7), value (14)
+    kKeepAlive    = 0x42,
+    kPresetSelect = 0x43, // slot (7): load it, or just select it if empty
+    kPresetSave   = 0x44, // slot (7): save the current settings there
+    kPresetReset  = 0x45, // factory reset: every preset and saved setting
 };
 
 enum class Kind : uint8_t
@@ -64,6 +67,17 @@ enum class Section : uint8_t
     kTraces   = 6, // points (7), traces (7), then each point's value per
                    // trace, 0..16383 across the trace's range (14), oldest first
     kXY       = 7, // count (7), then x, y pairs, -1..1 as 0..126 (7 each)
+    kPresets  = 8, // slot (7, 127: none yet), modified (7), slots in use (14, a bit each)
+};
+
+// Whether a parameter is kept in flash (common/presets.h): in each preset
+// (the sound), as a global setting of the app's (mono in, trails...), or
+// not at all (on/off, momentary switches, triggers).
+enum class Store : uint8_t
+{
+    kNone,
+    kPreset,
+    kGlobal,
 };
 
 // A value plotted over time, described in the hello.
@@ -90,6 +104,7 @@ struct Hello
     uint8_t            num_traces;
     uint8_t            trace_period_ms; // between points
     const char        *xy;              // the kXY plot's title, or nullptr
+    uint8_t            presets;         // preset slots, 0: none
 };
 
 // One read head in the buffer, for the kBuffer section.
@@ -113,6 +128,7 @@ struct Param
     const char *const *options; // kChoice
     uint8_t            num_options;
     uint8_t            columns; // kChoice: lay the options out in this many columns
+    Store              store;   // not sent: what common/presets.h keeps (kNone if left out)
 };
 
 // Builds one message. The buffer belongs to the caller (it can live in
@@ -158,7 +174,7 @@ void WriteXY(Writer &w, float x, float y);                // each -1..1
 struct Command
 {
     Msg     type;
-    uint8_t index; // kSet
+    uint8_t index; // kSet: the parameter; kPresetSelect, kPresetSave: the slot
     int     raw;   // kSet: the 14-bit value
 };
 
@@ -179,9 +195,9 @@ class Session
 
     void Init(int num_params) { num_params_ = num_params; }
 
-    // Handles a request or keep-alive. Returns true, with *set filled, for
-    // a kSet the app should apply.
-    bool Receive(const uint8_t *data, int length, uint32_t now_ms, Command *set);
+    // Handles a request or keep-alive. Returns true, with *command filled,
+    // for a kSet or a preset command the app should act on.
+    bool Receive(const uint8_t *data, int length, uint32_t now_ms, Command *command);
 
     enum class Send
     {

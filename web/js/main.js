@@ -3,7 +3,8 @@
 
 import { Controls } from "./controls.js";
 import { Link } from "./link.js";
-import { set } from "./protocol.js";
+import { PresetsPanel } from "./presets.js";
+import { presetReset, presetSave, presetSelect, set } from "./protocol.js";
 import { BufferView } from "./views/buffer.js";
 import { CpuView, Meters, TempoView } from "./views/readouts.js";
 import { TraceView, XYView } from "./views/traces.js";
@@ -20,6 +21,11 @@ const cpu = new CpuView($("#cpu"));
 const traces = new TraceView($("#traces"));
 const xy = new XYView($("#xy canvas"));
 const controls = new Controls($("#controls"), (index, raw) => link.send(set(index, raw)));
+const presets = new PresetsPanel($("#presets"), {
+  onSelect: (slot) => link.send(presetSelect(slot)),
+  onSave: (slot) => link.send(presetSave(slot)),
+  onReset: () => link.send(presetReset()),
+});
 
 let hello = null;
 let params = [];
@@ -54,6 +60,7 @@ link.addEventListener("message", async (e) => {
       xy.clear();
       meters.setNames(msg.meters);
       $("#controls").replaceChildren();
+      presets.setup(msg.presets);
       // Show the views this app has data for.
       $("#scope").hidden = msg.bufferFrames === 0;
       $("#trace-panel").hidden = msg.traces.length === 0;
@@ -108,6 +115,7 @@ link.addEventListener("message", async (e) => {
       if (msg.xy) xy.add(msg.xy);
       if (msg.levels) meters.update(msg.levels, now);
       if (msg.cpu) cpu.update(msg.cpu, now);
+      if (msg.presets) presets.update(msg.presets);
       break;
   }
 });

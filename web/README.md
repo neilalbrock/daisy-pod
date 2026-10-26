@@ -50,6 +50,11 @@ modules, with no build step.
 - **Tempo** (grainfall, and driftnet while synced): BPM, whether it comes
   from tap tempo or MIDI clock, and where you are in the bar and the beat.
   Driftnet keeps the panel, marked "Not synced", while it runs free.
+- **Presets** (every app but the starter): a button per slot in its LED
+  colour, dimmed while empty, with Save and Factory reset (which asks
+  first). Clicking a slot loads its preset (an
+  empty one is only selected, ready to save into); clicking the selected
+  slot again reloads it. The head says whether the sound has changed since.
 - **Levels**: input, wet and output peaks (and the loop, for driftnet).
 - **CPU**: the audio callback's average and peak load over the last 30 s.
 - **Controls**: built from the parameter list the app sends, grouped as on the
@@ -69,7 +74,9 @@ keep-alive every second; the app answers with a hello (its name, buffer
 layout, group and meter names, and any traces and X-Y plot), one message per
 parameter, and then its state (on change, and every half second) and a
 telemetry frame every 30 ms, until the keep-alives stop. So nothing is sent to a DAW unless this page is
-open. Settings go back as `set` messages, by parameter index.
+open. Settings go back as `set` messages, by parameter index, and presets as
+`preset select` and `preset save` messages, by slot, and `preset reset`; each frame says which
+slot is selected, whether it's modified and which slots hold a preset.
 
 The app sends from its main loop, never the audio callback, and each message
 stays under the 768 bytes libDaisy's USB MIDI can send at once. The page only
@@ -85,6 +92,7 @@ works over USB: the Pod's TRS MIDI is far too slow for the telemetry.
 | `js/link.js` | The Web MIDI connection: request, keep-alives, decoding |
 | `js/protocol.js` | The protocol, matching `common/web_link.h` |
 | `js/controls.js`, `js/knob.js` | The control surface |
+| `js/presets.js` | The presets card |
 | `js/views/buffer.js` | The buffer view |
 | `js/views/loop.js` | The loop view, which an app can use instead (driftnet) |
 | `js/views/readouts.js` | Tempo, levels and CPU |

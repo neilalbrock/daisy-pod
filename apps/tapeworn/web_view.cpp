@@ -2,6 +2,7 @@
 
 #include <cmath>
 
+#include "presets.h"
 #include "tape_engine.h"
 
 namespace web_view
@@ -9,6 +10,7 @@ namespace web_view
 namespace
 {
 using weblink::Kind;
+using weblink::Store;
 
 // Filled from TapeModel::Name() by WriteHello(), before any parameter goes
 // out.
@@ -34,19 +36,19 @@ constexpr uint8_t Count(const T (&)[N])
 } // namespace
 
 const weblink::Param kParams[kNumParams] = {
-    {"Model", Kind::kChoice, 0, model_names, TapeModel::kNumModels, 1},
-    {"Wow", Kind::kContinuous, 1, nullptr, 0, 0},
-    {"Flutter", Kind::kContinuous, 1, nullptr, 0, 0},
-    {"Saturate", Kind::kContinuous, 2, nullptr, 0, 0},
-    {"Failure", Kind::kContinuous, 2, nullptr, 0, 0},
-    {"Dry", Kind::kContinuous, 3, nullptr, 0, 0},
-    {"Volume", Kind::kContinuous, 3, nullptr, 0, 0},
-    {"Noise", Kind::kContinuous, 4, nullptr, 0, 0},
-    {"Spread", Kind::kContinuous, 4, nullptr, 0, 0},
-    {"AUX type", Kind::kChoice, 5, kAuxNames, Count(kAuxNames), 3},
-    {"AUX", Kind::kToggle, 5, nullptr, 0, 0},
-    {"Bypass", Kind::kToggle, 6, nullptr, 0, 0},
-    {"Mono in", Kind::kToggle, 6, nullptr, 0, 0},
+    {"Model", Kind::kChoice, 0, model_names, TapeModel::kNumModels, 1, Store::kPreset},
+    {"Wow", Kind::kContinuous, 1, nullptr, 0, 0, Store::kPreset},
+    {"Flutter", Kind::kContinuous, 1, nullptr, 0, 0, Store::kPreset},
+    {"Saturate", Kind::kContinuous, 2, nullptr, 0, 0, Store::kPreset},
+    {"Failure", Kind::kContinuous, 2, nullptr, 0, 0, Store::kPreset},
+    {"Dry", Kind::kContinuous, 3, nullptr, 0, 0, Store::kPreset},
+    {"Volume", Kind::kContinuous, 3, nullptr, 0, 0, Store::kPreset},
+    {"Noise", Kind::kContinuous, 4, nullptr, 0, 0, Store::kPreset},
+    {"Spread", Kind::kContinuous, 4, nullptr, 0, 0, Store::kPreset},
+    {"AUX type", Kind::kChoice, 5, kAuxNames, Count(kAuxNames), 3, Store::kPreset},
+    {"AUX", Kind::kToggle, 5, nullptr, 0, 0, Store::kNone},
+    {"Bypass", Kind::kToggle, 6, nullptr, 0, 0, Store::kNone},
+    {"Mono in", Kind::kToggle, 6, nullptr, 0, 0, Store::kGlobal},
 };
 
 float SpeedCents(float speed)
@@ -71,6 +73,7 @@ void WriteHello(weblink::Writer &w, float sample_rate)
     h.num_traces      = kNumTraces;
     h.trace_period_ms = kTracePeriodMs;
     h.xy              = "Saturation";
+    h.presets         = Presets::kSlots;
     weblink::WriteHello(w, h);
 }
 

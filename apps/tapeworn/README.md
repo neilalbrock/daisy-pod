@@ -33,7 +33,8 @@ jump.
 |---|---|
 | Encoder turn | Tape model (LED 2 flashes the model's colour, white = flat) |
 | Encoder press | Next page |
-| Encoder long press (0.6 s) | AUX type: stop, fail, filter (LED 1 flashes the new type) |
+| Encoder long press (0.6 s) | AUX type: stop, fail, filter (LED 1 flashes the new type). On the preset page, it saves instead |
+| Page 5 (LED 2: the slot) | Presets: the encoder turn selects a slot (see [Presets](#presets)) |
 | Button 1 | Bypass (LED 1: green = active, red = bypassed) |
 | Button 1 hold (1 s) | Mono in: the left input feeds both channels. LED 1 flashes cyan for on, dark for off |
 | Button 2 | AUX on/off. Hold it for momentary: it turns off when you let go |
@@ -48,6 +49,32 @@ LED 1 shows the AUX colour while AUX is on.
 
 Starting values: wow 0.3, flutter 0.3, saturate 0.35, failure 0.15, no dry,
 unity volume, a little noise, no spread, VHS 2nd gen.
+
+## Presets
+
+Eight preset slots, kept in the Seed's flash, so they survive power-off and
+reflashing. Every app keeps its own.
+
+- **On the Pod:** page 5 is the preset page. Turning the encoder there
+  selects a slot and loads its preset; an empty slot is only selected,
+  keeping the sound, ready to save into. A long press on the encoder saves
+  the current settings to the slot. The knobs do nothing on this page.
+  LED 2 shows the slot: a colour each, dim if empty, blinking off while the
+  sound differs from what's saved, and flickering white on a save. Before
+  any slot is selected it's dim white.
+- **Over MIDI:** program change 1-8 (any channel, on the TRS input or USB) recalls preset 1-8, as on Generation Loss; 0 does nothing.
+- **On the web page:** a button per slot, and Save. Selecting the slot
+  already selected reloads it, dropping any changes.
+
+A preset holds the knobs, the tape model and the AUX type. Mono in are saved on their own, a few seconds
+after they last change. At power-up they come back, then the preset last
+selected. Bypass and AUX on/off always start from scratch.
+
+**Factory reset:** hold both buttons while powering up the Pod (through
+the bootloader's 2.5 s wait) until both LEDs flash white, then let go. Or
+press Factory reset on the web page. Every preset and saved setting
+for this app is erased (the other apps keep theirs) and everything goes
+back to its defaults.
 
 ## Tape models
 

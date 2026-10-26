@@ -41,6 +41,12 @@
 //   Button 2           - Micro-Looper: play the last moments; tap again to
 //                        go back to listening (recording over the loop)
 //   Button 2 hold      - overdub, while held (LATCH: until held again)
+//   Page 4 (LED 2: the slot) Presets. Encoder turn - select a slot, loading
+//                            its preset; an empty one keeps the sound.
+//                            Encoder long press - save to the slot. LED 2
+//                            shows the slot's colour: dim if empty,
+//                            blinking off while modified, flickering white
+//                            on a save. The knobs do nothing here.
 //
 // LED 1 is green while the Wet Channel is on and white while frozen, with
 // red added while the loop plays. It blinks off at the start of each pass,
@@ -49,16 +55,31 @@
 // Everything else - MOOD's hidden options and DIP switches, ramping, tempo
 // sync, Synth Mode and true bypass - is over MIDI on any channel (TRS and
 // USB) with MOOD's CC map, or from the web page (web/, `make web`). See
-// README.md. Nothing is saved: it all starts from the defaults at power-up.
+// README.md. Program change 1-8 recalls preset 1-8, as on MOOD (0 does
+// nothing).
+//
+// Presets (common/presets.h) hold the knobs, toggles, ramping, the clock
+// divisions and Synth Mode's settings. The hidden options, DIP switches,
+// true bypass and Follow MIDI clock are saved on their own a few seconds
+// after they change. At power-up they come back, then the preset last
+// selected. The channels, freeze, overdub, tempo and expression always
+// start from scratch.
+//
+// Hold both buttons while powering up (both LEDs flash white) for a factory
+// reset: this app's presets and saved settings are erased. CC 56 and the
+// web page do the same while running.
 // While truly bypassed (both channels off with TRUE BYPASS set) LED 1 blinks
 // red.
 
 #include "daisy_pod.h"
 #include "bypass_fade.h"
 #include "drift_engine.h"
+#include "factory_reset.h"
 #include "limiter.h"
 #include "paged_knobs.h"
+#include "presets.h"
 #include "press_hold.h"
+#include "qspi_flash.h"
 #include "ramp.h"
 #include "sdram_timing.h"
 #include "synth.h"
@@ -100,14 +121,22 @@ Limiter        limiter; // on dry + wet, so a loud wet signal doesn't clip
 BypassFade     bypass_fade;
 CpuLoadMeter   cpu_meter;
 
-constexpr int kNumPages = 3;
-constexpr int kNumKnobs = 2;
+QspiFlash flash(hw.seed.qspi);
+Presets   presets;
+
+constexpr int kNumKnobPages = 3;
+constexpr int kPresetPage   = kNumKnobPages; // after the knob pages; its knobs do nothing
+constexpr int kNumPages     = kNumKnobPages + 1;
+constexpr int kNumKnobs     = 2;
+
+static_assert(kNumParams <= Presets::kMaxParams, "too many parameters for a preset");
 
 // Raw knob positions (0..1) per page, initial values chosen to sound sensible.
 PagedKnobs<kNumPages, kNumKnobs> pages({
     {0.5f, 0.4f},  // time, feedback
     {1.0f, 0.72f}, // full length, 1x forward
     {0.9f, 0.5f},  // clock 48k, mix both full
+    {0.0f, 0.0f},  // presets: unused
 });
 
 constexpr uint32_t kHoldMs      = 400; // a button held this long freezes or overdubs
@@ -118,7 +147,7 @@ constexpr uint32_t kHoldMs      = 400; // a button held this long freezes or ove
 // writes it; the main loop reads it for the LEDs and the page.
 
 // Each page's three-way toggle, 0..2: wet mode, loop mode, routing.
-int  toggles[kNumPages] = {1, 1, 0}; // Delay, Tape, input only
+int  toggles[kNumKnobPages] = {1, 1, 0}; // Delay, Tape, input only
 bool wet_on             = false;
 bool freeze_on = false, freeze_held = false;   // set (CC, page, LATCH), and the button
 bool overdub_on = false, overdub_held = false; // the same for overdubbing
@@ -137,7 +166,7 @@ bool            follow_clock = true;
 int             time_division = 5, length_division = 5; // CC 53, 54: quarter notes
 bool            true_bypass   = false;                  // CC 55
 
-PressHold encoder_press(600); // hold: mono in
+PressHold encoder_press(600); // hold: mono in, or on the preset page, save
 PressHold button1_press(kHoldMs);
 PressHold button2_press(kHoldMs);
 bool      b1_switched_on = false; // this press turned its channel on, so
@@ -218,6 +247,7 @@ void HandleCc(uint8_t cc, uint8_t value, uint32_t now)
         case 53: time_division = value > 7 ? 7 : value; break;
         case 54: length_division = value > 7 ? 7 : value; break;
         case 55: true_bypass = on; break;
+        case 56: presets.Reset(); break; // factory reset, any value
         case 52: ramp_settings.running = on; break;
         case 57: synth_settings.octave = value > 9 ? 9 : value; break;
         case 58:
@@ -387,6 +417,13 @@ void SetParam(int index, int raw, uint32_t now)
 }
 
 // A value for the page, in the main loop.
+// A value from a preset or the saved settings, through SetParam. Neither
+// holds Tap, the only one that needs the sample count.
+void SetPresetParam(int index, int raw)
+{
+    SetParam(index, raw, sample_count);
+}
+
 int ParamRaw(int index)
 {
     auto unit = [](float v) { return (int)(fminf(fmaxf(v, 0.0f), 1.0f) * 16383.0f + 0.5f); };
@@ -563,6 +600,7 @@ void SendWeb(uint32_t now_ms)
             WriteFrame(w, telemetry, hw.AudioSampleRate(), kLoopFrames,
                        cpu_meter.GetAvgCpuLoad(), cpu_meter.GetMaxCpuLoad(), overview,
                        &overview_cursor);
+            presets.WriteSection(w);
             cpu_meter.Reset();
             break;
         default: return;
@@ -613,11 +651,19 @@ void HandleMidi(MidiEvent e, uint32_t now, uint32_t now_ms)
             HandleCc(cc.control_number, cc.value, now);
             break;
         }
+        case ProgramChange:
+        {
+            // As on MOOD: 1-8 are the presets, 0 does nothing.
+            int program = e.AsProgramChange().program;
+            if(program >= 1 && program <= Presets::kSlots)
+                presets.Select(program - 1);
+            break;
+        }
         case SystemCommon:
             if(e.sc_type == SystemExclusive)
             {
                 weblink::Command c;
-                if(web.Receive(e.sysex_data, e.sysex_message_len, now_ms, &c))
+                if(web.Receive(e.sysex_data, e.sysex_message_len, now_ms, &c) && !presets.Handle(c))
                     SetParam(c.index, c.raw, now);
             }
             break;
@@ -685,6 +731,7 @@ void AudioCallback(AudioHandle::InputBuffer  in,
         HandleMidi(hw.midi.PopEvent(), now, now_ms);
     while(usb_midi.HasEvents())
         HandleMidi(usb_midi.PopEvent(), now, now_ms);
+    presets.Apply();
 
     HandleButtons();
 
@@ -693,11 +740,13 @@ void AudioCallback(AudioHandle::InputBuffer  in,
     for(int k = 0; k < kNumKnobs; k++)
         knob[k] = hw.GetKnobValue(knob_ids[k]);
 
-    // Long press toggles mono in as soon as the hold is long enough; a short
-    // press changes page on release.
+    // Long press toggles mono in (or saves, on the preset page) as soon as
+    // the hold is long enough; a short press changes page on release.
     PressHold::Event enc = encoder_press.Update(hw.encoder.Pressed(),
                                                 hw.encoder.TimeHeldMs());
-    if(enc == PressHold::Event::kHold)
+    if(enc == PressHold::Event::kHold && pages.Page() == kPresetPage)
+        presets.Save();
+    else if(enc == PressHold::Event::kHold)
     {
         mono_in          = !mono_in;
         mono_flash_until = now_ms + 500;
@@ -710,7 +759,9 @@ void AudioCallback(AudioHandle::InputBuffer  in,
     pages.Update(knob);
 
     int inc = hw.encoder.Increment();
-    if(inc != 0)
+    if(inc != 0 && pages.Page() == kPresetPage)
+        presets.Step(inc);
+    else if(inc != 0)
     {
         int &t             = toggles[pages.Page()];
         t                  = t + inc < 0 ? 0 : (t + inc > 2 ? 2 : t + inc);
@@ -852,6 +903,11 @@ int main(void)
     HAL_NVIC_SetPriority(OTG_FS_EP1_IN_IRQn, 1, 0);
     hw.midi.StartReceive();
 
+    // The saved settings, then the last preset; or with both buttons held,
+    // a factory reset.
+    bool reset = FactoryResetHeld(hw);
+    presets.Init(&flash, kRegionDriftnet, kParams, kNumParams, ParamRaw, SetPresetParam, reset);
+
     // Every knob starts "not live" so the defaults above hold until a knob moves.
     hw.StartAdc();
     System::Delay(10); // let the ADC settle before taking the reference reading
@@ -860,7 +916,7 @@ int main(void)
 
     hw.StartAudio(AudioCallback);
 
-    const float page_colours[kNumPages][3] = {
+    const float page_colours[kNumKnobPages][3] = {
         {0.0f, 0.0f, 1.0f}, // blue
         {1.0f, 0.0f, 1.0f}, // magenta
         {1.0f, 0.7f, 0.0f}, // yellow
@@ -910,14 +966,25 @@ int main(void)
             hw.led1.Set(red, wet_on ? 1.0f : 0.0f, 0.0f);
         }
 
-        // LED 2: page colour, or the page's toggle just after a change.
-        int          page = pages.Page();
-        const float *c    = now < toggle_flash_until ? position_colours[toggles[page]]
-                                                     : page_colours[page];
-        hw.led2.Set(c[0], c[1], c[2]);
+        // LED 2: the preset slot on the preset page, else the page colour,
+        // or the page's toggle just after a change.
+        int page = pages.Page();
+        if(page == kPresetPage)
+        {
+            float r, g, b;
+            presets.LedColour(now, &r, &g, &b);
+            hw.led2.Set(r, g, b);
+        }
+        else
+        {
+            const float *c = now < toggle_flash_until ? position_colours[toggles[page]]
+                                                      : page_colours[page];
+            hw.led2.Set(c[0], c[1], c[2]);
+        }
         hw.UpdateLeds();
 
         RefreshOverview(&overview_next);
+        presets.Poll(now);
         SendWeb(now);
         System::Delay(10);
     }

@@ -39,7 +39,8 @@ jump.
 |---|---|
 | Encoder turn | Effect and variation, Mosaic A ... Warp D (wraps round). LED 2 flashes the effect's colour, LED 1 the variation: A red, B yellow, C green, D blue |
 | Encoder press | Next page |
-| Encoder long press (0.6 s) | Reverse on/off |
+| Encoder long press (0.6 s) | Reverse on/off. On the preset page, it saves instead |
+| Page 7 (LED 2: the slot) | Presets: the encoder turn selects a slot (see [Presets](#presets)) |
 | Button 1 | Tap tempo (quarter notes) |
 | Button 1 hold (1 s) | Bypass (LED 1 red) |
 | Button 2 | Hold sampler on/off. Hold it for momentary: it turns off when you let go |
@@ -72,6 +73,32 @@ buffer, so it never feeds back into the effect.
 
 A limiter on dry + wet holds the output under -1 dBFS. Bypass fades over 5 ms
 so it doesn't click, and the buffer keeps recording while bypassed.
+
+## Presets
+
+Eight preset slots, kept in the Seed's flash, so they survive power-off and
+reflashing. Every app keeps its own.
+
+- **On the Pod:** page 7 is the preset page. Turning the encoder there
+  selects a slot and loads its preset; an empty slot is only selected,
+  keeping the sound, ready to save into. A long press on the encoder saves
+  the current settings to the slot. The knobs do nothing on this page.
+  LED 2 shows the slot: a colour each, dim if empty, blinking off while the
+  sound differs from what's saved, and flickering white on a save. Before
+  any slot is selected it's dim white.
+- **Over MIDI:** program change 45-52 (sent as 44-51, channel 1) selects slot 1-8, where the Microcosm keeps its first two user banks.
+- **On the web page:** a button per slot, and Save. Selecting the slot
+  already selected reloads it, dropping any changes.
+
+A preset holds the effect and variation, every knob page and reverse. Mono in are saved on their own, a few seconds
+after they last change. At power-up they come back, then the preset last
+selected. Tempo, Hold and bypass are left as they are.
+
+**Factory reset:** hold both buttons while powering up the Pod (through
+the bootloader's 2.5 s wait) until both LEDs flash white, then let go. Or
+press Factory reset on the web page. Every preset and saved setting
+for this app is erased (the other apps keep theirs) and everything goes
+back to its defaults.
 
 ## Effects
 
@@ -295,7 +322,8 @@ left it. If the clock just stops arriving, it does the same. Tap tempo is
 ignored while following clock.
 
 **Program change** 1-44 (sent as 0-43) selects the effect and variation:
-four per effect in the order above.
+four per effect in the order above. 45-52 (sent as 44-51) select presets
+1-8, where the Microcosm keeps its first two user banks.
 
 **Control change:**
 

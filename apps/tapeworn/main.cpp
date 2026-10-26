@@ -23,17 +23,35 @@
 //   Button 2           - AUX on/off; hold for momentary. LED 1 shows the AUX
 //                        colour while on: blue = stop, orange = fail,
 //                        white = filter
+//   Page 5 (LED 2: the slot) Presets. Encoder turn - select a slot, loading
+//                            its preset; an empty one keeps the sound.
+//                            Encoder long press - save to the slot. LED 2
+//                            shows the slot's colour: dim if empty,
+//                            blinking off while modified, flickering white
+//                            on a save. The knobs do nothing here.
 //
-// Over USB MIDI it talks to the web control surface (web/, `make web`),
-// streaming levels, CPU, tape speed and the saturator's loop while the page
-// is open.
+// Program change 1-8 (any channel, TRS or USB) recalls preset 1-8, as on
+// Generation Loss (0 does nothing). Over USB MIDI it also talks to the web control surface (web/,
+// `make web`), streaming levels, CPU, tape speed and the saturator's loop
+// while the page is open, with the presets.
+//
+// Presets (common/presets.h) hold the knobs, tape model and AUX type. Mono
+// in is saved on its own a few seconds after it changes. At power-up it
+// comes back, then the preset last selected.
+//
+// Hold both buttons while powering up (both LEDs flash white) for a factory
+// reset: this app's presets and saved settings are erased. The web page
+// does the same while running.
 
 #include "daisy_pod.h"
 #include "bypass_fade.h"
 #include "colour.h"
+#include "factory_reset.h"
 #include "limiter.h"
 #include "paged_knobs.h"
+#include "presets.h"
 #include "press_hold.h"
+#include "qspi_flash.h"
 #include "sdram_timing.h"
 #include "tape_engine.h"
 #include "util/CpuLoadMeter.h"
@@ -51,9 +69,13 @@ MidiUsbHandler usb_midi;
 TapeEngine     tape_engine;
 Limiter        limiter; // on dry + wet, so turning both up doesn't clip
 CpuLoadMeter   cpu_meter;
+QspiFlash      flash(hw.seed.qspi);
+Presets        presets;
 
-constexpr int kNumPages = 4;
-constexpr int kNumKnobs = 2;
+constexpr int kNumKnobPages = 4;
+constexpr int kPresetPage   = kNumKnobPages; // after the knob pages; its knobs do nothing
+constexpr int kNumPages     = kNumKnobPages + 1;
+constexpr int kNumKnobs     = 2;
 
 // Raw knob positions (0..1) per page, initial values chosen to sound sensible.
 PagedKnobs<kNumPages, kNumKnobs> pages({
@@ -61,6 +83,7 @@ PagedKnobs<kNumPages, kNumKnobs> pages({
     {0.35f, 0.15f}, // saturate, failure
     {0.0f, 0.5f},   // dry none, volume unity
     {0.2f, 0.0f},   // noise, spread
+    {0.0f, 0.0f},   // presets: unused
 });
 
 int             model    = 5; // VHS 2nd gen
@@ -71,7 +94,7 @@ bool            mono_in  = false;
 
 constexpr uint32_t kMomentaryMs = 400; // button 2: held this long = momentary
 
-PressHold  encoder_press(600);  // hold: AUX type
+PressHold  encoder_press(600);  // hold: AUX type, or on the preset page, save
 PressHold  button1_press(1000); // hold: mono in
 BypassFade bypass_fade;
 uint32_t   aux_held_ms = 0; // how long button 2 has been held
@@ -87,6 +110,8 @@ volatile uint32_t mono_flash_until  = 0;
 // the audio callback; the main loop sends it what it needs.
 
 using namespace web_view;
+
+static_assert(kNumParams <= Presets::kMaxParams, "too many parameters for a preset");
 
 uint8_t DSY_SDRAM_BSS web_buffer[weblink::kMaxMessage];
 weblink::Session      web;
@@ -134,6 +159,12 @@ void SetParam(int index, int raw, uint32_t now_ms)
                 pages.Set((index - 1) / 2, (index - 1) % 2, raw / 16383.0f);
             break;
     }
+}
+
+// A value from a preset or the saved settings, through SetParam.
+void SetPresetParam(int index, int raw)
+{
+    SetParam(index, raw, System::GetNow());
 }
 
 // A value for the page, in the main loop.
@@ -244,6 +275,7 @@ void SendWeb(uint32_t now_ms)
         case weblink::Session::Send::kFrame:
             ReadTelemetry();
             WriteFrame(w, telemetry, cpu_meter.GetAvgCpuLoad(), cpu_meter.GetMaxCpuLoad());
+            presets.WriteSection(w);
             cpu_meter.Reset();
             web.TakeRestart(); // no buffer overview to restart
             break;
@@ -252,6 +284,26 @@ void SendWeb(uint32_t now_ms)
     size_t size = w.End();
     if(size > 0)
         usb_midi.SendMessage(w.Data(), size);
+}
+
+// ---------------------------------------------------------------- MIDI
+
+// Program changes from any channel (TRS or USB), and the web page's SysEx.
+void HandleMidi(MidiEvent e, uint32_t now_ms)
+{
+    if(e.type == ProgramChange)
+    {
+        // As on Generation Loss: 1-8 are the presets, 0 does nothing.
+        int program = e.AsProgramChange().program;
+        if(program >= 1 && program <= Presets::kSlots)
+            presets.Select(program - 1);
+    }
+    else if(e.type == SystemCommon && e.sc_type == SystemExclusive)
+    {
+        weblink::Command c;
+        if(web.Receive(e.sysex_data, e.sysex_message_len, now_ms, &c) && !presets.Handle(c))
+            SetParam(c.index, c.raw, now_ms);
+    }
 }
 
 // ---------------------------------------------------------------- Audio
@@ -264,16 +316,13 @@ void AudioCallback(AudioHandle::InputBuffer  in,
     hw.ProcessAllControls();
     uint32_t now_ms = System::GetNow();
 
-    // The web page's settings, over USB MIDI SysEx.
+    hw.midi.Listen();
     usb_midi.Listen();
+    while(hw.midi.HasEvents())
+        HandleMidi(hw.midi.PopEvent(), now_ms);
     while(usb_midi.HasEvents())
-    {
-        MidiEvent e = usb_midi.PopEvent();
-        weblink::Command c;
-        if(e.type == SystemCommon && e.sc_type == SystemExclusive
-           && web.Receive(e.sysex_data, e.sysex_message_len, now_ms, &c))
-            SetParam(c.index, c.raw, now_ms);
-    }
+        HandleMidi(usb_midi.PopEvent(), now_ms);
+    presets.Apply();
 
     // Button 1: a tap toggles bypass on release, a 1 s hold toggles mono in.
     PressHold::Event b1 = button1_press.Update(hw.button1.Pressed(),
@@ -295,7 +344,9 @@ void AudioCallback(AudioHandle::InputBuffer  in,
         aux_on = false;
 
     int inc = hw.encoder.Increment();
-    if(inc != 0)
+    if(inc != 0 && pages.Page() == kPresetPage)
+        presets.Step(inc);
+    else if(inc != 0)
         SetModel(model + inc, now_ms);
 
     const DaisyPod::Knob knob_ids[kNumKnobs] = {DaisyPod::KNOB_1, DaisyPod::KNOB_2};
@@ -303,11 +354,13 @@ void AudioCallback(AudioHandle::InputBuffer  in,
     for(int k = 0; k < kNumKnobs; k++)
         knob[k] = hw.GetKnobValue(knob_ids[k]);
 
-    // Long press cycles the AUX type as soon as the hold is long enough; a
-    // short press changes page on release.
+    // Long press cycles the AUX type (or saves, on the preset page) as soon
+    // as the hold is long enough; a short press changes page on release.
     PressHold::Event enc = encoder_press.Update(hw.encoder.Pressed(),
                                                 hw.encoder.TimeHeldMs());
-    if(enc == PressHold::Event::kHold)
+    if(enc == PressHold::Event::kHold && pages.Page() == kPresetPage)
+        presets.Save();
+    else if(enc == PressHold::Event::kHold)
     {
         aux_type = (TapeEngine::Aux)(((int)aux_type + 1) % TapeEngine::kNumAux);
         aux_flash_until = now_ms + 600;
@@ -394,7 +447,13 @@ int main(void)
     HAL_NVIC_SetPriority(OTG_FS_IRQn, 1, 0);
     HAL_NVIC_SetPriority(OTG_FS_EP1_OUT_IRQn, 1, 0);
     HAL_NVIC_SetPriority(OTG_FS_EP1_IN_IRQn, 1, 0);
+    hw.midi.StartReceive();
     trace_period = (int)(hw.AudioSampleRate() * kTracePeriodMs / 1000.0f);
+
+    // The saved settings, then the last preset; or with both buttons held,
+    // a factory reset.
+    bool reset = FactoryResetHeld(hw);
+    presets.Init(&flash, kRegionTapeworn, kParams, kNumParams, ParamRaw, SetPresetParam, reset);
 
     // Every knob starts "not live" so the defaults above hold until a knob moves.
     hw.StartAdc();
@@ -404,7 +463,7 @@ int main(void)
 
     hw.StartAudio(AudioCallback);
 
-    const float page_colours[kNumPages][3] = {
+    const float page_colours[kNumKnobPages][3] = {
         {0.0f, 0.0f, 1.0f}, // blue
         {1.0f, 0.0f, 1.0f}, // magenta
         {1.0f, 0.7f, 0.0f}, // yellow
@@ -440,8 +499,15 @@ int main(void)
         else
             hw.led1.Set(0.0f, 1.0f, 0.0f);
 
-        // LED 2: page colour, or the model's colour just after a change.
-        if(now < model_flash_until)
+        // LED 2: the preset slot on the preset page, else the page colour,
+        // or the model's colour just after a change.
+        if(pages.Page() == kPresetPage)
+        {
+            float r, g, b;
+            presets.LedColour(now, &r, &g, &b);
+            hw.led2.Set(r, g, b);
+        }
+        else if(now < model_flash_until)
         {
             float r = 1.0f, g = 1.0f, b = 1.0f; // model 0, flat: white
             if(model > 0)
@@ -455,6 +521,7 @@ int main(void)
         }
         hw.UpdateLeds();
 
+        presets.Poll(now);
         SendWeb(now);
         System::Delay(10);
     }

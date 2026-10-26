@@ -10,8 +10,7 @@ make APP=slowdrift program-dfu
 ```
 
 Every control is also over MIDI (see [MIDI](#midi)) and on the
-[web page](#the-web-page). Nothing is saved: presets may come later, and for
-now everything starts from the defaults at power-up.
+[web page](#the-web-page). Eight [presets](#presets) are kept in flash.
 
 ## Signal flow
 
@@ -56,7 +55,8 @@ and LED 2 flashes it for a second.
 | Control | Function |
 |---|---|
 | Encoder press | Next page |
-| Encoder long press (0.6 s) | Mono in: the left input feeds both channels. LED 1 flashes cyan for on, dark for off |
+| Encoder long press (0.6 s) | Mono in: the left input feeds both channels. LED 1 flashes cyan for on, dark for off. On the preset page, it saves instead |
+| Page 5 (LED 2: the slot) | Presets: the encoder turn selects a slot (see [Presets](#presets)) |
 | Button 1 | On/off. Pressed while off, the effect comes on at once. Let go within 0.4 s and it stays on; hold it longer and it goes off again when you let go (smart bypass). Pressed while on, it goes off when you let go |
 | Button 2 | Sustain: the decay stretches to 60 s while held, then eases back. In Dream, a press freezes the pad and another releases it |
 
@@ -136,8 +136,36 @@ again.
 | 103 | Freeze (Dream only) | 0-63 off, 64-127 on |
 | 104 | Mono in | 0-63 off, 64-127 on |
 
+**Program change** 1-8 (sent as 0-7) selects preset slot 1-8.
+
 The choices split 0-127 evenly, so a controller's knob sweeps through them.
 LED 2 flashes a choice changed over MIDI only if its page is showing.
+
+## Presets
+
+Eight preset slots, kept in the Seed's flash, so they survive power-off and
+reflashing. Every app keeps its own.
+
+- **On the Pod:** page 5 is the preset page. Turning the encoder there
+  selects a slot and loads its preset; an empty slot is only selected,
+  keeping the sound, ready to save into. A long press on the encoder saves
+  the current settings to the slot. The knobs do nothing on this page.
+  LED 2 shows the slot: a colour each, dim if empty, blinking off while the
+  sound differs from what's saved, and flickering white on a save. Before
+  any slot is selected it's dim white.
+- **Over MIDI:** program change 1-8 (sent as 0-7) selects slot 1-8.
+- **On the web page:** a button per slot, and Save. Selecting the slot
+  already selected reloads it, dropping any changes.
+
+A preset holds the knobs, mode, waveshape and width. Trails and mono in are saved on their own, a few seconds
+after they last change. At power-up they come back, then the preset last
+selected. On/off, Sustain and Freeze always start from scratch.
+
+**Factory reset:** hold both buttons while powering up the Pod (through
+the bootloader's 2.5 s wait) until both LEDs flash white, then let go. Or
+press Factory reset on the web page. Every preset and saved setting
+for this app is erased (the other apps keep theirs) and everything goes
+back to its defaults.
 
 ## The web page
 

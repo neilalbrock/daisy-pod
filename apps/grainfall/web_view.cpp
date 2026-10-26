@@ -2,11 +2,14 @@
 
 #include <cmath>
 
+#include "presets.h"
+
 namespace web_view
 {
 namespace
 {
 using weblink::Kind;
+using weblink::Store;
 
 const char *const kSlotNames[] = {
     "Mosaic A",    "Mosaic B",    "Mosaic C",    "Mosaic D",    "Seq A",      "Seq B",
@@ -37,25 +40,25 @@ constexpr uint8_t Count(const T (&)[N])
 } // namespace
 
 const weblink::Param kParams[kNumParams] = {
-    {"Effect", Kind::kChoice, 0, kSlotNames, Count(kSlotNames), 4},
-    {"Activity", Kind::kContinuous, 1, nullptr, 0, 0},
-    {"Repeats", Kind::kContinuous, 1, nullptr, 0, 0},
-    {"Shape", Kind::kChoice, 2, kShapeNames, Count(kShapeNames), 2},
-    {"Time", Kind::kChoice, 2, kTimeNames, Count(kTimeNames), 3},
-    {"Filter", Kind::kContinuous, 3, nullptr, 0, 0},
-    {"Mix", Kind::kContinuous, 3, nullptr, 0, 0},
-    {"Mod depth", Kind::kContinuous, 4, nullptr, 0, 0},
-    {"Mod rate", Kind::kContinuous, 4, nullptr, 0, 0},
-    {"Resonance", Kind::kContinuous, 5, nullptr, 0, 0},
-    {"Volume", Kind::kContinuous, 5, nullptr, 0, 0},
-    {"Space", Kind::kContinuous, 6, nullptr, 0, 0},
-    {"Reverb", Kind::kChoice, 6, kReverbNames, Count(kReverbNames), 2},
-    {"Tempo", Kind::kContinuous, 7, nullptr, 0, 0},
-    {"Tap", Kind::kTrigger, 7, nullptr, 0, 0},
-    {"Reverse", Kind::kToggle, 8, nullptr, 0, 0},
-    {"Hold", Kind::kToggle, 8, nullptr, 0, 0},
-    {"Bypass", Kind::kToggle, 8, nullptr, 0, 0},
-    {"Mono in", Kind::kToggle, 8, nullptr, 0, 0},
+    {"Effect", Kind::kChoice, 0, kSlotNames, Count(kSlotNames), 4, Store::kPreset},
+    {"Activity", Kind::kContinuous, 1, nullptr, 0, 0, Store::kPreset},
+    {"Repeats", Kind::kContinuous, 1, nullptr, 0, 0, Store::kPreset},
+    {"Shape", Kind::kChoice, 2, kShapeNames, Count(kShapeNames), 2, Store::kPreset},
+    {"Time", Kind::kChoice, 2, kTimeNames, Count(kTimeNames), 3, Store::kPreset},
+    {"Filter", Kind::kContinuous, 3, nullptr, 0, 0, Store::kPreset},
+    {"Mix", Kind::kContinuous, 3, nullptr, 0, 0, Store::kPreset},
+    {"Mod depth", Kind::kContinuous, 4, nullptr, 0, 0, Store::kPreset},
+    {"Mod rate", Kind::kContinuous, 4, nullptr, 0, 0, Store::kPreset},
+    {"Resonance", Kind::kContinuous, 5, nullptr, 0, 0, Store::kPreset},
+    {"Volume", Kind::kContinuous, 5, nullptr, 0, 0, Store::kPreset},
+    {"Space", Kind::kContinuous, 6, nullptr, 0, 0, Store::kPreset},
+    {"Reverb", Kind::kChoice, 6, kReverbNames, Count(kReverbNames), 2, Store::kPreset},
+    {"Tempo", Kind::kContinuous, 7, nullptr, 0, 0, Store::kNone},
+    {"Tap", Kind::kTrigger, 7, nullptr, 0, 0, Store::kNone},
+    {"Reverse", Kind::kToggle, 8, nullptr, 0, 0, Store::kPreset},
+    {"Hold", Kind::kToggle, 8, nullptr, 0, 0, Store::kNone},
+    {"Bypass", Kind::kToggle, 8, nullptr, 0, 0, Store::kNone},
+    {"Mono in", Kind::kToggle, 8, nullptr, 0, 0, Store::kGlobal},
 };
 
 void Snapshot(const GrainEngine &engine, Telemetry *t)
@@ -84,6 +87,7 @@ void WriteHello(weblink::Writer &w,
     h.meters           = kMeterNames;
     h.num_meters       = Count(kMeterNames);
     h.num_params       = kNumParams;
+    h.presets = Presets::kSlots;
     weblink::WriteHello(w, h);
 }
 

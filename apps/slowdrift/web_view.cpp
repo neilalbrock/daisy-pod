@@ -2,11 +2,14 @@
 
 #include <cmath>
 
+#include "presets.h"
+
 namespace web_view
 {
 namespace
 {
 using weblink::Kind;
+using weblink::Store;
 
 const char *const kModeNames[]   = {"Dream", "Light", "Rain", "Dark", "Rise"};
 const char *const kShapeNames[]  = {"Sine", "Warp", "Sink", "Square", "Random"};
@@ -28,22 +31,22 @@ constexpr uint8_t Count(const T (&)[N])
 } // namespace
 
 const weblink::Param kParams[kNumParams] = {
-    {"Decay", Kind::kContinuous, 0, nullptr, 0, 0},
-    {"Mix", Kind::kContinuous, 0, nullptr, 0, 0},
-    {"Filter", Kind::kContinuous, 1, nullptr, 0, 0},
-    {"Depth", Kind::kContinuous, 1, nullptr, 0, 0},
-    {"X", Kind::kContinuous, 2, nullptr, 0, 0},
-    {"Stretch", Kind::kContinuous, 2, nullptr, 0, 0},
-    {"Rate", Kind::kContinuous, 3, nullptr, 0, 0},
-    {"Pan", Kind::kContinuous, 3, nullptr, 0, 0},
-    {"Mode", Kind::kChoice, 0, kModeNames, Count(kModeNames), 5},
-    {"Waveshape", Kind::kChoice, 1, kShapeNames, Count(kShapeNames), 5},
-    {"Width", Kind::kChoice, 2, kWidthNames, Count(kWidthNames), 3},
-    {"Trails", Kind::kToggle, 3, nullptr, 0, 0},
-    {"On", Kind::kToggle, 4, nullptr, 0, 0},
-    {"Sustain", Kind::kToggle, 4, nullptr, 0, 0},
-    {"Freeze", Kind::kToggle, 4, nullptr, 0, 0},
-    {"Mono in", Kind::kToggle, 4, nullptr, 0, 0},
+    {"Decay", Kind::kContinuous, 0, nullptr, 0, 0, Store::kPreset},
+    {"Mix", Kind::kContinuous, 0, nullptr, 0, 0, Store::kPreset},
+    {"Filter", Kind::kContinuous, 1, nullptr, 0, 0, Store::kPreset},
+    {"Depth", Kind::kContinuous, 1, nullptr, 0, 0, Store::kPreset},
+    {"X", Kind::kContinuous, 2, nullptr, 0, 0, Store::kPreset},
+    {"Stretch", Kind::kContinuous, 2, nullptr, 0, 0, Store::kPreset},
+    {"Rate", Kind::kContinuous, 3, nullptr, 0, 0, Store::kPreset},
+    {"Pan", Kind::kContinuous, 3, nullptr, 0, 0, Store::kPreset},
+    {"Mode", Kind::kChoice, 0, kModeNames, Count(kModeNames), 5, Store::kPreset},
+    {"Waveshape", Kind::kChoice, 1, kShapeNames, Count(kShapeNames), 5, Store::kPreset},
+    {"Width", Kind::kChoice, 2, kWidthNames, Count(kWidthNames), 3, Store::kPreset},
+    {"Trails", Kind::kToggle, 3, nullptr, 0, 0, Store::kGlobal},
+    {"On", Kind::kToggle, 4, nullptr, 0, 0, Store::kNone},
+    {"Sustain", Kind::kToggle, 4, nullptr, 0, 0, Store::kNone},
+    {"Freeze", Kind::kToggle, 4, nullptr, 0, 0, Store::kNone},
+    {"Mono in", Kind::kToggle, 4, nullptr, 0, 0, Store::kGlobal},
 };
 
 void WriteHello(weblink::Writer &w, float sample_rate)
@@ -59,6 +62,7 @@ void WriteHello(weblink::Writer &w, float sample_rate)
     h.traces          = kTraces;
     h.num_traces      = kNumTraces;
     h.trace_period_ms = kTracePeriodMs;
+    h.presets         = Presets::kSlots;
     weblink::WriteHello(w, h);
 }
 

@@ -14,11 +14,14 @@ export const Msg = {
   REQUEST: 0x40,
   SET: 0x41,
   KEEP_ALIVE: 0x42,
+  PRESET_SELECT: 0x43,
+  PRESET_SAVE: 0x44,
+  PRESET_RESET: 0x45,
 };
 
 export const Kind = { CONTINUOUS: 0, CHOICE: 1, TOGGLE: 2, TRIGGER: 3 };
 
-const Section = { TEMPO: 1, LEVELS: 2, CPU: 3, BUFFER: 4, OVERVIEW: 5, TRACES: 6, XY: 7 };
+const Section = { TEMPO: 1, LEVELS: 2, CPU: 3, BUFFER: 4, OVERVIEW: 5, TRACES: 6, XY: 7, PRESETS: 8 };
 
 export const UNIT_MAX = 16383;
 
@@ -122,6 +125,13 @@ function readFrame(r) {
         for (let i = 0; i < n; i++) frame.xy.push([(r.u7() - 63) / 63, (r.u7() - 63) / 63]);
         break;
       }
+      case Section.PRESETS: {
+        const slot = r.u7();
+        const modified = r.u7() !== 0;
+        const mask = r.u14();
+        frame.presets = { slot: slot === 127 ? -1 : slot, modified, used: Array.from({ length: 14 }, (_, i) => (mask & (1 << i)) !== 0) };
+        break;
+      }
       default:
         // A section this page doesn't know: the rest can't be read.
         return frame;
@@ -155,6 +165,7 @@ export function decode(bytes) {
       hello.traces = [];
       hello.tracePeriodMs = 1;
       hello.xy = "";
+      hello.presets = 0;
       if (r.more) {
         const n = r.u7();
         hello.tracePeriodMs = r.u7();
@@ -162,6 +173,8 @@ export function decode(bytes) {
           hello.traces.push({ name: r.str(), unit: r.str(), min: r.u14() - 8192, max: r.u14() - 8192 });
         hello.xy = r.str();
       }
+      // Added later still: how many preset slots (common/presets.h).
+      if (r.more) hello.presets = r.u7();
       return hello;
     }
     case Msg.PARAM: {
@@ -195,6 +208,9 @@ function message(type, payload = []) {
 
 export const request = () => message(Msg.REQUEST);
 export const keepAlive = () => message(Msg.KEEP_ALIVE);
+export const presetSelect = (slot) => message(Msg.PRESET_SELECT, [slot & 0x7f]);
+export const presetSave = (slot) => message(Msg.PRESET_SAVE, [slot & 0x7f]);
+export const presetReset = () => message(Msg.PRESET_RESET);
 
 // raw: 0..16383 for continuous values, the option index for choices, 0 or 1
 // for toggles.

@@ -647,6 +647,24 @@ main {
   gap: 8px;
 }
 
+/* Presets: a slot per LED colour, dim while empty, a dot while modified. */
+.presets {
+  --accent: var(--text-soft);
+}
+
+.preset-slots > button {
+  font-family: var(--mono);
+}
+
+.preset-slots > button.empty {
+  opacity: 0.45;
+}
+
+.preset-slots > button.modified::after {
+  content: " •";
+}
+
+body:not(.is-live) .presets,
 body:not(.is-live) .controls {
   opacity: 0.45;
   pointer-events: none;

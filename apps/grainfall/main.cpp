@@ -30,25 +30,45 @@
 //   Button 2           - Hold sampler on/off; hold it for momentary
 //   Both buttons 1 s   - mono in: the left input feeds both channels
 //                        (LED 1 flashes cyan for on, dark for off)
+//   Page 7 (LED 2: the slot) Presets. Encoder turn - select a slot, loading
+//                            its preset; an empty one keeps the sound.
+//                            Encoder long press - save to the slot. LED 2
+//                            shows the slot's colour: dim if empty,
+//                            blinking off while modified, flickering white
+//                            on a save. The knobs do nothing here.
 //
 // LED 1 is green when active, blue while Hold is on, cyan while reversed.
 //
 // MIDI on the Pod's TRS input and over USB, channel 1, follows the
 // Microcosm's map: clock (MIDI Start follows it, Stop lets go), program
-// change 1-44 for the effects, and CCs for the controls. See README.md.
+// change 1-44 for the effects and 45-52 for presets 1-8 (the Microcosm's
+// first two user banks), and CCs for the controls. See README.md.
 //
 // Over USB it also talks to the web control surface (web/, `make web`),
-// streaming the buffer, voices, tempo, levels and CPU while the page is open.
+// streaming the buffer, voices, tempo, levels, CPU and the presets while
+// the page is open.
+//
+// Presets (common/presets.h) hold the effect, knobs and reverse; tempo,
+// Hold and bypass stay as they are. Mono in is saved on its own a few
+// seconds after it changes. At power-up it comes back, then the preset
+// last selected.
+//
+// Hold both buttons while powering up (both LEDs flash white) for a factory
+// reset: this app's presets and saved settings are erased. The web page
+// does the same while running.
 
 #include <cmath>
 
 #include "bypass_fade.h"
 #include "colour.h"
 #include "daisy_pod.h"
+#include "factory_reset.h"
 #include "grain_engine.h"
 #include "limiter.h"
 #include "paged_knobs.h"
+#include "presets.h"
 #include "press_hold.h"
+#include "qspi_flash.h"
 #include "sdram_timing.h"
 #include "tempo.h"
 #include "util/CpuLoadMeter.h"
@@ -82,9 +102,13 @@ Tempo          tempo;
 Limiter        limiter; // on dry + wet, so a loud wet signal doesn't clip
 BypassFade     bypass_fade;
 CpuLoadMeter   cpu_meter;
+QspiFlash      flash(hw.seed.qspi);
+Presets        presets;
 
-constexpr int kNumPages = 6;
-constexpr int kNumKnobs = 2;
+constexpr int kNumKnobPages = 6;
+constexpr int kPresetPage   = kNumKnobPages; // after the knob pages; its knobs do nothing
+constexpr int kNumPages     = kNumKnobPages + 1;
+constexpr int kNumKnobs     = 2;
 constexpr int kNumSlots = GrainEngine::kNumEffects * GrainEngine::kNumVariations;
 
 // Raw knob positions (0..1) per page, initial values chosen to sound sensible.
@@ -95,6 +119,7 @@ PagedKnobs<kNumPages, kNumKnobs> pages({
     {0.0f, 0.3f},  // mod depth off, rate
     {0.2f, 0.5f},  // resonance, volume unity
     {0.0f, 0.625f}, // space off, reverb C Large Hall
+    {0.0f, 0.0f},   // presets: unused
 });
 
 constexpr int      kMidiChannel = 0; // channel 1
@@ -109,7 +134,7 @@ bool reverse   = false;
 bool mono_in   = false;
 uint32_t sample_count = 0; // running timestamp for MIDI and tap tempo
 
-PressHold encoder_press(600);  // hold: reverse
+PressHold encoder_press(600);  // hold: reverse, or on the preset page, save
 PressHold button1_press(1000); // tap: tap tempo, hold: bypass
 
 // Both-button chord for mono in. Button 2 waits kChordMs before acting, in
@@ -189,6 +214,8 @@ void HandleCc(uint8_t cc, uint8_t value, uint32_t now)
 
 using namespace web_view;
 
+static_assert(kNumParams <= Presets::kMaxParams, "too many parameters for a preset");
+
 weblink::Session web;
 weblink::Writer  web_out;
 int              web_state[kNumParams]; // values in the last state sent
@@ -221,6 +248,13 @@ void SetParam(int index, int raw, uint32_t now, uint32_t now_ms)
                 pages.Set((index - 1) / 2, (index - 1) % 2, v);
             break;
     }
+}
+
+// A value from a preset or the saved settings, through SetParam. Neither
+// holds Tap, the only one that needs the sample count.
+void SetPresetParam(int index, int raw)
+{
+    SetParam(index, raw, sample_count, System::GetNow());
 }
 
 // A value for the page, in the main loop.
@@ -317,6 +351,7 @@ void SendWeb(uint32_t now_ms)
             WriteFrame(w, telemetry, hw.AudioSampleRate(), cpu_meter.GetAvgCpuLoad(),
                        cpu_meter.GetMaxCpuLoad(), overview, kOverviewColumns,
                        web.TakeRestart(), &overview_cursor);
+            presets.WriteSection(w);
             cpu_meter.Reset();
             break;
         default: return;
@@ -353,7 +388,7 @@ void HandleMidi(MidiEvent e, uint32_t now, uint32_t now_ms)
             if(e.sc_type == SystemExclusive)
             {
                 weblink::Command c;
-                if(web.Receive(e.sysex_data, e.sysex_message_len, now_ms, &c))
+                if(web.Receive(e.sysex_data, e.sysex_message_len, now_ms, &c) && !presets.Handle(c))
                     SetParam(c.index, c.raw, now, now_ms);
             }
             break;
@@ -367,6 +402,8 @@ void HandleMidi(MidiEvent e, uint32_t now, uint32_t now_ms)
                                + pc.program % GrainEngine::kNumVariations,
                            now_ms);
             }
+            else if(pc.channel == kMidiChannel && pc.program < kNumSlots + Presets::kSlots)
+                presets.Select(pc.program - kNumSlots);
             break;
         }
         default: break;
@@ -448,9 +485,12 @@ void AudioCallback(AudioHandle::InputBuffer  in,
         HandleMidi(usb_midi.PopEvent(), now, now_ms);
 
     HandleButtons(now, now_ms);
+    presets.Apply();
 
     int inc = hw.encoder.Increment();
-    if(inc != 0)
+    if(inc != 0 && pages.Page() == kPresetPage)
+        presets.Step(inc);
+    else if(inc != 0)
         SelectSlot(slot + inc, now_ms);
 
     const DaisyPod::Knob knob_ids[kNumKnobs] = {DaisyPod::KNOB_1, DaisyPod::KNOB_2};
@@ -458,11 +498,13 @@ void AudioCallback(AudioHandle::InputBuffer  in,
     for(int k = 0; k < kNumKnobs; k++)
         knob[k] = hw.GetKnobValue(knob_ids[k]);
 
-    // Long press toggles reverse as soon as the hold is long enough; a short
-    // press changes page on release.
+    // Long press toggles reverse (or saves, on the preset page) as soon as
+    // the hold is long enough; a short press changes page on release.
     PressHold::Event enc = encoder_press.Update(hw.encoder.Pressed(),
                                                 hw.encoder.TimeHeldMs());
-    if(enc == PressHold::Event::kHold)
+    if(enc == PressHold::Event::kHold && pages.Page() == kPresetPage)
+        presets.Save();
+    else if(enc == PressHold::Event::kHold)
         reverse = !reverse;
     else if(enc == PressHold::Event::kTap)
         pages.NextPage(knob);
@@ -560,6 +602,11 @@ int main(void)
     HAL_NVIC_SetPriority(OTG_FS_EP1_IN_IRQn, 1, 0);
     hw.midi.StartReceive();
 
+    // The saved settings, then the last preset; or with both buttons held,
+    // a factory reset.
+    bool reset = FactoryResetHeld(hw);
+    presets.Init(&flash, kRegionGrainfall, kParams, kNumParams, ParamRaw, SetPresetParam, reset);
+
     // Every knob starts "not live" so the defaults above hold until a knob moves.
     hw.StartAdc();
     System::Delay(10); // let the ADC settle before taking the reference reading
@@ -568,7 +615,7 @@ int main(void)
 
     hw.StartAudio(AudioCallback);
 
-    const float page_colours[kNumPages][3] = {
+    const float page_colours[kNumKnobPages][3] = {
         {0.0f, 0.0f, 1.0f}, // blue
         {1.0f, 0.0f, 1.0f}, // magenta
         {1.0f, 0.7f, 0.0f}, // yellow
@@ -610,8 +657,15 @@ int main(void)
         else
             hw.led1.Set(0.0f, 1.0f, 0.0f);
 
-        // LED 2: page colour, or the effect's colour just after a change.
-        if(now < effect_flash_til)
+        // LED 2: the preset slot on the preset page, else the page colour,
+        // or the effect's colour just after a change.
+        if(pages.Page() == kPresetPage)
+        {
+            float r, g, b;
+            presets.LedColour(now, &r, &g, &b);
+            hw.led2.Set(r, g, b);
+        }
+        else if(now < effect_flash_til)
         {
             float r, g, b;
             Hue(0.9f * effect / (GrainEngine::kNumEffects - 1), &r, &g, &b);
@@ -624,6 +678,7 @@ int main(void)
         }
         hw.UpdateLeds();
 
+        presets.Poll(now);
         SendWeb(now);
         System::Delay(10);
     }

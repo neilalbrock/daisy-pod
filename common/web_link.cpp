@@ -98,6 +98,7 @@ void WriteHello(Writer &w, const Hello &h)
         w.U14((uint32_t)(t.max + 8192));
     }
     w.Str(h.xy != nullptr ? h.xy : "");
+    w.U7(h.presets);
 }
 
 void WriteParam(Writer &w, int index, const Param &p)
@@ -153,11 +154,18 @@ bool Parse(const uint8_t *data, int length, Command *out)
             out->index = data[3];
             out->raw   = (data[4] << 7) | data[5];
             return true;
+        case Msg::kPresetSelect:
+        case Msg::kPresetSave:
+            if(length < 4)
+                return false;
+            out->index = data[3];
+            return true;
+        case Msg::kPresetReset: return true;
         default: return false;
     }
 }
 
-bool Session::Receive(const uint8_t *data, int length, uint32_t now_ms, Command *set)
+bool Session::Receive(const uint8_t *data, int length, uint32_t now_ms, Command *command)
 {
     Command c;
     if(!Parse(data, length, &c))
@@ -166,9 +174,10 @@ bool Session::Receive(const uint8_t *data, int length, uint32_t now_ms, Command 
     heard_      = true;
     if(c.type == Msg::kRequest)
         requested_ = true;
-    if(c.type != Msg::kSet)
+    if(c.type != Msg::kSet && c.type != Msg::kPresetSelect && c.type != Msg::kPresetSave
+       && c.type != Msg::kPresetReset)
         return false;
-    *set = c;
+    *command = c;
     return true;
 }
 

@@ -2,11 +2,14 @@
 
 #include <cmath>
 
+#include "presets.h"
+
 namespace web_view
 {
 namespace
 {
 using weblink::Kind;
+using weblink::Store;
 
 const char *const kWetModes[]   = {"Reverb", "Delay", "Slip"};
 const char *const kLoopModes[]  = {"Env", "Tape", "Stretch"};
@@ -45,63 +48,63 @@ float Db(float gain)
 } // namespace
 
 const weblink::Param kParams[kNumParams] = {
-    {"Time", Kind::kContinuous, 0, nullptr, 0, 0},
-    {"Wet modify", Kind::kContinuous, 0, nullptr, 0, 0},
-    {"Length", Kind::kContinuous, 1, nullptr, 0, 0},
-    {"Loop modify", Kind::kContinuous, 1, nullptr, 0, 0},
-    {"Clock", Kind::kContinuous, 2, nullptr, 0, 0},
-    {"Mix", Kind::kContinuous, 2, nullptr, 0, 0},
-    {"Wet mode", Kind::kChoice, 0, kWetModes, Count(kWetModes), 3},
-    {"Loop mode", Kind::kChoice, 1, kLoopModes, Count(kLoopModes), 3},
-    {"Routing", Kind::kChoice, 2, kRoutings, Count(kRoutings), 3},
-    {"Wet on", Kind::kToggle, 3, nullptr, 0, 0},
-    {"Freeze", Kind::kToggle, 3, nullptr, 0, 0},
-    {"Looper", Kind::kToggle, 3, nullptr, 0, 0},
-    {"Overdub", Kind::kToggle, 3, nullptr, 0, 0},
-    {"True bypass", Kind::kToggle, 3, nullptr, 0, 0},
-    {"Tone", Kind::kContinuous, 4, nullptr, 0, 0},
-    {"Stereo width", Kind::kContinuous, 4, nullptr, 0, 0},
-    {"Direct loop", Kind::kContinuous, 4, nullptr, 0, 0},
-    {"Fade", Kind::kContinuous, 4, nullptr, 0, 0},
-    {"Level balance", Kind::kContinuous, 4, nullptr, 0, 0},
-    {"Sync", Kind::kChoice, 4, kSyncs, Count(kSyncs), 3},
-    {"Spread solo", Kind::kChoice, 4, kSolos, Count(kSolos), 3},
-    {"Loop length", Kind::kChoice, 4, kLengths, Count(kLengths), 2},
-    {"Classic", Kind::kToggle, 5, nullptr, 0, 0},
-    {"MISO", Kind::kToggle, 5, nullptr, 0, 0},
-    {"Spread", Kind::kToggle, 5, nullptr, 0, 0},
-    {"Dry kill", Kind::kToggle, 5, nullptr, 0, 0},
-    {"Trails", Kind::kToggle, 5, nullptr, 0, 0},
-    {"Latch", Kind::kToggle, 5, nullptr, 0, 0},
-    {"No dub", Kind::kToggle, 5, nullptr, 0, 0},
-    {"Smooth", Kind::kToggle, 5, nullptr, 0, 0},
-    {"Ramp time", Kind::kToggle, 6, nullptr, 0, 0},
-    {"Ramp wet modify", Kind::kToggle, 6, nullptr, 0, 0},
-    {"Ramp clock", Kind::kToggle, 6, nullptr, 0, 0},
-    {"Ramp loop modify", Kind::kToggle, 6, nullptr, 0, 0},
-    {"Ramp length", Kind::kToggle, 6, nullptr, 0, 0},
-    {"Bounce", Kind::kToggle, 6, nullptr, 0, 0},
-    {"Sweep", Kind::kChoice, 6, kSweeps, Count(kSweeps), 2},
-    {"Polarity", Kind::kChoice, 6, kPolarities, Count(kPolarities), 2},
-    {"Ramp speed", Kind::kContinuous, 6, nullptr, 0, 0},
-    {"Waveform", Kind::kContinuous, 6, nullptr, 0, 0},
-    {"Ramping", Kind::kToggle, 6, nullptr, 0, 0},
-    {"Expression", Kind::kContinuous, 6, nullptr, 0, 0},
-    {"Expression on", Kind::kToggle, 6, nullptr, 0, 0},
-    {"Tap", Kind::kTrigger, 7, nullptr, 0, 0},
-    {"Tempo", Kind::kContinuous, 7, nullptr, 0, 0},
-    {"Follow MIDI clock", Kind::kToggle, 7, nullptr, 0, 0},
-    {"Synced", Kind::kToggle, 7, nullptr, 0, 0},
-    {"Time division", Kind::kChoice, 7, kDivisions, Count(kDivisions), 4},
-    {"Length division", Kind::kChoice, 7, kDivisions, Count(kDivisions), 4},
-    {"Synth", Kind::kToggle, 8, nullptr, 0, 0},
-    {"Output", Kind::kChoice, 8, kOutputs, Count(kOutputs), 3},
-    {"Octave", Kind::kChoice, 8, kOctaves, Count(kOctaves), 5},
-    {"Attack", Kind::kContinuous, 8, nullptr, 0, 0},
-    {"Decay", Kind::kContinuous, 8, nullptr, 0, 0},
-    {"Sustain", Kind::kContinuous, 8, nullptr, 0, 0},
-    {"Release", Kind::kContinuous, 8, nullptr, 0, 0},
-    {"Portamento", Kind::kContinuous, 8, nullptr, 0, 0},
+    {"Time", Kind::kContinuous, 0, nullptr, 0, 0, Store::kPreset},
+    {"Wet modify", Kind::kContinuous, 0, nullptr, 0, 0, Store::kPreset},
+    {"Length", Kind::kContinuous, 1, nullptr, 0, 0, Store::kPreset},
+    {"Loop modify", Kind::kContinuous, 1, nullptr, 0, 0, Store::kPreset},
+    {"Clock", Kind::kContinuous, 2, nullptr, 0, 0, Store::kPreset},
+    {"Mix", Kind::kContinuous, 2, nullptr, 0, 0, Store::kPreset},
+    {"Wet mode", Kind::kChoice, 0, kWetModes, Count(kWetModes), 3, Store::kPreset},
+    {"Loop mode", Kind::kChoice, 1, kLoopModes, Count(kLoopModes), 3, Store::kPreset},
+    {"Routing", Kind::kChoice, 2, kRoutings, Count(kRoutings), 3, Store::kPreset},
+    {"Wet on", Kind::kToggle, 3, nullptr, 0, 0, Store::kNone},
+    {"Freeze", Kind::kToggle, 3, nullptr, 0, 0, Store::kNone},
+    {"Looper", Kind::kToggle, 3, nullptr, 0, 0, Store::kNone},
+    {"Overdub", Kind::kToggle, 3, nullptr, 0, 0, Store::kNone},
+    {"True bypass", Kind::kToggle, 3, nullptr, 0, 0, Store::kGlobal},
+    {"Tone", Kind::kContinuous, 4, nullptr, 0, 0, Store::kGlobal},
+    {"Stereo width", Kind::kContinuous, 4, nullptr, 0, 0, Store::kGlobal},
+    {"Direct loop", Kind::kContinuous, 4, nullptr, 0, 0, Store::kGlobal},
+    {"Fade", Kind::kContinuous, 4, nullptr, 0, 0, Store::kGlobal},
+    {"Level balance", Kind::kContinuous, 4, nullptr, 0, 0, Store::kGlobal},
+    {"Sync", Kind::kChoice, 4, kSyncs, Count(kSyncs), 3, Store::kGlobal},
+    {"Spread solo", Kind::kChoice, 4, kSolos, Count(kSolos), 3, Store::kGlobal},
+    {"Loop length", Kind::kChoice, 4, kLengths, Count(kLengths), 2, Store::kGlobal},
+    {"Classic", Kind::kToggle, 5, nullptr, 0, 0, Store::kGlobal},
+    {"MISO", Kind::kToggle, 5, nullptr, 0, 0, Store::kGlobal},
+    {"Spread", Kind::kToggle, 5, nullptr, 0, 0, Store::kGlobal},
+    {"Dry kill", Kind::kToggle, 5, nullptr, 0, 0, Store::kGlobal},
+    {"Trails", Kind::kToggle, 5, nullptr, 0, 0, Store::kGlobal},
+    {"Latch", Kind::kToggle, 5, nullptr, 0, 0, Store::kGlobal},
+    {"No dub", Kind::kToggle, 5, nullptr, 0, 0, Store::kGlobal},
+    {"Smooth", Kind::kToggle, 5, nullptr, 0, 0, Store::kGlobal},
+    {"Ramp time", Kind::kToggle, 6, nullptr, 0, 0, Store::kPreset},
+    {"Ramp wet modify", Kind::kToggle, 6, nullptr, 0, 0, Store::kPreset},
+    {"Ramp clock", Kind::kToggle, 6, nullptr, 0, 0, Store::kPreset},
+    {"Ramp loop modify", Kind::kToggle, 6, nullptr, 0, 0, Store::kPreset},
+    {"Ramp length", Kind::kToggle, 6, nullptr, 0, 0, Store::kPreset},
+    {"Bounce", Kind::kToggle, 6, nullptr, 0, 0, Store::kPreset},
+    {"Sweep", Kind::kChoice, 6, kSweeps, Count(kSweeps), 2, Store::kPreset},
+    {"Polarity", Kind::kChoice, 6, kPolarities, Count(kPolarities), 2, Store::kPreset},
+    {"Ramp speed", Kind::kContinuous, 6, nullptr, 0, 0, Store::kPreset},
+    {"Waveform", Kind::kContinuous, 6, nullptr, 0, 0, Store::kPreset},
+    {"Ramping", Kind::kToggle, 6, nullptr, 0, 0, Store::kPreset},
+    {"Expression", Kind::kContinuous, 6, nullptr, 0, 0, Store::kNone},
+    {"Expression on", Kind::kToggle, 6, nullptr, 0, 0, Store::kNone},
+    {"Tap", Kind::kTrigger, 7, nullptr, 0, 0, Store::kNone},
+    {"Tempo", Kind::kContinuous, 7, nullptr, 0, 0, Store::kNone},
+    {"Follow MIDI clock", Kind::kToggle, 7, nullptr, 0, 0, Store::kGlobal},
+    {"Synced", Kind::kToggle, 7, nullptr, 0, 0, Store::kNone},
+    {"Time division", Kind::kChoice, 7, kDivisions, Count(kDivisions), 4, Store::kPreset},
+    {"Length division", Kind::kChoice, 7, kDivisions, Count(kDivisions), 4, Store::kPreset},
+    {"Synth", Kind::kToggle, 8, nullptr, 0, 0, Store::kNone},
+    {"Output", Kind::kChoice, 8, kOutputs, Count(kOutputs), 3, Store::kPreset},
+    {"Octave", Kind::kChoice, 8, kOctaves, Count(kOctaves), 5, Store::kPreset},
+    {"Attack", Kind::kContinuous, 8, nullptr, 0, 0, Store::kPreset},
+    {"Decay", Kind::kContinuous, 8, nullptr, 0, 0, Store::kPreset},
+    {"Sustain", Kind::kContinuous, 8, nullptr, 0, 0, Store::kPreset},
+    {"Release", Kind::kContinuous, 8, nullptr, 0, 0, Store::kPreset},
+    {"Portamento", Kind::kContinuous, 8, nullptr, 0, 0, Store::kPreset},
 };
 
 void WriteHello(weblink::Writer &w, float sample_rate, uint32_t ring_frames)
@@ -119,6 +122,7 @@ void WriteHello(weblink::Writer &w, float sample_rate, uint32_t ring_frames)
     h.traces          = kTraces;
     h.num_traces      = kNumTraces;
     h.trace_period_ms = kTracePeriodMs;
+    h.presets = Presets::kSlots;
     weblink::WriteHello(w, h);
 }
 

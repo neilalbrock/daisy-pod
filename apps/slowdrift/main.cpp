@@ -28,6 +28,13 @@
 //                          Encoder - Trails: on or off
 //   (a limiter holds dry + wet under -1 dBFS)
 //
+//   Page 5 (LED 2: the slot) Presets. Encoder turn - select a slot, loading
+//                            its preset; an empty one keeps the sound.
+//                            Encoder long press - save to the slot. LED 2
+//                            shows the slot's colour: dim if empty,
+//                            blinking off while modified, flickering white
+//                            on a save. The knobs do nothing here.
+//
 //   Encoder long press - mono in: the left input feeds both channels
 //                        (LED 1 flashes cyan for on, dark for off)
 //   Button 1           - on/off. Pressed while off, it comes on at once; let
@@ -50,17 +57,28 @@
 //   25 Trails  (64 and up: on)
 //   64 Sustain pedal: as button 2
 //   102 On/off   103 Freeze (Dream)   104 Mono in   (64 and up: on)
+//   Program change 1-8 (sent as 0-7) selects preset slot 1-8
 //
 // Over USB MIDI it also talks to the web control surface (web/, `make
 // web`), streaming levels, CPU, the LFO, the reverb's input gain and the
-// decay time while the page is open. Nothing is saved: it all starts from
-// the defaults at power-up.
+// decay time while the page is open, with the presets.
+//
+// Presets (common/presets.h) hold the knobs, mode, waveshape and width.
+// Trails and mono in are saved on their own a few seconds after they
+// change. At power-up they come back, then the preset last selected.
+//
+// Hold both buttons while powering up (both LEDs flash white) for a factory
+// reset: this app's presets and saved settings are erased. The web page
+// does the same while running.
 
 #include "daisy_pod.h"
 #include "colour.h"
+#include "factory_reset.h"
 #include "limiter.h"
 #include "paged_knobs.h"
+#include "presets.h"
 #include "press_hold.h"
+#include "qspi_flash.h"
 #include "slow_engine.h"
 #include "util/CpuLoadMeter.h"
 #include "web_link.h"
@@ -83,9 +101,15 @@ MidiUsbHandler usb_midi;
 SlowEngine     engine;
 Limiter        limiter; // on dry + wet, so a loud wet signal doesn't clip
 CpuLoadMeter   cpu_meter;
+QspiFlash      flash(hw.seed.qspi);
+Presets        presets;
 
-constexpr int kNumPages = 4;
-constexpr int kNumKnobs = 2;
+constexpr int kNumKnobPages = 4;
+constexpr int kPresetPage   = kNumKnobPages; // after the knob pages; its knobs do nothing
+constexpr int kNumPages     = kNumKnobPages + 1;
+constexpr int kNumKnobs     = 2;
+
+static_assert(kNumParams <= Presets::kMaxParams, "too many parameters for a preset");
 
 // Raw knob positions (0..1) per page, initial values chosen to sound sensible.
 PagedKnobs<kNumPages, kNumKnobs> pages({
@@ -93,6 +117,7 @@ PagedKnobs<kNumPages, kNumKnobs> pages({
     {0.6f, 0.3f},  // filter, depth
     {0.4f, 0.0f},  // x, no stretch
     {0.4f, 0.5f},  // rate 0.4 Hz, pan centred
+    {0.0f, 0.0f},  // presets: unused
 });
 
 // ---------------------------------------------------------------- State
@@ -101,9 +126,9 @@ PagedKnobs<kNumPages, kNumKnobs> pages({
 // the main loop reads it for the LEDs and the page.
 
 // Each page's encoder choice: mode, waveshape, width, trails.
-constexpr int kChoiceCounts[kNumPages] = {SlowEngine::kNumModes, Lfo::kNumShapes,
-                                          SlowEngine::kNumWidths, 2};
-int  choices[kNumPages] = {SlowEngine::kDream, Lfo::kSine, SlowEngine::kWide, 1};
+constexpr int kChoiceCounts[kNumKnobPages] = {SlowEngine::kNumModes, Lfo::kNumShapes,
+                                              SlowEngine::kNumWidths, 2};
+int  choices[kNumKnobPages] = {SlowEngine::kDream, Lfo::kSine, SlowEngine::kWide, 1};
 bool active  = true;
 bool sustain = false;
 bool freeze  = false;
@@ -111,7 +136,7 @@ bool mono_in = false;
 
 constexpr uint32_t kMomentaryMs = 400; // button 1 held this long while off: smart bypass
 
-PressHold encoder_press(600); // hold: mono in
+PressHold encoder_press(600); // hold: mono in, or on the preset page, save
 bool      momentary   = false; // button 1 turned it on with this press
 uint32_t  b1_held_ms  = 0;
 
@@ -183,6 +208,12 @@ void SetParam(int index, int raw, uint32_t now_ms)
                 pages.Set(index / 2, index % 2, raw / 16383.0f);
             break;
     }
+}
+
+// A value from a preset or the saved settings, through SetParam.
+void SetPresetParam(int index, int raw)
+{
+    SetParam(index, raw, System::GetNow());
 }
 
 // A value for the page, in the main loop.
@@ -275,6 +306,7 @@ void SendWeb(uint32_t now_ms)
         case weblink::Session::Send::kFrame:
             ReadTelemetry();
             WriteFrame(w, telemetry, cpu_meter.GetAvgCpuLoad(), cpu_meter.GetMaxCpuLoad());
+            presets.WriteSection(w);
             cpu_meter.Reset();
             web.TakeRestart(); // no buffer overview to restart
             break;
@@ -331,12 +363,13 @@ void HandleMidi(MidiEvent e, uint32_t now_ms)
             HandleCc(cc.control_number, cc.value, now_ms);
             break;
         }
+        case ProgramChange: presets.Select(e.AsProgramChange().program); break;
         case SystemCommon:
-            // The web page's settings.
+            // The web page's settings and presets.
             if(e.sc_type == SystemExclusive)
             {
                 weblink::Command c;
-                if(web.Receive(e.sysex_data, e.sysex_message_len, now_ms, &c))
+                if(web.Receive(e.sysex_data, e.sysex_message_len, now_ms, &c) && !presets.Handle(c))
                     SetParam(c.index, c.raw, now_ms);
             }
             break;
@@ -393,11 +426,14 @@ void AudioCallback(AudioHandle::InputBuffer  in,
     for(int k = 0; k < kNumKnobs; k++)
         knob[k] = hw.GetKnobValue(knob_ids[k]);
 
-    // Long press toggles mono in as soon as the hold is long enough; a short
-    // press changes page on release.
-    PressHold::Event enc = encoder_press.Update(hw.encoder.Pressed(),
+    // Long press toggles mono in (or saves, on the preset page) as soon as
+    // the hold is long enough; a short press changes page on release.
+    bool             on_presets = pages.Page() == kPresetPage;
+    PressHold::Event enc        = encoder_press.Update(hw.encoder.Pressed(),
                                                 hw.encoder.TimeHeldMs());
-    if(enc == PressHold::Event::kHold)
+    if(enc == PressHold::Event::kHold && on_presets)
+        presets.Save();
+    else if(enc == PressHold::Event::kHold)
     {
         mono_in          = !mono_in;
         mono_flash_until = now_ms + 500;
@@ -410,8 +446,11 @@ void AudioCallback(AudioHandle::InputBuffer  in,
     pages.Update(knob);
 
     int inc = hw.encoder.Increment();
-    if(inc != 0)
+    if(inc != 0 && pages.Page() == kPresetPage)
+        presets.Step(inc);
+    else if(inc != 0)
         SetChoice(pages.Page(), choices[pages.Page()] + inc, now_ms);
+    presets.Apply();
 
     SlowEngine::Params p;
     p.decay   = pages.Value(0, 0);
@@ -490,6 +529,11 @@ int main(void)
     hw.midi.StartReceive();
     trace_period = (int)(hw.AudioSampleRate() * kTracePeriodMs / 1000.0f);
 
+    // The saved settings, then the last preset; or with both buttons held,
+    // a factory reset.
+    bool reset = FactoryResetHeld(hw);
+    presets.Init(&flash, kRegionSlowdrift, kParams, kNumParams, ParamRaw, SetPresetParam, reset);
+
     // Every knob starts "not live" so the defaults above hold until a knob moves.
     hw.StartAdc();
     System::Delay(10); // let the ADC settle before taking the reference reading
@@ -498,7 +542,7 @@ int main(void)
 
     hw.StartAudio(AudioCallback);
 
-    const float page_colours[kNumPages][3] = {
+    const float page_colours[kNumKnobPages][3] = {
         {0.0f, 0.0f, 1.0f}, // blue
         {1.0f, 0.0f, 1.0f}, // magenta
         {1.0f, 0.7f, 0.0f}, // yellow
@@ -549,8 +593,11 @@ int main(void)
         }
         hw.led1.Set(r, g, b);
 
-        // LED 2: page colour, or the page's choice just after a change.
-        if(now < choice_flash_until)
+        // LED 2: the preset slot on the preset page, else the page colour,
+        // or the page's choice just after a change.
+        if(page == kPresetPage)
+            presets.LedColour(now, &r, &g, &b);
+        else if(now < choice_flash_until)
         {
             int v = choices[page];
             switch(page)
@@ -582,6 +629,7 @@ int main(void)
         hw.led2.Set(r, g, b);
         hw.UpdateLeds();
 
+        presets.Poll(now);
         SendWeb(now);
         System::Delay(10);
     }

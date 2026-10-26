@@ -16,7 +16,15 @@ second, variable sample rate), `OnsetDetector` (note onsets), `Plate` (a Dattorr
 reverb in grainfall and slowdrift) and the `PitchShift` octave shifter it uses, `PagedKnobs`,
 `PressHold` (tap vs hold on a button), `BypassFade`, `Limiter`, `SampleBuffer`
 (a stereo ring for SDRAM), `Hue()` for LED colours, the DSP helpers in `dsp.h` (`Rng`, `Biquad`, `Svf`, `DcBlock` and
-friends), and the web link protocol (`web_link.h`).
+friends), the web link protocol (`web_link.h`), and `Presets` (`presets.h`: eight presets and the
+global settings, saved to the QSPI flash through `PresetStore` and `QspiFlash`).
+
+Every app but the starter has eight presets, kept in flash so they survive
+power-off and reflashing: a preset page on the Pod (the last page; turn the
+encoder to select a slot, long-press to save), program changes, and the web
+page. Global settings like mono in are saved as you set them. For a factory
+reset (one app's presets and settings), hold both buttons while powering up.
+See each app's README.
 
 ## Web control surface
 
@@ -118,4 +126,7 @@ first so every object is rebuilt with the new flags.
 - Buffers read many times a sample (the reverbs in grainfall, driftnet and slowdrift) go
   in the 256 KB of RAM_D2, which reads faster, through the linker script's
   `.heap` section. Leave room there: malloc's heap starts where it ends.
+- Presets live in the last 1 MB of the 8 MB QSPI flash (from 0x700000), 64 KB
+  per app. The bootloader keeps its first 256 KB to itself and the app image
+  at 0x40000, so flashing an app never reaches them.
 
