@@ -34,6 +34,7 @@
 #include "limiter.h"
 #include "paged_knobs.h"
 #include "press_hold.h"
+#include "sdram_timing.h"
 #include "tape_engine.h"
 #include "util/CpuLoadMeter.h"
 #include "web_link.h"
@@ -369,6 +370,7 @@ void AudioCallback(AudioHandle::InputBuffer  in,
 int main(void)
 {
     hw.Init(true); // 480 MHz: the hysteresis solver needs the headroom
+    TuneSdramTimings();
     hw.SetAudioBlockSize(4);
     hw.SetAudioSampleRate(SaiHandle::Config::SampleRate::SAI_48KHZ);
 

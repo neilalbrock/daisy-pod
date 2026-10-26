@@ -60,6 +60,7 @@
 #include "paged_knobs.h"
 #include "press_hold.h"
 #include "ramp.h"
+#include "sdram_timing.h"
 #include "synth.h"
 #include "tempo.h"
 #include "util/CpuLoadMeter.h"
@@ -811,6 +812,7 @@ void AudioCallback(AudioHandle::InputBuffer  in,
 int main(void)
 {
     hw.Init(true); // 480 MHz: the core can tick 1.33 times a sample at 64k
+    TuneSdramTimings();
     hw.SetAudioBlockSize(4);
     hw.SetAudioSampleRate(SaiHandle::Config::SampleRate::SAI_48KHZ);
 
