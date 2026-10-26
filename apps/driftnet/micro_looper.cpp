@@ -21,8 +21,25 @@ constexpr float kRateAt[kRatePoints] = {0.0f, 7.5f, 23.0f, 38.5f, 53.5f, 61.0f,
 constexpr float kRate[kRatePoints]   = {-1.0f, -1.0f, -0.667f, -0.5f, -0.25f, 0.0f,
                                         0.0f, 0.25f, 0.5f, 0.667f, 1.0f};
 
+// Synced LENGTH in Tape mode: whole fractions of the loop, where each zone
+// starts in MIDI values (MOOD's synced LENGTH table).
+constexpr float kSyncedFractions[6] = {1.0f / 32, 1.0f / 16, 1.0f / 8, 1.0f / 4, 1.0f / 2, 1.0f};
+constexpr int   kSyncedStart[5]     = {13, 37, 62, 85, 111};
+
 constexpr float kFadeSeconds    = 0.005f; // engage, release, overdub punch in/out, mode change
 constexpr float kReleaseSeconds = 0.05f;  // Env's detector
+constexpr float kChopSeconds    = 0.002f; // CLASSIC's gate in Tape
+constexpr float kMinLoop        = 2048.0f; // frames: SYNC's shortest loop
+
+// FADE: what each overdub pass keeps, from this at min to all of it.
+constexpr float kMinKeep = 0.3f;
+
+// CLASSIC: each pass darkens the loop a little and rounds off its peaks.
+constexpr float kWearSmooth = 0.12f;
+constexpr float kWearDrive  = 1.1f;
+
+// SPREAD's pans, in cycles per core tick at 48k.
+constexpr float kStretchPanMin = 0.05f / 48000.0f, kStretchPanMax = 0.5f / 48000.0f;
 
 // LENGTH's ranges in core frames (seconds at 48k).
 constexpr float kMinSlice = 240.0f, kMaxSlice = 48000.0f; // Env: 5 ms to 1 s
@@ -40,16 +57,36 @@ void MicroLooper::Init(float *data, size_t frames)
 
 void MicroLooper::SetRate(float core_rate)
 {
+    // These run every block: skip the maths unless something changed.
+    if(core_rate == rate_set_)
+        return;
+    rate_set_ = core_rate;
     gain_inc_    = 1.0f / (kFadeSeconds * core_rate);
     env_release_ = expf(-1.0f / (kReleaseSeconds * core_rate));
+    chop_coef_   = fminf(1.0f, 1.0f / (kChopSeconds * core_rate));
 }
 
 void MicroLooper::SetLength(float length)
 {
     length_ = dsp::Clamp(length, 0.0f, 1.0f);
+    if(length_ == length_set_ && loop_len_ == loop_len_set_ && options_.synced == synced_set_)
+        return;
+    length_set_   = length_;
+    loop_len_set_ = loop_len_;
+    synced_set_   = options_.synced;
 
-    // Tape: full at max, down to 1/32 of the loop at min.
-    window_ = loop_len_ * exp2f(5.0f * (length_ - 1.0f));
+    // Tape: full at max, down to 1/32 of the loop at min, or in whole
+    // fractions while synced.
+    if(options_.synced)
+    {
+        int v    = (int)(length_ * 127.0f + 0.5f);
+        int zone = 0;
+        while(zone < 5 && v >= kSyncedStart[zone])
+            zone++;
+        window_ = loop_len_ * kSyncedFractions[zone];
+    }
+    else
+        window_ = loop_len_ * exp2f(5.0f * (length_ - 1.0f));
 
     slice_len_  = kMinSlice * powf(kMaxSlice / kMinSlice, length_);
     grain_size_ = kMinGrain * powf(kMaxGrain / kMinGrain, length_);
@@ -58,6 +95,9 @@ void MicroLooper::SetLength(float length)
 void MicroLooper::SetModify(float modify)
 {
     modify_ = dsp::Clamp(modify, 0.0f, 1.0f);
+    if(modify_ == modify_set_)
+        return;
+    modify_set_ = modify_;
     float v = modify_ * 127.0f;
 
     int zone = 0;
@@ -79,7 +119,11 @@ void MicroLooper::SetModify(float modify)
 
 void MicroLooper::Engage()
 {
-    // The ring's newest loop_len_ frames, with the seam just before them.
+    // The ring's newest loop_len_ frames, with the seam just before them:
+    // all of the ring, half of it, or what SYNC asks for.
+    float ring = (float)(options_.half ? buffer_.Frames() / 2 : buffer_.Frames()) - (float)kSeam;
+    loop_len_  = options_.capture > 0 ? dsp::Clamp((float)options_.capture, kMinLoop, ring) : ring;
+    SetLength(length_); // the window, slices and grains follow the loop
     start_ = buffer_.WritePos() - (uint32_t)loop_len_;
     mode_  = next_mode_;
     Begin();
@@ -93,7 +137,7 @@ void MicroLooper::Begin()
     repeating_ = false;
     switch(mode_)
     {
-        case Mode::kTape: pos_ = speed_ < 0.0f ? window_ - 1.0f : 0.0f; break;
+        case Mode::kTape: pos_ = speed_ < 0.0f ? TapeWindow() - 1.0f : 0.0f; break;
         case Mode::kEnv: pos_ = 0.0f; break;
         case Mode::kStretch:
             pos_ = dir_ < 0.0f ? loop_len_ - 1.0f : 0.0f;
@@ -115,7 +159,7 @@ void MicroLooper::SetOverdub(bool on)
 
 float MicroLooper::LoopPos() const
 {
-    return mode_ == Mode::kTape ? loop_len_ - window_ + pos_ : pos_;
+    return mode_ == Mode::kTape ? loop_len_ - TapeWindow() + pos_ : pos_;
 }
 
 void MicroLooper::SetLoopPos(float pos)
@@ -123,9 +167,10 @@ void MicroLooper::SetLoopPos(float pos)
     if(mode_ == Mode::kTape)
     {
         // Into the window, which is the end of the loop.
-        pos = fmodf(pos - (loop_len_ - window_), window_);
+        float window = TapeWindow();
+        pos          = fmodf(pos - (loop_len_ - window), window);
         if(pos < 0.0f)
-            pos += window_;
+            pos += window;
     }
     pos_ = pos;
 }
@@ -219,28 +264,62 @@ void MicroLooper::Read(float *l, float *r)
         case Mode::kStretch: ReadStretch(l, r); break;
     }
     float g = gain_ * mode_gain_;
+    // CLASSIC with NO DUB: the loop is muted while overdubbing, like MOOD MKI.
+    if(options_.classic && options_.no_dub)
+        g *= 1.0f - dub_;
     *l *= g;
     *r *= g;
+}
+
+void MicroLooper::Pan(float *l, float *r, float amount) const
+{
+    if(amount <= 0.0f)
+        return;
+    float m = 0.5f * (*l + *r);
+    float p = dsp::FastSin(pan_phase_);
+    *l += amount * (m * (1.0f - p) - *l);
+    *r += amount * (m * (1.0f + p) - *r);
 }
 
 void MicroLooper::ReadTape(float *l, float *r)
 {
     // The window can shrink under the play head. It ends where the loop
-    // does, so a short one holds the newest audio.
-    if(pos_ >= window_)
-        pos_ = fmodf(pos_, window_);
-    uint32_t first = start_ + (uint32_t)(loop_len_ - window_);
-    dub_frame_     = ReadSeamless(first, window_, pos_, l, r);
+    // does, so a short one holds the newest audio. CLASSIC plays all of the
+    // loop and chops it into pieces of the window's length instead.
+    float window = TapeWindow();
+    if(pos_ >= window)
+        pos_ = fmodf(pos_, window);
+    uint32_t first = start_ + (uint32_t)(loop_len_ - window);
+    dub_frame_     = ReadSeamless(first, window, pos_, l, r);
+
+    // SPREAD: the left channel plays the same window backwards.
+    if(options_.spread)
+    {
+        float back = window - pos_;
+        if(back >= window)
+            back -= window;
+        float bl, br;
+        ReadSeamless(first, window, back, &bl, &br);
+        *l = bl;
+    }
+
+    if(options_.classic)
+    {
+        float gate = window_ >= loop_len_ || fmodf(pos_, window_) < 0.5f * window_ ? 1.0f : 0.0f;
+        chop_ += chop_coef_ * (gate - chop_);
+        *l *= chop_;
+        *r *= chop_;
+    }
 
     pos_ += speed_;
-    if(pos_ >= window_)
+    if(pos_ >= window)
     {
-        pos_ -= window_;
+        pos_ -= window;
         loop_starts_++;
     }
     else if(pos_ < 0.0f)
     {
-        pos_ += window_;
+        pos_ += window;
         loop_starts_++;
     }
 }
@@ -289,6 +368,15 @@ void MicroLooper::ReadEnv(float *l, float *r)
             loop_starts_++;
         }
     }
+
+    // SPREAD: pans side to side while it repeats, once every two slices.
+    if(options_.spread)
+    {
+        pan_phase_ = dsp::WrapPhase(pan_phase_ + 0.5f / fmaxf(slice_len_, 1.0f));
+        float target = repeating_ ? 1.0f : 0.0f;
+        pan_amount_ += dsp::Clamp(target - pan_amount_, -gain_inc_, gain_inc_);
+        Pan(l, r, pan_amount_);
+    }
 }
 
 void MicroLooper::ReadStretch(float *l, float *r)
@@ -326,6 +414,14 @@ void MicroLooper::ReadStretch(float *l, float *r)
     *l         = sum_l * norm;
     *r         = sum_r * norm;
 
+    // SPREAD: a slow pan, quicker the faster the grains move on.
+    if(options_.spread)
+    {
+        float speed = kStretchPanMin + fabsf(rate_) * (kStretchPanMax - kStretchPanMin);
+        pan_phase_  = dsp::WrapPhase(pan_phase_ + speed);
+        Pan(l, r, 1.0f);
+    }
+
     pos_ += rate_;
     if(pos_ >= loop_len_)
     {
@@ -355,11 +451,73 @@ void MicroLooper::Write(float l, float r)
     // Once per frame the play head passes, so slow speeds don't add the
     // same frame twice. Layers pile up, so round them off above full scale
     // (nearly linear below it).
-    if(dub_ > 0.0f && dub_frame_ != last_dubbed_)
+    bool wear = options_.classic;
+    if((dub_ <= 0.0f && !wear) || dub_frame_ == last_dubbed_)
+        return;
+    float  keep = options_.no_dub ? 0.0f : kMinKeep + (1.0f - kMinKeep) * options_.fade;
+    keep        = 1.0f - dub_ * (1.0f - keep);
+    float  in[2] = {l, r};
+    float *f     = buffer_.At(dub_frame_);
+    for(int ch = 0; ch < 2; ch++)
     {
-        float *f     = buffer_.At(dub_frame_);
-        f[0]         = 2.0f * dsp::SoftClip(0.5f * (f[0] + l * dub_));
-        f[1]         = 2.0f * dsp::SoftClip(0.5f * (f[1] + r * dub_));
-        last_dubbed_ = dub_frame_;
+        float x = f[ch];
+        if(wear)
+        {
+            // Smoothed against the frame before, and its peaks rounded off.
+            x += kWearSmooth * (wear_[ch] - x);
+            x         = dsp::SoftClip(kWearDrive * x) / kWearDrive;
+            wear_[ch] = x;
+        }
+        f[ch] = 2.0f * dsp::SoftClip(0.5f * (x * keep + in[ch] * dub_));
+    }
+    last_dubbed_ = dub_frame_;
+}
+
+void MicroLooper::Snapshot(View *v) const
+{
+    v->playing   = playing_ || gain_ > 0.0f;
+    v->mode      = mode_;
+    v->write     = buffer_.WritePos();
+    v->start     = start_;
+    v->loop_len  = loop_len_;
+    v->pos       = start_ + (uint32_t)LoopPos();
+    v->env       = env_;
+    v->threshold = threshold_;
+    v->num_heads = 0;
+    if(!v->playing)
+        return;
+    switch(mode_)
+    {
+        case Mode::kTape:
+        {
+            float    window = TapeWindow();
+            uint32_t first  = start_ + (uint32_t)(loop_len_ - window);
+            v->heads[0] = {first, window, first + (uint32_t)pos_, fabsf(speed_), speed_ < 0.0f, 1.0f};
+            v->num_heads = 1;
+            break;
+        }
+        case Mode::kEnv:
+            if(repeating_)
+                v->heads[0] = {start_ + (uint32_t)slice_, repeat_len_, v->pos, 1.0f, false, 1.0f};
+            else
+                v->heads[0] = {start_, loop_len_, v->pos, 1.0f, false, 1.0f};
+            v->num_heads = 1;
+            break;
+        case Mode::kStretch:
+            for(const Grain &g : grains_)
+            {
+                float q = g.start + g.dir * g.age;
+                if(q >= loop_len_)
+                    q -= loop_len_;
+                else if(q < 0.0f)
+                    q += loop_len_;
+                float s     = dsp::FastSin(0.5f * g.age / g.size);
+                float first = g.dir > 0.0f ? g.start : g.start - g.size;
+                if(first < 0.0f)
+                    first += loop_len_;
+                v->heads[v->num_heads++]
+                    = {start_ + (uint32_t)first, g.size, start_ + (uint32_t)q, 1.0f, g.dir < 0.0f, s * s};
+            }
+            break;
     }
 }

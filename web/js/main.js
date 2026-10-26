@@ -11,7 +11,9 @@ import { TraceView, XYView } from "./views/traces.js";
 const $ = (sel) => document.querySelector(sel);
 
 const link = new Link();
-const view = new BufferView($("#buffer"));
+const bufferView = new BufferView($("#buffer"));
+let view = bufferView; // or the app's own view of its buffer (extras.View)
+const appViews = {};
 const tempo = new TempoView($("#tempo"));
 const meters = new Meters($("#levels"));
 const cpu = new CpuView($("#cpu"));
@@ -58,7 +60,14 @@ link.addEventListener("message", async (e) => {
       $("#xy-title").textContent = msg.xy;
       $("#tempo").hidden = true; // until a frame brings a tempo
       app.then((extras) => {
-        if (msg === hello) $("#trace-title").textContent = extras.tracesTitle || "Traces";
+        if (msg !== hello) return;
+        $("#trace-title").textContent = extras.tracesTitle || "Traces";
+        // An app can draw its buffer its own way, under its own title.
+        view = extras.View ? (appViews[msg.app] ??= new extras.View($("#buffer"))) : bufferView;
+        view.setLayout(msg);
+        $("#scope h2").textContent = extras.scopeTitle || "Buffer";
+        $("#scope .legend").hidden = Boolean(extras.View);
+        $("#scope .span").hidden = Boolean(extras.View);
       });
       break;
     case "param":
@@ -129,12 +138,12 @@ function spanButtons(attr, target) {
   const buttons = document.querySelectorAll(`[${attr}]`);
   for (const b of buttons)
     b.addEventListener("click", () => {
-      target.spanSeconds = Number(b.getAttribute(attr));
+      target().spanSeconds = Number(b.getAttribute(attr));
       for (const o of buttons) o.setAttribute("aria-pressed", String(o === b));
     });
 }
-spanButtons("data-span", view);
-spanButtons("data-trace-span", traces);
+spanButtons("data-span", () => view);
+spanButtons("data-trace-span", () => traces);
 
 link.addEventListener("status", showStatus);
 link.addEventListener("ports", fillPorts);

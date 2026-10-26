@@ -16,6 +16,14 @@ constexpr float kTapR[8] = {0.10f, 0.18f, 0.29f, 0.41f, 0.53f, 0.64f, 0.77f, 0.9
 constexpr float kTapGain[8] = {1.0f, 0.93f, 0.86f, 0.79f, 0.72f, 0.65f, 0.58f, 0.51f};
 constexpr float kOutGain    = 0.4f;
 
+// SPREAD: where each left tap is scattered to (-1 left, 1 right); the right
+// taps go to the mirror image.
+constexpr float kScatter[8] = {0.8f, -0.3f, 0.5f, -0.9f, 0.2f, -0.6f, 0.95f, -0.1f};
+
+// CLASSIC: a short comb in the feedback, and how much of it.
+constexpr float kRingFrames = 113.0f;
+constexpr float kRingGain   = 0.35f;
+
 // Diffuser lengths in frames (Freeverb's allpasses, the right side offset).
 constexpr uint32_t kStageLen[2][4] = {{225, 341, 441, 556}, {248, 364, 464, 579}};
 
@@ -31,7 +39,11 @@ void WetReverb::Init(float *data, size_t frames)
     for(size_t i = 0; i < frames * 2; i++)
         line_[i] = 0.0f;
 
-    float *mem = diffuser_mem_;
+    // The diffusers' lines follow the main one (both sides' stages, with
+    // room for the modulation), cleared once here.
+    float *mem = data + 2 * frames;
+    for(size_t i = 0; i < kDiffuserFloats; i++)
+        mem[i] = 0.0f;
     for(int ch = 0; ch < 2; ch++)
         for(int s = 0; s < kStages; s++)
         {
@@ -49,12 +61,18 @@ void WetReverb::Init(float *data, size_t frames)
 
 void WetReverb::SetRate(float core_rate)
 {
+    if(core_rate == rate_set_)
+        return;
+    rate_set_ = core_rate;
     size_coef_  = dsp::SmoothCoef(0.05f, core_rate);
     smear_coef_ = dsp::SmoothCoef(0.02f, core_rate);
 }
 
 void WetReverb::SetTime(float time)
 {
+    if(time == time_set_)
+        return;
+    time_set_ = time;
     time         = dsp::Clamp(time, 0.0f, 1.0f);
     size_target_ = kMinSize * powf(kMaxSize / kMinSize, time);
     decay_       = 0.35f + 0.5f * time;
@@ -91,7 +109,8 @@ float WetReverb::Tap(int ch, float delay) const
 
 float WetReverb::Diffuse(int ch, float x)
 {
-    lfo_[ch] = dsp::WrapPhase(lfo_[ch] + kLfoInc[ch]);
+    if(!classic_)
+        lfo_[ch] = dsp::WrapPhase(lfo_[ch] + kLfoInc[ch]);
 
     float y = x;
     for(int s = 0; s < kStages; s++)
@@ -135,8 +154,19 @@ void WetReverb::Process(float in_l, float in_r, float *out_l, float *out_r)
     {
         last_l = Tap(0, size_ * kTapL[i]);
         last_r = Tap(1, size_ * kTapR[i]);
-        l += kTapGain[i] * last_l;
-        r += kTapGain[i] * last_r;
+        if(spread_ > 0.0f)
+        {
+            // Each tap from its own side towards its scattered place.
+            float pl = -1.0f + spread_ * (kScatter[i] + 1.0f);
+            float pr = 1.0f - spread_ * (kScatter[i] + 1.0f);
+            l += kTapGain[i] * (last_l * fminf(1.0f, 1.0f - pl) + last_r * fminf(1.0f, 1.0f - pr));
+            r += kTapGain[i] * (last_l * fminf(1.0f, 1.0f + pl) + last_r * fminf(1.0f, 1.0f + pr));
+        }
+        else
+        {
+            l += kTapGain[i] * last_l;
+            r += kTapGain[i] * last_r;
+        }
     }
     *out_l = l * kOutGain;
     *out_r = r * kOutGain;
@@ -154,8 +184,17 @@ void WetReverb::Process(float in_l, float in_r, float *out_l, float *out_r)
         damp_[0] += kDamp * (last_r - damp_[0]);
         damp_[1] += kDamp * (last_l - damp_[1]);
     }
-    float x_l = Diffuse(0, in_l * in_gain + decay * damp_[0]);
-    float x_r = Diffuse(1, in_r * in_gain + decay * damp_[1]);
+    float x_l = in_l * in_gain + decay * damp_[0];
+    float x_r = in_r * in_gain + decay * damp_[1];
+    // The comb and the feedback together must stay under unity gain.
+    float ring = classic_ ? fminf(kRingGain, 0.97f - decay) : 0.0f;
+    if(ring > 0.0f)
+    {
+        x_l += ring * Tap(0, kRingFrames);
+        x_r += ring * Tap(1, kRingFrames);
+    }
+    x_l = Diffuse(0, x_l);
+    x_r = Diffuse(1, x_r);
 
     // Round off above full scale, so a frozen wash can't run away.
     line_[2 * write_]     = 2.0f * dsp::SoftClip(0.5f * x_l);

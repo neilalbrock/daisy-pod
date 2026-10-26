@@ -10,7 +10,11 @@ the sample rate both run at.
 make APP=driftnet program-dfu
 ```
 
-MOOD's MIDI map, hidden options and the web page are still to come.
+Everything the pedal hides behind its toggles, DIP switches and hidden menu
+is here too: over MIDI with MOOD's own CC map, or from the
+[web page](#the-web-page). The Pod's controls cover the knobs, toggles and
+footswitches. Nothing is saved: presets and saved options may come later,
+and for now everything starts from the defaults at power-up.
 
 ## The CLOCK
 
@@ -25,6 +29,10 @@ sets several things at once:
 - **Pitch:** anything already recorded plays slower and lower when you turn
   the clock down. Overdubs keep the speed they were recorded at.
 - **Grit:** there's no anti-alias filter, so low settings alias heavily.
+
+With the SMOOTH DIP switch on, CLOCK glides anywhere between 2k and 64k
+instead of stepping, for fine tuning and atonal harmonies. Synth Mode plays
+the clock from a keyboard (see [Synth Mode](#synth-mode)).
 
 ## Controls
 
@@ -49,15 +57,16 @@ A limiter holds dry plus wet under -1 dBFS.
 | Control | Function |
 |---|---|
 | Button 1 | Wet Channel on; tap again for off |
-| Button 1 hold | Freeze while held |
+| Button 1 hold | Freeze while held (with LATCH, until held again) |
 | Button 2 | Micro-Looper: play the last moments; tap again to go back to listening |
-| Button 2 hold | Overdub while held |
+| Button 2 hold | Overdub while held (with LATCH, until held again) |
 | Encoder press | Next page |
-| Encoder long press | Mono in: the left input feeds both channels (LED 1 flashes cyan for on, dark for off) |
+| Encoder long press | Mono in (the MISO DIP switch): the left input feeds both channels (LED 1 flashes cyan for on, dark for off) |
 
 **LED 1** is green while the Wet Channel is on and white while it's frozen,
 with red added while the loop plays (so both on shows yellow). It blinks
-off at the start of each pass, and its red flickers while overdubbing.
+off at the start of each pass, and its red flickers while overdubbing. In
+Synth Mode it's cyan, brighter while a note sounds.
 
 ### Routing
 
@@ -70,7 +79,8 @@ encoder on page 3.
 | In + Loop | Green | Your input and the loop |
 | Loop | Blue | The loop only; your input stays dry |
 
-A loop sent through the Wet Channel is heard only through it.
+A loop sent through the Wet Channel is heard only through it, unless
+DIRECT MICRO-LOOP blends some of the clean loop back in.
 
 ## The Micro-Looper
 
@@ -86,7 +96,10 @@ else would feed the loop back into itself through the effect.
 
 Switching between the looper's modes keeps the loop. Overdubs are written
 wherever the play head is, so anywhere but Tape at 1x they can land
-somewhere unexpected.
+somewhere unexpected. FADE lets each overdub pass fade the loop, and NO DUB
+replaces it outright, for a pseudo-live effect that follows your playing
+(more closely at higher clock rates). LOOP LENGTH can halve the loop, as on
+the first MOOD, and SYNC can set it from TIME.
 
 | Mode | LENGTH | MODIFY |
 |---|---|---|
@@ -109,6 +122,16 @@ LENGTH then shrinks or grows that moment. Below noon it runs backwards. The
 steps follow MOOD's MIDI chart, with the knob moving smoothly between them.
 To get to know it, set LENGTH and MODIFY to max, turn MODIFY slowly towards
 noon, then turn LENGTH down.
+
+**SPREAD** (the DIP switch, unless SPREAD SOLO keeps it to the Wet Channel)
+gives each mode a stereo movement: Env pans side to side while it holds a
+slice, Tape plays the loop forwards on the right and backwards on the left,
+and Stretch pans slowly, faster the less it's stretched.
+
+**CLASSIC** brings back some of the first MOOD's flaws: the loop wears a
+little on every pass, getting duller and rounder; Tape's LENGTH chops the
+loop instead of shortening it; and with NO DUB the loop is muted while you
+overdub, so holding the button records and releasing plays back.
 
 ## The Wet Channel
 
@@ -138,3 +161,130 @@ make harmonised phrases that follow behind you. Each window keeps the
 speed it started with, so turning MODIFY steps the harmony. Freeze stops
 the sampling, so it repeats the same window like a synth note. Try a loop
 routed through it, moving MODIFY as you punch it in and out.
+
+**SPREAD**, unless SPREAD SOLO keeps it to the loop, as wide as STEREO
+WIDTH: the Reverb scatters its taps across the stereo field, the Delay
+ping-pongs, mirroring where your input sits, and Slip pans side to side once
+every two windows. **CLASSIC** makes the Reverb ring a little, the Delay's
+TIME bend the pitch of the echoes, Slip crunchier, and the clock hiss more
+as it comes down.
+
+**TONE** is a hi-cut on the Wet Channel only, from open down to 800 Hz. It
+stays put in Hz whatever the CLOCK. With **TRAILS**, switching the Wet
+Channel off lets what's sounding ring out.
+
+## Hidden options and DIP switches
+
+None of these have Pod controls. Set them over MIDI (channel 2) or from the
+web page.
+
+| Hidden option | CC | Values | Default |
+|---|---|---|---|
+| STEREO WIDTH: how wide SPREAD is on the Wet Channel | 24 | 0-127 | 127 |
+| FADE: how much of the loop each overdub pass keeps (down to 30%) | 26 | 0-127 | 127 |
+| TONE: the Wet Channel's hi-cut | 27 | 0-127 | 127 (open) |
+| LEVEL BALANCE: below noon turns the loop down, above it the Wet Channel | 28 | 0-127 | 64 (even) |
+| DIRECT MICRO-LOOP: clean loop blended back when it's routed through | 29 | 0-127 | 0 |
+| SYNC: loop to wet, off, wet to loop (see [Tempo and sync](#tempo-and-sync)) | 31 | 0-1, 2, 3+ | off |
+| SPREAD SOLO: SPREAD on the Wet Channel only, both, or the loop only | 32 | 0-1, 2, 3+ | both |
+| LOOP LENGTH: half or full | 33 | 0-1, 2+ | full |
+
+| DIP switch | CC | Default |
+|---|---|---|
+| CLASSIC | 71 | off |
+| MISO: mono in, stereo out (also the encoder's long press) | 72 | off |
+| SPREAD | 73 | off |
+| DRY KILL: no dry signal at all, even in bypass | 74 | off |
+| TRAILS | 75 | off |
+| LATCH: the two holds toggle | 76 | off |
+| NO DUB | 77 | off |
+| SMOOTH: CLOCK glides instead of stepping | 78 | off |
+
+## Ramping
+
+MOOD's left bank of DIP switches automates the knobs. Pick which ones move
+(TIME, wet MODIFY, CLOCK, loop MODIFY, LENGTH: CCs 61-65). With **BOUNCE**
+(66) they sweep back and forth for as long as it's on; without it they ramp
+once, each time a channel is switched on, from the far end of their range to
+where the knob is. **SWEEP** (67) sets the range: from the bottom up to the
+knob, or from the knob up to the top. **POLARITY** (68) turns the movement
+over.
+
+RAMP SPEED (CC 20) goes from one cycle every 50 s to 10 a second, and
+RAMPING WAVEFORM (CC 25) morphs from triangle through square, sine and
+random to smoothed random. CC 52 at 0 stops the movement where it is and
+anything above resumes it. On the pedal MIX becomes the ramp speed; here MIX
+stays on the Pod and the speed is set over MIDI or from the page.
+
+**Expression over MIDI** (CC 100) takes over the chosen knobs across the
+same range. With none chosen it controls MIX, as on the pedal.
+
+## Tempo and sync
+
+Driftnet follows MIDI clock (after a MIDI Start or Continue) unless CC 51 is
+0, or takes a tempo from taps on CC 93 or 107 (or the page). Once it has a
+tempo, TIME (in Delay and Slip) moves in note values, in MOOD's steps: 1/32,
+1/16, 1/8 triplet, 1/8, dotted 1/8 and 1/4. A time too long for the delay
+halves until it fits. In Tape mode LENGTH steps through whole fractions of
+the loop: 1/32 up to the whole. The page's Synced switch forgets a tapped
+tempo.
+
+The SYNC hidden option ties the two channels together:
+
+- **Loop to wet:** the loop is as long as TIME, so if your playing is in time
+  with the Delay, the loop captures it in time.
+- **Wet to loop:** TIME steps through fractions of the loop (1/32, 1/16, 1/8,
+  1/6, 1/4, 1/3, 1/2, all of it), so the echoes land in time with it.
+
+MOOD's clock division CCs (53 and 54) aren't used.
+
+## Synth Mode
+
+Playing a MIDI note on channel 2 turns the CLOCK into an instrument. Notes
+set the clock in semitones: middle C is 48k, where everything plays at the
+pitch it was recorded at, and the clock's range (2k to 64k) sets how far a
+note can go. Notes are monophonic, last note first. Moving the CLOCK knob,
+or CC 59, leaves Synth Mode; MIDI clock is ignored while it's on.
+
+| Setting | CC | Values |
+|---|---|---|
+| OCTAVE TRANSPOSE | 57 | 0-9 octaves; 3 puts middle C at 48k |
+| OUTPUT TYPE: open (always sounding), on/off (while a key is down), or ADSR | 58 | 0, 1, 2+ |
+| ATTACK, DECAY, SUSTAIN, RELEASE | 80-83 | 0-127 |
+| PORTAMENTO | 84 | 0-127, up to 2 s |
+| Pitch bend | | 4 semitones either way |
+| Mod wheel: vibrato | 1 | 0-127 |
+
+On/off and ADSR follow velocity, and only gate the Wet Channel and the loop;
+your dry signal always passes. A frozen Reverb or a Stretch loop makes a
+good first sound.
+
+## MIDI
+
+Channel 2, MOOD's default, on the Pod's TRS MIDI input and over USB. Knob
+CCs move the value with the same takeover as a page change, so the physical
+knob does nothing until you move it.
+
+| What | CC | Values |
+|---|---|---|
+| TIME, MIX, LENGTH, wet MODIFY | 14, 15, 16, 17 | 0-127 |
+| CLOCK | 18 | MOOD's stepped table (0-4 2k ... 122-127 64k), or 0-127 with SMOOTH |
+| Loop MODIFY | 19 | 0-127 (Tape and Stretch follow MOOD's tables) |
+| Wet mode, routing, loop mode | 21, 22, 23 | 0-1 left, 2 middle, 3+ right |
+| Wet Channel on, looper on | 102, 103 | 0 off, 1+ on |
+| Freeze, overdub | 105, 106 | 0 off, 1+ on |
+| Tap tempo | 93, 107 | 1+ |
+| MIDI reset: follow clock, octave 3, no portamento, open output | 110 | any |
+
+The hidden options, DIP switches, ramping and Synth Mode CCs are above. Not
+used: presets and program changes, true bypass (55), factory reset (56),
+the hidden menu switch (104) and changing the MIDI channel.
+
+## The web page
+
+`make web` and open http://localhost:8000 with the Pod on USB (see
+[web/README.md](../../web/README.md)). It shows every control, option and
+switch, the levels (in, wet, loop, out) and CPU, traces of the clock, Env's
+detector against its threshold and the ramp, and the loop: the ring filling
+while the looper listens, then the loop with what's playing it (Tape's
+window, Env's slice, Stretch's grains) and its play heads.

@@ -1,7 +1,7 @@
-// Grainfall - tempo
+// Tempo from tap tempo or MIDI clock
 //
-// One beat position for the effects, from tap tempo or MIDI clock. As on
-// the Microcosm, MIDI Start (or Continue) hands timing to the incoming clock
+// One beat position for an app's effects. As on the Microcosm (grainfall's
+// model), MIDI Start (or Continue) hands timing to the incoming clock
 // and MIDI Stop hands it back. If the clock just stops arriving, the
 // internal clock carries on from where it was at the same tempo. Taps are
 // ignored while following clock. Call it only from the audio callback, with
@@ -38,6 +38,10 @@ class Tempo
     float BeatPos() const { return beats_; } // 0..kWrapBeats
     float SamplesPerBeat() const { return samples_per_beat_; }
     bool  Following() const { return following_; } // locked to MIDI clock
+    // A tempo was tapped in or set (not just the 120 BPM it starts at),
+    // until ClearTempo(). An app can sync to it only then.
+    bool HasTempo() const { return has_tempo_; }
+    void ClearTempo() { has_tempo_ = false; }
 
   private:
     static constexpr int kTapHistory = 3;
@@ -49,6 +53,7 @@ class Tempo
     uint32_t  last_now_         = 0;
     bool      external_         = false;
     bool      following_        = false;
+    bool      has_tempo_        = false;
 
     uint32_t last_tap_  = 0;
     bool     have_tap_  = false;

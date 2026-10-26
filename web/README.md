@@ -2,8 +2,8 @@
 
 A page that connects to the Pod over USB MIDI (Web MIDI), shows what the app
 is doing and gives you every control at once. It works with any app that
-speaks the web link protocol (`common/web_link.h`): grainfall and tapeworn so
-far. The page shows whichever views the app sends data for.
+speaks the web link protocol (`common/web_link.h`): grainfall, tapeworn and
+driftnet so far. The page shows whichever views the app sends data for.
 
 ```sh
 make web    # serves this folder on http://localhost:8000
@@ -28,6 +28,14 @@ modules, with no build step.
   play head points the way it's reading. Delay taps are vertical lines; their dots are coloured when a
   tap is pitch-shifted. Detected notes are marked along the top, and the beat
   grid (bars brighter) runs underneath.
+- **Loop** (driftnet): while the looper listens, the ring it records into,
+  scrolling right to left. While it plays, the loop laid out oldest to
+  newest, with what's playing it on top: Tape's window, the Env slice being
+  held, or Stretch's two grains (fading in and out), each with its play head.
+  The footer gives the loop's length at the current CLOCK.
+- **Clock, Env and ramp** (driftnet): the clock rate, the input level against
+  Env's threshold (a slice is held while it's above), and where a ramp or
+  bounce is.
 - **Tape transport** (tapeworn): each channel's tape speed in cents, so you
   can see wow wander, flutter shimmer, snags jolt and the AUX stop wind down,
   and its level, showing dropouts and the stop's fade. Left is teal, right
@@ -38,7 +46,7 @@ modules, with no build step.
   Each axis is scaled to fill the plot, so it shows the shape at any level.
 - **Tempo** (grainfall): BPM, whether it comes from tap tempo or MIDI clock,
   and where you are in the bar and the beat.
-- **Levels**: input, wet and output peaks.
+- **Levels**: input, wet and output peaks (and the loop, for driftnet).
 - **CPU**: the audio callback's average and peak load over the last 30 s.
 - **Controls**: built from the parameter list the app sends, grouped as on the
   Pod (grainfall's knob pages in their LED colours). Drag a knob up and down
@@ -70,9 +78,10 @@ works over USB: the Pod's TRS MIDI is far too slow for the telemetry.
 | `js/protocol.js` | The protocol, matching `common/web_link.h` |
 | `js/controls.js`, `js/knob.js` | The control surface |
 | `js/views/buffer.js` | The buffer view |
+| `js/views/loop.js` | The loop view, which an app can use instead (driftnet) |
 | `js/views/readouts.js` | Tempo, levels and CPU |
 | `js/views/traces.js` | Traces over time, and the X-Y plot |
-| `js/apps/<app>.js` | Optional extras per app: colours, units, group titles |
+| `js/apps/<app>.js` | Optional extras per app: colours, units, group titles, its own buffer view |
 
 ## Adding an app
 
@@ -91,4 +100,7 @@ On the firmware side (see `web_view.{h,cpp}` and the web link section of
    the hello and send their values, and the page plots them.
 
 On the page, add `js/apps/<app>.js` for colours and units if you like; the
-plain controls work without it.
+plain controls work without it. It can also give a `View`, a class with the
+buffer view's methods (`setLayout`, `addOverview`, `setFrame`, `draw`), to
+draw the buffer section its own way under its own `scopeTitle`, as driftnet
+does with `js/views/loop.js`.

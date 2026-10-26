@@ -38,6 +38,7 @@ void Tempo::Tap(uint32_t now)
         for(int i = 0; i < num_taps_; i++)
             sum += taps_[i];
         samples_per_beat_ = (float)sum / (float)num_taps_;
+        has_tempo_        = true;
     }
     else
     {
@@ -56,7 +57,10 @@ void Tempo::Tap(uint32_t now)
 void Tempo::SetBpm(float bpm)
 {
     if(!following_ && bpm > 0.0f)
+    {
         samples_per_beat_ = 60.0f * sample_rate_ / bpm;
+        has_tempo_        = true;
+    }
 }
 
 void Tempo::Update(uint32_t now)

@@ -14,6 +14,7 @@ constexpr float kMaxWindow = 96000.0f; // 2 s at 48k
 constexpr int   kZones      = 26;
 constexpr int   kNeutral    = 13;
 constexpr float kHysteresis = 0.15f; // of a zone
+constexpr float kClassicEdge = 0.05f; // CLASSIC: each window's fade, of its life
 } // namespace
 
 void WetSlip::Init(float *data, size_t frames)
@@ -26,13 +27,25 @@ void WetSlip::Init(float *data, size_t frames)
 
 void WetSlip::SetTime(float time)
 {
+    if(time == time_set_)
+        return;
+    time_set_ = time;
     window_ = kMinWindow * powf(kMaxWindow / kMinWindow, dsp::Clamp(time, 0.0f, 1.0f));
+}
+
+void WetSlip::SetWindowFrames(float frames)
+{
+    time_set_ = -1.0f; // SetTime() works it out again next time
+    window_ = dsp::Clamp(frames, kMinWindow, kMaxWindow);
 }
 
 void WetSlip::SetModify(float modify)
 {
     // Equal-width zones either side, with 1x forward a narrow zone at noon.
-    float m = dsp::Clamp(modify, 0.0f, 1.0f), x;
+    if(modify == modify_set_)
+        return;
+    modify_set_ = modify;
+    float m     = dsp::Clamp(modify, 0.0f, 1.0f), x;
     if(m < 0.48f)
         x = m / 0.48f * 13.0f - 0.5f;
     else if(m < 0.52f)
@@ -87,15 +100,21 @@ void WetSlip::Process(float in_l, float in_r, float *out_l, float *out_r)
         if(h.age >= h.life)
             Start(h, 0.0f);
 
-        float s = dsp::FastSin(0.5f * h.age / h.life);
-        float w = s * s; // Hann
+        float a = h.age / h.life, w;
+        if(classic_)
+            w = fminf(1.0f, fminf(a, 1.0f - a) / kClassicEdge);
+        else
+        {
+            float s = dsp::FastSin(0.5f * a);
+            w       = s * s; // Hann
+        }
         if(h.live)
         {
             float    pos   = h.offset + h.speed * h.age; // <= 0, from the anchor
             float    whole = floorf(pos);
             uint32_t frame = h.anchor + (uint32_t)(int32_t)whole;
             float    hl, hr;
-            buffer_.Read(frame, pos - whole, &hl, &hr);
+            buffer_.Read(frame, classic_ ? 0.0f : pos - whole, &hl, &hr);
             l += w * hl;
             r += w * hr;
         }
@@ -106,6 +125,18 @@ void WetSlip::Process(float in_l, float in_r, float *out_l, float *out_r)
     // Two heads half a window apart sum to 1; this keeps the level steady
     // while a window change has them out of step.
     float norm = 1.0f / fmaxf(weights, 0.5f);
-    *out_l     = l * norm;
-    *out_r     = r * norm;
+    l *= norm;
+    r *= norm;
+
+    // SPREAD: side to side, once every two windows.
+    if(spread_ > 0.0f)
+    {
+        pan_phase_ = dsp::WrapPhase(pan_phase_ + 0.5f / window_);
+        float m    = 0.5f * (l + r);
+        float p    = spread_ * dsp::FastSin(pan_phase_);
+        l          = m * (1.0f - p);
+        r          = m * (1.0f + p);
+    }
+    *out_l = l;
+    *out_r = r;
 }

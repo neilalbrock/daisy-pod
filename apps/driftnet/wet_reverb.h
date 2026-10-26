@@ -14,6 +14,10 @@
 // signal isn't lossless, so a frozen loop would slowly fade: while frozen
 // the blend glides to fully diffused, and MODIFY sets only the gain.
 //
+// SPREAD scatters the taps across the stereo field, as far as WIDTH lets
+// them. CLASSIC stops the modulation and adds a short comb, so trails ring
+// a little, like MOOD MKI.
+//
 // Timed in core frames, so the CLOCK scales it, and runs once per core tick.
 // libDaisy-free.
 
@@ -25,8 +29,12 @@
 class WetReverb
 {
   public:
-    // data: frames * 2 floats, interleaved. Any length longer than the
-    // largest size (24000 frames); it needn't be a power of two.
+    // The diffusers' memory, in floats, which follows the line in Init's data.
+    static constexpr size_t kDiffuserFloats = 3400;
+
+    // data: frames * 2 floats for the line (interleaved), then
+    // kDiffuserFloats for the diffusers, all in fast RAM. Any length longer
+    // than the largest size (24000 frames); it needn't be a power of two.
     void Init(float *data, size_t frames);
 
     // Once per block.
@@ -34,6 +42,8 @@ class WetReverb
     void SetTime(float time);      // 0..1
     void SetModify(float modify);  // 0..1
     void SetFreeze(bool on) { freeze_ = on; }
+    void SetSpread(float width) { spread_ = width; } // 0: off
+    void SetClassic(bool on) { classic_ = on; }
 
     // Forget what's in the line and the diffusers, without clearing them:
     // switching back to Reverb doesn't bring old tails back.
@@ -46,7 +56,7 @@ class WetReverb
     static constexpr int kStages = 4;
     static constexpr int kModDepth = 6; // frames, on each side's last diffuser
 
-    // One allpass on a short line in diffuser_mem_. The last stage of each
+    // One allpass on a short line after the main one. The last stage of each
     // side reads with a slowly moving fractional delay. Like the main line,
     // it isn't cleared on Reset(): it reads silence until it has filled
     // again. (Clearing costs a whole block: newlib's memset goes a byte at
@@ -67,8 +77,6 @@ class WetReverb
     uint32_t frames_ = 0, write_ = 0;
     uint32_t fresh_  = 0; // frames written since Reset()
 
-    static constexpr int kDiffuserFrames = 3400; // both sides' stages, with room for the modulation
-    float   diffuser_mem_[kDiffuserFrames];
     Allpass stages_[2][kStages];
     float   lfo_[2] = {0.0f, 0.5f};
 
@@ -79,4 +87,7 @@ class WetReverb
     float smear_ = 0.0f, smear_target_ = 0.0f, smear_coef_ = 0.0f;
     float damp_[2] = {};
     bool  freeze_  = false;
+    float spread_  = 0.0f;
+    bool  classic_ = false;
+    float rate_set_ = -1.0f, time_set_ = -1.0f; // the setters skip repeats
 };

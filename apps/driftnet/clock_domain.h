@@ -10,7 +10,8 @@
 //
 // Buffers count core frames, so a lower clock lengthens loops and delays and
 // slows down whatever is already recorded. The knob moves in the pedal's
-// steps, alternating fifths and fourths, so those changes stay in harmony.
+// steps, alternating fifths and fourths, so those changes stay in harmony;
+// SMOOTH and Synth Mode set any rate in between with SetHz().
 //
 // Header only, libDaisy-free.
 
@@ -25,6 +26,7 @@ class ClockDomain
     static constexpr float kRates[kSteps]  = {2000.0f,  3000.0f,  4000.0f,  6000.0f,
                                               8000.0f,  12000.0f, 16000.0f, 24000.0f,
                                               32000.0f, 48000.0f, 64000.0f};
+    static constexpr float kMinRate        = 2000.0f;
     static constexpr float kMaxRate        = 64000.0f;
 
     void Init(float sample_rate)
@@ -41,16 +43,37 @@ class ClockDomain
         float pos = knob * (kSteps - 1);
         if(fabsf(pos - step_) > 0.5f + kHysteresis)
             SetStep((int)(pos + 0.5f));
+        else if(rate_ != kRates[step_])
+            SetStep(step_); // back from SetHz()
     }
 
     void SetStep(int step)
     {
         step_  = step < 0 ? 0 : (step >= kSteps ? kSteps - 1 : step);
-        ratio_ = kRates[step_] / sample_rate_;
+        rate_  = kRates[step_];
+        ratio_ = rate_ / sample_rate_;
+    }
+
+    // Any rate, clamped to the ladder's range. The step stays where it was,
+    // so going back to SetKnob() lands on the knob's step again.
+    void SetHz(float hz)
+    {
+        rate_  = hz < kMinRate ? kMinRate : (hz > kMaxRate ? kMaxRate : hz);
+        ratio_ = rate_ / sample_rate_;
+    }
+
+    // A step for a MIDI value, from MOOD's stepped CLOCK table (CC 18).
+    static int StepForMidi(int value)
+    {
+        static constexpr int kStart[kSteps] = {0, 5, 17, 29, 41, 54, 70, 84, 96, 110, 122};
+        int                  step           = 0;
+        while(step + 1 < kSteps && value >= kStart[step + 1])
+            step++;
+        return step;
     }
 
     int   Step() const { return step_; }
-    float Rate() const { return kRates[step_]; }
+    float Rate() const { return rate_; }
 
     // Once per output sample: Begin() with the input, then while NextTick()
     // gives an input, run the core on it and Push() its output. Read the
@@ -95,6 +118,7 @@ class ClockDomain
     static constexpr float kHysteresis = 0.15f; // of a step
 
     float sample_rate_ = 48000.0f;
+    float rate_        = 48000.0f;
     float ratio_       = 1.0f;
     float phase_       = 0.0f;
     int   step_        = 0;
