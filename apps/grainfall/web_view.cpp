@@ -24,8 +24,9 @@ static_assert(sizeof(kSlotNames) / sizeof(kSlotNames[0])
 
 const char *const kShapeNames[] = {"Square", "Ramp up", "Triangle", "Ramp down"};
 const char *const kTimeNames[]  = {"1/4", "1/2", "TAP", "2x", "4x", "8x"};
-const char *const kGroupNames[] = {"Effect", "Page 1", "Page 2", "Page 3", "Page 4",
-                                   "Page 5", "Tempo",  "Switches"};
+const char *const kReverbNames[] = {"Bright room", "Dark medium", "Large hall", "Ambient"};
+const char *const kGroupNames[]  = {"Effect", "Page 1", "Page 2", "Page 3", "Page 4",
+                                    "Page 5", "Page 6", "Tempo",  "Switches"};
 const char *const kMeterNames[] = {"In", "Wet", "Out"};
 
 template <typename T, size_t N>
@@ -47,12 +48,14 @@ const weblink::Param kParams[kNumParams] = {
     {"Mod rate", Kind::kContinuous, 4, nullptr, 0, 0},
     {"Resonance", Kind::kContinuous, 5, nullptr, 0, 0},
     {"Volume", Kind::kContinuous, 5, nullptr, 0, 0},
-    {"Tempo", Kind::kContinuous, 6, nullptr, 0, 0},
-    {"Tap", Kind::kTrigger, 6, nullptr, 0, 0},
-    {"Reverse", Kind::kToggle, 7, nullptr, 0, 0},
-    {"Hold", Kind::kToggle, 7, nullptr, 0, 0},
-    {"Bypass", Kind::kToggle, 7, nullptr, 0, 0},
-    {"Mono in", Kind::kToggle, 7, nullptr, 0, 0},
+    {"Space", Kind::kContinuous, 6, nullptr, 0, 0},
+    {"Reverb", Kind::kChoice, 6, kReverbNames, Count(kReverbNames), 2},
+    {"Tempo", Kind::kContinuous, 7, nullptr, 0, 0},
+    {"Tap", Kind::kTrigger, 7, nullptr, 0, 0},
+    {"Reverse", Kind::kToggle, 8, nullptr, 0, 0},
+    {"Hold", Kind::kToggle, 8, nullptr, 0, 0},
+    {"Bypass", Kind::kToggle, 8, nullptr, 0, 0},
+    {"Mono in", Kind::kToggle, 8, nullptr, 0, 0},
 };
 
 void Snapshot(const GrainEngine &engine, Telemetry *t)

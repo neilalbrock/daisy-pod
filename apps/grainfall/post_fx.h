@@ -1,18 +1,22 @@
 // Grainfall - post-effect chain
 //
-//   wet -> pitch modulation -> resonant low-pass -> effect volume
+//   wet -> pitch modulation -> Space (reverb) -> resonant low-pass
+//       -> effect volume
 //
 // Pitch modulation is a short delay swept by a sine, the two channels a
 // quarter cycle apart: a gentle chorus-like shimmer at low depth, a seasick
 // wobble at high. The low-pass is fully open at the top of its knob and
 // silences the effect at the bottom. Resonance eases off over the top tenth
-// of the filter's travel, so fully open really is open. libDaisy-free.
+// of the filter's travel, so fully open really is open. Space (space.h) is
+// the Microcosm's reverb, before the filter as there, so closing the filter
+// silences its tail too. libDaisy-free.
 
 #pragma once
 
 #include <cstddef>
 
 #include "dsp.h"
+#include "space.h"
 
 class PostFx
 {
@@ -24,12 +28,15 @@ class PostFx
         float filter    = 1.0f; // 0 = closed (silent) .. 1 = open
         float resonance = 0.2f; // 0..1
         float volume    = 0.5f; // 0..1, noon is unity, max x2
+        float space     = 0.0f; // 0..1, reverb mix: dry to reverb only
+        int   reverb    = Space::kLargeHall; // reverb mode, 0..3 = A..D
     };
 
     static constexpr size_t kModLen = 1024; // 21 ms, a power of two
 
     // mod_buffer: 2 * kModLen floats, the pitch mod delay (SDRAM is fine).
-    void Init(float sample_rate, float *mod_buffer);
+    // reverb_mem: Space::kFloats floats, in fast RAM (see space.h).
+    void Init(float sample_rate, float *mod_buffer, float *reverb_mem);
 
     // Once per block.
     void SetParams(const Params &p);
@@ -46,6 +53,8 @@ class PostFx
     float  lfo_phase_ = 0.0f, lfo_inc_ = 0.0f;
     float  depth_ = 0.0f, depth_target_ = 0.0f; // swing in samples
     float  depth_coef_ = 0.0f;
+
+    Space space_;
 
     dsp::Svf svf_l_, svf_r_;
     float    cutoff_ = 20000.0f; // smoothed per block

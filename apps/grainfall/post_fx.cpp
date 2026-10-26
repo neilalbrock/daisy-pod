@@ -11,7 +11,7 @@ constexpr float kMinCutoff = 20.0f;
 constexpr float kMaxCutoff = 20000.0f;
 } // namespace
 
-void PostFx::Init(float sample_rate, float *mod_buffer)
+void PostFx::Init(float sample_rate, float *mod_buffer, float *reverb_mem)
 {
     sample_rate_ = sample_rate;
     mod_buf_l_   = mod_buffer;
@@ -23,6 +23,7 @@ void PostFx::Init(float sample_rate, float *mod_buffer)
     block_coef_  = 0.1f; // per block: about 1 ms at block size 4
     svf_l_.Set(cutoff_, 0.707f, sample_rate);
     svf_r_.CopyCoefs(svf_l_);
+    space_.Init(reverb_mem);
 }
 
 void PostFx::SetParams(const Params &p)
@@ -44,6 +45,9 @@ void PostFx::SetParams(const Params &p)
 
     float kill   = f < 0.03f ? f / 0.03f : 1.0f;
     gain_target_ = Clamp(p.volume, 0.0f, 1.0f) * 2.0f * kill;
+
+    space_.SetMix(p.space);
+    space_.SetMode(p.reverb);
 }
 
 float PostFx::ReadMod(const float *buf, float delay) const
@@ -72,6 +76,8 @@ void PostFx::Process(float *l, float *r)
     }
     mod_write_ = (mod_write_ + 1) & (kModLen - 1);
     lfo_phase_ = WrapPhase(lfo_phase_ + lfo_inc_);
+
+    space_.Process(l, r);
 
     float bp;
     *l = svf_l_.Process(*l, &bp);

@@ -112,4 +112,7 @@ first so every object is rebuilt with the new flags.
   `apps/<name>/app.mk`, but flashing it overwrites the bootloader.
 - Large audio buffers (grain/delay buffers) belong in the 64 MB SDRAM:
   `float DSY_SDRAM_BSS buffer[48000 * 10];`
+- Buffers read many times a sample (grainfall's and driftnet's reverbs) go
+  in the 256 KB of RAM_D2, which reads faster, through the linker script's
+  `.heap` section. Leave room there: malloc's heap starts where it ends.
 

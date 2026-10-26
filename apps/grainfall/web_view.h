@@ -15,7 +15,7 @@
 
 namespace web_view
 {
-// Activity to Volume are the Pod's knob pages in order: page (i - 1) / 2,
+// Activity to Reverb are the Pod's knob pages in order: page (i - 1) / 2,
 // knob (i - 1) % 2.
 enum ParamId
 {
@@ -30,6 +30,8 @@ enum ParamId
     kParamModRate,
     kParamResonance,
     kParamVolume,
+    kParamSpace,
+    kParamReverb,
     kParamTempo,
     kParamTap,
     kParamReverse,

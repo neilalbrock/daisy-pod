@@ -8,6 +8,7 @@ const PAGE_COLOURS = {
   "Page 3": "#f2b630", // yellow
   "Page 4": "#33d6d6", // cyan
   "Page 5": "#e6e6e6", // white
+  "Page 6": "#45d36b", // green
 };
 const VARIATION_COLOURS = ["#ff5a5a", "#f2b630", "#45d36b", "#4f7dff"]; // A red, B yellow, C green, D blue
 

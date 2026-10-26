@@ -1,8 +1,9 @@
 // Grainfall - granular and micro-loop effects for the Daisy Pod (Daisy Seed 3)
 //
 // Our own take on the Hologram Microcosm: 11 effects with 4 variations each,
-// steered by macro controls, then pitch modulation, a resonant low-pass and
-// the dry/wet mix. The two knobs are shared across five pages; press the
+// steered by macro controls, then pitch modulation, a reverb, a resonant
+// low-pass and the dry/wet mix. The two knobs are shared across six pages;
+// press the
 // encoder to change page (LED 2 shows which). After a page change a knob
 // does nothing until it is moved, so values don't jump.
 //
@@ -17,6 +18,9 @@
 //   Page 5 (LED 2 white)   Knob 1 - filter resonance
 //                          Knob 2 - effect volume (noon is unity, max x2)
 //                          (a limiter holds dry + wet under -1 dBFS)
+//   Page 6 (LED 2 green)   Knob 1 - Space: reverb mix, none to reverb only
+//                          Knob 2 - reverb mode: A Bright Room, B Dark
+//                                   Medium, C Large Hall, D Ambient
 //   Encoder turn       - effect and variation, Mosaic A .. Warp D. LED 2
 //                        flashes the effect's colour, LED 1 the variation
 //                        (A red, B yellow, C green, D blue)
@@ -59,6 +63,12 @@ float DSY_SDRAM_BSS buffer[kBufferFrames * 2];
 float DSY_SDRAM_BSS hold_buffer[kHoldFrames * 2];
 float DSY_SDRAM_BSS mod_buffer[PostFx::kModLen * 2]; // pitch mod delay
 
+// The reverb reads about 30 taps a sample, so its lines go in RAM_D2, which
+// reads faster than SDRAM. BOOT_SRAM apps leave RAM_D2 to the heap, so the
+// linker script's .heap section is the way in. Leave room: malloc's heap
+// starts where .heap ends and has no limit check.
+float __attribute__((section(".heap"))) reverb_buffer[Space::kFloats];
+
 // For the web page: a peak per 256 frames (5 ms) of the buffer, and the
 // message being sent.
 constexpr size_t      kOverviewColumns = 4096;
@@ -73,7 +83,7 @@ Limiter        limiter; // on dry + wet, so a loud wet signal doesn't clip
 BypassFade     bypass_fade;
 CpuLoadMeter   cpu_meter;
 
-constexpr int kNumPages = 5;
+constexpr int kNumPages = 6;
 constexpr int kNumKnobs = 2;
 constexpr int kNumSlots = GrainEngine::kNumEffects * GrainEngine::kNumVariations;
 
@@ -84,6 +94,7 @@ PagedKnobs<kNumPages, kNumKnobs> pages({
     {1.0f, 0.5f},  // filter open, mix 50 %
     {0.0f, 0.3f},  // mod depth off, rate
     {0.2f, 0.5f},  // resonance, volume unity
+    {0.0f, 0.625f}, // space off, reverb C Large Hall
 });
 
 constexpr int      kMidiChannel = 0; // channel 1
@@ -150,10 +161,12 @@ void HandleCc(uint8_t cc, uint8_t value, uint32_t now)
         case 9: pages.Set(2, 1, v); break;  // mix
         case 10: tempo.SetBpm(40.0f + v * 200.0f); break; // time, as tempo
         case 11: pages.Set(0, 1, v); break; // repeats
+        case 12: pages.Set(5, 0, v); break; // space
         case 14: pages.Set(3, 1, v); break; // mod rate
         case 15: pages.Set(4, 0, v); break; // resonance
         case 16: pages.Set(4, 1, v); break; // effect volume
         case 19: pages.Set(3, 0, v); break; // mod depth
+        case 20: pages.Set(5, 1, v); break; // reverb mode, in four zones
         case 47: // reverse: toggles on press, so a button's release does nothing
             if(on)
                 reverse = !reverse;
@@ -195,6 +208,7 @@ void SetParam(int index, int raw, uint32_t now, uint32_t now_ms)
     {
         case kParamEffect: SelectSlot(raw, now_ms); break;
         case kParamShape: pages.Set(1, 0, (raw + 0.5f) / 4.0f); break;
+        case kParamReverb: pages.Set(5, 1, (raw + 0.5f) / Space::kNumModes); break;
         case kParamTime: pages.Set(1, 1, (raw + 0.5f) / GrainEngine::kNumSubdivs); break;
         case kParamTempo: tempo.SetBpm(kMinBpm + v * kBpmRange); break;
         case kParamTap: tempo.Tap(now); break;
@@ -203,7 +217,7 @@ void SetParam(int index, int raw, uint32_t now, uint32_t now_ms)
         case kParamBypass: bypass = raw != 0; break;
         case kParamMono: mono_in = raw != 0; break;
         default:
-            if(index >= kParamActivity && index <= kParamVolume)
+            if(index >= kParamActivity && index <= kParamSpace)
                 pages.Set((index - 1) / 2, (index - 1) % 2, v);
             break;
     }
@@ -217,6 +231,8 @@ int ParamRaw(int index)
     {
         case kParamEffect: return slot;
         case kParamShape: return (int)fminf(pages.Value(1, 0) * 4.0f, 3.0f);
+        case kParamReverb:
+            return (int)fminf(pages.Value(5, 1) * Space::kNumModes, Space::kNumModes - 1);
         case kParamTime:
             return (int)fminf(pages.Value(1, 1) * GrainEngine::kNumSubdivs,
                               GrainEngine::kNumSubdivs - 1);
@@ -478,6 +494,8 @@ void AudioCallback(AudioHandle::InputBuffer  in,
     p.post.mod_rate    = pages.Value(3, 1);
     p.post.resonance   = pages.Value(4, 0);
     p.post.volume      = pages.Value(4, 1);
+    p.post.space       = pages.Value(5, 0);
+    p.post.reverb      = (int)fminf(pages.Value(5, 1) * Space::kNumModes, Space::kNumModes - 1);
     engine.BeginBlock(p, (int)size);
 
     for(size_t i = 0; i < size; i++)
@@ -518,7 +536,7 @@ int main(void)
     hw.SetAudioSampleRate(SaiHandle::Config::SampleRate::SAI_48KHZ);
 
     engine.Init(hw.AudioSampleRate(), buffer, kBufferFrames, hold_buffer,
-                kHoldFrames, mod_buffer);
+                kHoldFrames, mod_buffer, reverb_buffer);
     engine.SetOverview(overview, kOverviewColumns);
     cpu_meter.Init(hw.AudioSampleRate(), hw.AudioBlockSize());
     web.Init(kNumParams);
@@ -556,6 +574,7 @@ int main(void)
         {1.0f, 0.7f, 0.0f}, // yellow
         {0.0f, 1.0f, 1.0f}, // cyan
         {1.0f, 1.0f, 1.0f}, // white
+        {0.0f, 1.0f, 0.0f}, // green
     };
     const float variation_colours[GrainEngine::kNumVariations][3] = {
         {1.0f, 0.0f, 0.0f}, // A red

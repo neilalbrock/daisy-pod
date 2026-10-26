@@ -2,7 +2,7 @@
 
 Granular and micro-loop effects, our own take on the Hologram Microcosm: 11
 effects with 4 variations each, steered by macro controls, then pitch
-modulation, a resonant low-pass and the dry/wet mix.
+modulation, a reverb, a resonant low-pass and the dry/wet mix.
 
 ```sh
 make APP=grainfall program-dfu
@@ -12,8 +12,8 @@ make APP=grainfall program-dfu
 
 ```
 in -> Hold (live, or the held loop) -> + feedback -> 22 s buffer
-   -> effect voices -> pitch mod -> low-pass -> effect volume
-   -> + dry -> limiter -> out
+   -> effect voices -> pitch mod -> Space (reverb) -> low-pass
+   -> effect volume -> + dry -> limiter -> out
 ```
 
 Where an effect uses feedback (Haze, Pattern, Warp), part of its output is
@@ -22,7 +22,7 @@ made of earlier grains and delays repeat.
 
 ## Controls
 
-The two knobs are shared across five pages. Press the encoder to change page.
+The two knobs are shared across six pages. Press the encoder to change page.
 After a page change, a knob does nothing until you move it, so values don't
 jump.
 
@@ -33,6 +33,7 @@ jump.
 | 3 (yellow) | Filter: low-pass, fully open at max, silent at min | Mix: dry to wet |
 | 4 (cyan) | Pitch mod depth | Pitch mod rate, 0.05 - 10 Hz |
 | 5 (white) | Filter resonance | Effect volume, noon is unity, max x2 |
+| 6 (green) | Space: reverb mix, none to reverb only | Reverb mode: A Bright Room, B Dark Medium, C Large Hall, D Ambient (quarters of the knob) |
 
 | Control | Function |
 |---|---|
@@ -53,6 +54,21 @@ beat, 2x two, 1/4 one every four beats, and so on.
 **Hold** freezes the last step of input (the Time setting, between 0.25 and
 2 s) and loops it into the effect in place of the live input, so the effect
 keeps working on it. The dry signal stays live, so you can play over it.
+
+**Space** is the Microcosm's reverb, on the effect after pitch mod and
+before the filter, so closing the filter silences its tail too; the dry
+signal stays clean. It is a plate (after Dattorro) in four modes:
+
+| Mode | Decay | Character |
+|---|---|---|
+| A Bright Room | 0.9 s | Small and bright |
+| B Dark Medium | 1.8 s | Darker, the highs rolled off in and around the tank |
+| C Large Hall | 3.5 s | Big and smooth, with a 25 ms predelay |
+| D Ambient | 9 s | The biggest, most modulated, with a 60 ms predelay |
+
+Changing mode fades the reverb out, empties it and fades in with the new
+one (about 20 ms), so the old tail stops. The reverb isn't recorded into the
+buffer, so it never feeds back into the effect.
 
 A limiter on dry + wet holds the output under -1 dBFS. Bypass fades over 5 ms
 so it doesn't click, and the buffer keeps recording while bypassed.
@@ -292,10 +308,12 @@ four per effect in the order above.
 | 9 | Mix | 0-127 |
 | 10 | Tempo, 40-240 BPM | 0-127 |
 | 11 | Repeats | 0-127 |
+| 12 | Space | 0-127 |
 | 14 | Pitch mod rate | 0-127 |
 | 15 | Filter resonance | 0-127 |
 | 16 | Effect volume | 0-127 |
 | 19 | Pitch mod depth | 0-127 |
+| 20 | Reverb mode | 0-31 A Bright Room, 32-63 B Dark Medium, 64-95 C Large Hall, 96-127 D Ambient |
 | 47 | Reverse: toggles on 64-127 | |
 | 48 | Hold: 0-63 off, 64-127 on | |
 | 93 | Tap tempo: taps on 64-127 | |
@@ -304,7 +322,7 @@ four per effect in the order above.
 A CC moves the value just as a knob would. If that parameter's page is
 showing, its knob lets go until you move it, so it doesn't snap back.
 
-The Microcosm's reverb, phrase looper and preset CCs are ignored.
+The Microcosm's phrase looper and preset CCs are ignored.
 
 ## Web control surface
 

@@ -22,7 +22,8 @@ void GrainEngine::Init(float  sample_rate,
                        size_t buffer_frames,
                        float *hold_buffer,
                        size_t hold_frames,
-                       float *mod_buffer)
+                       float *mod_buffer,
+                       float *reverb_mem)
 {
     sample_rate_ = sample_rate;
     buffer_.Init(buffer, buffer_frames);
@@ -30,7 +31,7 @@ void GrainEngine::Init(float  sample_rate,
     hold_.Init(sample_rate, hold_buffer, hold_frames);
     onset_detector_.Init(sample_rate);
     onsets_.Clear();
-    post_.Init(sample_rate, mod_buffer);
+    post_.Init(sample_rate, mod_buffer, reverb_mem);
     pattern_.Init(sample_rate);
     warp_.Init(sample_rate);
     preroll_ = (uint32_t)(0.005f * sample_rate);
