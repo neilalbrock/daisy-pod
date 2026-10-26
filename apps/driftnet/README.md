@@ -66,7 +66,8 @@ A limiter holds dry plus wet under -1 dBFS.
 **LED 1** is green while the Wet Channel is on and white while it's frozen,
 with red added while the loop plays (so both on shows yellow). It blinks
 off at the start of each pass, and its red flickers while overdubbing. In
-Synth Mode it's cyan, brighter while a note sounds.
+Synth Mode it's cyan, brighter while a note sounds, and it blinks red while
+[truly bypassed](#true-bypass).
 
 ### Routing
 
@@ -175,7 +176,7 @@ Channel off lets what's sounding ring out.
 
 ## Hidden options and DIP switches
 
-None of these have Pod controls. Set them over MIDI (channel 2) or from the
+None of these have Pod controls. Set them over MIDI or from the
 web page.
 
 | Hidden option | CC | Values | Default |
@@ -224,10 +225,22 @@ same range. With none chosen it controls MIX, as on the pedal.
 Driftnet follows MIDI clock (after a MIDI Start or Continue) unless CC 51 is
 0, or takes a tempo from taps on CC 93 or 107 (or the page). Once it has a
 tempo, TIME (in Delay and Slip) moves in note values, in MOOD's steps: 1/32,
-1/16, 1/8 triplet, 1/8, dotted 1/8 and 1/4. A time too long for the delay
-halves until it fits. In Tape mode LENGTH steps through whole fractions of
-the loop: 1/32 up to the whole. The page's Synced switch forgets a tapped
-tempo.
+1/16, 1/8 triplet, 1/8, dotted 1/8 and 1/4. In Tape mode LENGTH steps
+through fractions of a note value, 1/32 of it up to the whole, keeping the
+newest end of the loop, so a loop caught on the beat plays in time. The
+page's Synced switch forgets a tapped tempo.
+
+The clock divisions set those note values. Each is 1/32, 1/16, 1/8
+triplet, 1/8, dotted 1/8, 1/4, 1/2 or a whole note (CC values 0-7), and
+both start at a quarter note:
+
+- **TIME division** (CC 53) multiplies TIME's steps. A quarter note leaves
+  them as they are, a half note doubles them, and an eighth halves them.
+- **LENGTH division** (CC 54) is the note value Tape's LENGTH is a fraction
+  of: at full LENGTH the loop is one of them.
+
+A time too long for the delay, or a length too long for the loop, halves
+until it fits, as on MOOD.
 
 The SYNC hidden option ties the two channels together:
 
@@ -236,11 +249,18 @@ The SYNC hidden option ties the two channels together:
 - **Wet to loop:** TIME steps through fractions of the loop (1/32, 1/16, 1/8,
   1/6, 1/4, 1/3, 1/2, all of it), so the echoes land in time with it.
 
-MOOD's clock division CCs (53 and 54) aren't used.
+## True bypass
+
+MOOD can bypass through a relay instead of its buffer. Here the TRUE BYPASS
+setting (CC 55 at 1 or more, or the page's switch) does the same whenever
+both channels are off: the dry signal passes untouched, TRAILS are cut, and
+the always-listening looper stops listening, as on the pedal. LED 1 blinks
+red while it's truly bypassed. Switching either channel on brings it all
+back; the loop you catch then is from before you bypassed.
 
 ## Synth Mode
 
-Playing a MIDI note on channel 2 turns the CLOCK into an instrument. Notes
+Playing a MIDI note turns the CLOCK into an instrument. Notes
 set the clock in semitones: middle C is 48k, where everything plays at the
 pitch it was recorded at, and the clock's range (2k to 64k) sets how far a
 note can go. Notes are monophonic, last note first. Moving the CLOCK knob,
@@ -261,9 +281,10 @@ good first sound.
 
 ## MIDI
 
-Channel 2, MOOD's default, on the Pod's TRS MIDI input and over USB. Knob
-CCs move the value with the same takeover as a page change, so the physical
-knob does nothing until you move it.
+On the Pod's TRS MIDI input and over USB, on every channel for now (MOOD
+listens on channel 2 by default). Knob CCs move the value with the same
+takeover as a page change, so the physical knob does nothing until you move
+it.
 
 | What | CC | Values |
 |---|---|---|
@@ -274,11 +295,14 @@ knob does nothing until you move it.
 | Wet Channel on, looper on | 102, 103 | 0 off, 1+ on |
 | Freeze, overdub | 105, 106 | 0 off, 1+ on |
 | Tap tempo | 93, 107 | 1+ |
-| MIDI reset: follow clock, octave 3, no portamento, open output | 110 | any |
+| Follow MIDI clock | 51 | 0 ignore, 1+ follow |
+| TIME and LENGTH clock divisions | 53, 54 | 0-7: 1/32 to a whole note |
+| True bypass | 55 | 0 buffered, 1+ true |
+| MIDI reset: follow clock, quarter-note divisions, octave 3, no portamento, open output | 110 | any |
 
 The hidden options, DIP switches, ramping and Synth Mode CCs are above. Not
-used: presets and program changes, true bypass (55), factory reset (56),
-the hidden menu switch (104) and changing the MIDI channel.
+used: presets and program changes, factory reset (56), the hidden menu
+switch (104) and choosing a MIDI channel.
 
 ## The web page
 

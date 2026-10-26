@@ -18,6 +18,7 @@ const char *const kSweeps[]     = {"Bottom", "Top"};
 const char *const kPolarities[] = {"Forward", "Reverse"};
 const char *const kOutputs[]    = {"Open", "On/off", "ADSR"};
 const char *const kOctaves[]    = {"0", "1", "2", "3", "4", "5", "6", "7", "8", "9"};
+const char *const kDivisions[]  = {"1/32", "1/16", "1/8T", "1/8", "1/8.", "1/4", "1/2", "1"};
 
 const char *const kGroupNames[] = {"Page 1",       "Page 2",  "Page 3", "Channels",
                                    "Hidden options", "DIP switches", "Ramping", "Tempo",
@@ -57,6 +58,7 @@ const weblink::Param kParams[kNumParams] = {
     {"Freeze", Kind::kToggle, 3, nullptr, 0, 0},
     {"Looper", Kind::kToggle, 3, nullptr, 0, 0},
     {"Overdub", Kind::kToggle, 3, nullptr, 0, 0},
+    {"True bypass", Kind::kToggle, 3, nullptr, 0, 0},
     {"Tone", Kind::kContinuous, 4, nullptr, 0, 0},
     {"Stereo width", Kind::kContinuous, 4, nullptr, 0, 0},
     {"Direct loop", Kind::kContinuous, 4, nullptr, 0, 0},
@@ -90,6 +92,8 @@ const weblink::Param kParams[kNumParams] = {
     {"Tempo", Kind::kContinuous, 7, nullptr, 0, 0},
     {"Follow MIDI clock", Kind::kToggle, 7, nullptr, 0, 0},
     {"Synced", Kind::kToggle, 7, nullptr, 0, 0},
+    {"Time division", Kind::kChoice, 7, kDivisions, Count(kDivisions), 4},
+    {"Length division", Kind::kChoice, 7, kDivisions, Count(kDivisions), 4},
     {"Synth", Kind::kToggle, 8, nullptr, 0, 0},
     {"Output", Kind::kChoice, 8, kOutputs, Count(kOutputs), 3},
     {"Octave", Kind::kChoice, 8, kOctaves, Count(kOctaves), 5},

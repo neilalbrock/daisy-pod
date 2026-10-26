@@ -35,6 +35,7 @@ enum ParamId
     kParamFreeze,
     kParamLooper,
     kParamOverdub,
+    kParamTrueBypass,
     // Hidden options
     kParamTone,
     kParamWidth,
@@ -72,6 +73,8 @@ enum ParamId
     kParamTempo,
     kParamFollowClock,
     kParamSynced,
+    kParamTimeDivision,
+    kParamLengthDivision,
     // Synth Mode
     kParamSynth,
     kParamOutput,

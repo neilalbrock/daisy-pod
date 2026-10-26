@@ -47,9 +47,11 @@
 // and its red flickers while overdubbing. It pulses cyan in Synth Mode.
 //
 // Everything else - MOOD's hidden options and DIP switches, ramping, tempo
-// sync and Synth Mode - is over MIDI on channel 2 (TRS and USB) with MOOD's
-// CC map, or from the web page (web/, `make web`). See README.md. Nothing is
-// saved: it all starts from the defaults at power-up.
+// sync, Synth Mode and true bypass - is over MIDI on any channel (TRS and
+// USB) with MOOD's CC map, or from the web page (web/, `make web`). See
+// README.md. Nothing is saved: it all starts from the defaults at power-up.
+// While truly bypassed (both channels off with TRUE BYPASS set) LED 1 blinks
+// red.
 
 #include "daisy_pod.h"
 #include "bypass_fade.h"
@@ -107,7 +109,6 @@ PagedKnobs<kNumPages, kNumKnobs> pages({
     {0.9f, 0.5f},  // clock 48k, mix both full
 });
 
-constexpr int      kMidiChannel = 1;   // channel 2, MOOD's default
 constexpr uint32_t kHoldMs      = 400; // a button held this long freezes or overdubs
 
 // ---------------------------------------------------------------- State
@@ -132,6 +133,8 @@ bool trails = false, latch = false, no_dub = false, smooth = false;
 Ramp::Settings  ramp_settings;
 Synth::Settings synth_settings;
 bool            follow_clock = true;
+int             time_division = 5, length_division = 5; // CC 53, 54: quarter notes
+bool            true_bypass   = false;                  // CC 55
 
 PressHold encoder_press(600); // hold: mono in
 PressHold button1_press(kHoldMs);
@@ -152,6 +155,11 @@ volatile uint32_t mono_flash_until   = 0;
 bool Freeze()
 {
     return freeze_on || freeze_held;
+}
+
+bool TrulyBypassed()
+{
+    return true_bypass && !wet_on && !engine.LooperPlaying();
 }
 
 void SetWetOn(bool on)
@@ -206,6 +214,9 @@ void HandleCc(uint8_t cc, uint8_t value, uint32_t now)
         case 32: solo = ThreeWay(value); break;
         case 33: loop_length = value <= 1 ? 0 : 1; break;
         case 51: follow_clock = on; break;
+        case 53: time_division = value > 7 ? 7 : value; break;
+        case 54: length_division = value > 7 ? 7 : value; break;
+        case 55: true_bypass = on; break;
         case 52: ramp_settings.running = on; break;
         case 57: synth_settings.octave = value > 9 ? 9 : value; break;
         case 58:
@@ -255,6 +266,8 @@ void HandleCc(uint8_t cc, uint8_t value, uint32_t now)
         case 106: overdub_on = on; break;
         case 110: // MIDI reset
             follow_clock               = true;
+            time_division              = 5;
+            length_division            = 5;
             synth_settings.octave      = 3;
             synth_settings.portamento  = 0.0f;
             synth_settings.output      = Synth::Output::kOpen;
@@ -303,6 +316,9 @@ void SetParam(int index, int raw, uint32_t now)
                 engine.LooperRelease();
             break;
         case kParamOverdub: overdub_on = on; break;
+        case kParamTrueBypass: true_bypass = on; break;
+        case kParamTimeDivision: time_division = raw; break;
+        case kParamLengthDivision: length_division = raw; break;
         case kParamTone: tone = v; break;
         case kParamWidth: width = v; break;
         case kParamDirect: direct = v; break;
@@ -382,6 +398,9 @@ int ParamRaw(int index)
         case kParamFreeze: return Freeze();
         case kParamLooper: return engine.LooperPlaying();
         case kParamOverdub: return engine.Overdubbing();
+        case kParamTrueBypass: return true_bypass;
+        case kParamTimeDivision: return time_division;
+        case kParamLengthDivision: return length_division;
         case kParamTone: return unit(tone);
         case kParamWidth: return unit(width);
         case kParamDirect: return unit(direct);
@@ -572,29 +591,25 @@ void HandleMidi(MidiEvent e, uint32_t now, uint32_t now_ms)
         case NoteOn:
         {
             NoteOnEvent n = e.AsNoteOn();
-            if(n.channel == kMidiChannel)
-                synth.NoteOn(n.note, n.velocity);
+            synth.NoteOn(n.note, n.velocity);
             break;
         }
         case NoteOff:
         {
             NoteOffEvent n = e.AsNoteOff();
-            if(n.channel == kMidiChannel)
-                synth.NoteOff(n.note);
+            synth.NoteOff(n.note);
             break;
         }
         case PitchBend:
         {
             PitchBendEvent b = e.AsPitchBend();
-            if(b.channel == kMidiChannel)
-                synth.PitchBend(b.value + 8192);
+            synth.PitchBend(b.value + 8192);
             break;
         }
         case ControlChange:
         {
             ControlChangeEvent cc = e.AsControlChange();
-            if(cc.channel == kMidiChannel)
-                HandleCc(cc.control_number, cc.value, now);
+            HandleCc(cc.control_number, cc.value, now);
             break;
         }
         case SystemCommon:
@@ -744,10 +759,16 @@ void AudioCallback(AudioHandle::InputBuffer  in,
     p.classic          = classic;
     p.spread           = spread;
     p.dry_kill         = dry_kill;
-    p.trails           = trails;
+    // TRUE BYPASS: with both channels off it's all out of the way, like the
+    // pedal's relay: no trails, and the looper stops listening.
+    bool truly_bypassed = TrulyBypassed();
+    p.trails           = trails && !truly_bypassed;
+    p.listen           = !truly_bypassed;
     p.no_dub           = no_dub;
     p.smooth           = smooth;
     p.samples_per_beat = synced ? tempo.SamplesPerBeat() : 0.0f;
+    p.time_division    = time_division;
+    p.length_division  = length_division;
     p.clock_hz         = synth.Active() ? synth.ClockHz() : 0.0f;
     p.gate             = synth.Active() ? synth.Gain() : 1.0f;
     engine.SetOverdub(overdub_on || overdub_held);
@@ -873,6 +894,8 @@ int main(void)
             float pulse = 0.4f + 0.6f * synth.Gain();
             hw.led1.Set(0.0f, pulse, pulse);
         }
+        else if(TrulyBypassed())
+            hw.led1.Set((now / 500) % 2 ? 0.3f : 0.0f, 0.0f, 0.0f);
         else if(playing && now < dark_until)
             hw.led1.Set(0.0f, 0.0f, 0.0f);
         else if(Freeze())

@@ -11,11 +11,17 @@ constexpr float kBlockFrames   = 4.0f;   // SetParams runs once per block of thi
 // TONE's hi-cut, from this at min to (nearly) open.
 constexpr float kToneMinHz = 800.0f, kToneMaxHz = 20000.0f;
 
-// TIME synced to a tempo: note values in beats, and where each starts in
-// MIDI values (MOOD's synced TIME table): 1/32, 1/16, 1/8 triplet, 1/8,
-// dotted 1/8 and 1/4.
-constexpr float kDivisionBeats[6] = {0.125f, 0.25f, 1.0f / 3.0f, 0.5f, 0.75f, 1.0f};
+// Note values in beats: 1/32, 1/16, 1/8 triplet, 1/8, dotted 1/8, 1/4, 1/2
+// and 1. The first six are TIME's synced steps, starting at these MIDI
+// values (MOOD's synced TIME table); all eight are the clock divisions.
+constexpr float kNoteBeats[8]     = {0.125f, 0.25f, 1.0f / 3.0f, 0.5f, 0.75f, 1.0f, 2.0f, 4.0f};
 constexpr int   kDivisionStart[5] = {13, 37, 62, 85, 111};
+constexpr int   kQuarter          = 5;
+
+float NoteBeats(int division)
+{
+    return kNoteBeats[division < 0 ? 0 : (division > 7 ? 7 : division)];
+}
 
 // SYNC with the wet following the loop: TIME steps through these fractions
 // of the loop, in equal parts of the knob.
@@ -53,8 +59,10 @@ float DriftEngine::SyncedTime(float rate) const
         int zone = 0;
         while(zone < 5 && v >= kDivisionStart[zone])
             zone++;
-        // Halve a time too long for the ring, as MOOD does.
-        float frames = kDivisionBeats[zone] * p.samples_per_beat / sample_rate_ * rate;
+        // TIME's note value, times the clock division (a quarter note leaves
+        // it as it is). Halve a time too long for the ring, as MOOD does.
+        float beats  = kNoteBeats[zone] * NoteBeats(p.time_division) / kNoteBeats[kQuarter];
+        float frames = beats * p.samples_per_beat / sample_rate_ * rate;
         while(frames > delay_.MaxFrames())
             frames *= 0.5f;
         return frames;
@@ -94,7 +102,9 @@ void DriftEngine::SetParams(const Params &p)
     lo.no_dub  = p.no_dub;
     lo.classic = p.classic;
     lo.half    = p.half_length;
-    lo.synced  = p.samples_per_beat > 0.0f;
+    lo.synced  = p.samples_per_beat > 0.0f
+                     ? NoteBeats(p.length_division) * p.samples_per_beat / sample_rate_ * rate
+                     : 0.0f;
     lo.spread  = p.spread && p.solo != Solo::kWet;
     if(p.sync == Sync::kLoopToWet)
         lo.capture = (uint32_t)(synced > 0.0f ? synced : delay_.TimeFrames(p.time));
@@ -244,7 +254,7 @@ void DriftEngine::Tick(float in_l, float in_r, float *out_l, float *out_r)
     // the clean input, or the loop would feed itself through the effect.
     if(looper_.Playing())
         looper_.Write(in_l, in_r);
-    else
+    else if(params_.listen)
         looper_.Write(in_l + wet_l, in_r + wet_r);
 
     // A loop sent through the Wet Channel is heard only through it, unless

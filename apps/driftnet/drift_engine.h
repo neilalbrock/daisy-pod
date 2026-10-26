@@ -118,8 +118,16 @@ class DriftEngine
         bool smooth   = false;
 
         // > 0: TIME (and Tape's LENGTH) follow this tempo, in samples per
-        // beat at the codec rate.
+        // beat at the codec rate. The clock divisions (CC 53 and 54, 0..7:
+        // 1/32 to a whole note) multiply TIME's synced note values (a
+        // quarter leaves them as they are) and set the length Tape's synced
+        // LENGTH is a fraction of.
         float samples_per_beat = 0.0f;
+        int   time_division    = 5;
+        int   length_division  = 5;
+
+        // False while truly bypassed: the looper stops listening.
+        bool listen = true;
 
         // Synth Mode: > 0 sets the clock; gate scales the wet and the loop.
         float clock_hz = 0.0f;

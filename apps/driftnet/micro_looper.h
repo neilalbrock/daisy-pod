@@ -53,7 +53,7 @@ class MicroLooper
         bool     no_dub  = false; // NO DUB: overdubs replace the loop
         bool     classic = false; // CLASSIC: wear, Tape chops, NO DUB mutes the loop
         bool     half    = false; // LOOP LENGTH: half the ring, like MOOD MKI
-        bool     synced  = false; // Tape's LENGTH in whole fractions of the loop
+        float    synced  = 0.0f;  // > 0: Tape's LENGTH in fractions of this many frames
         bool     spread  = false; // SPREAD
         uint32_t capture = 0;     // SYNC: frames to loop on Engage (0: all of them)
     };
@@ -158,7 +158,7 @@ class MicroLooper
     // What the setters last worked from, so they only redo the maths on a
     // change.
     float rate_set_ = -1.0f, length_set_ = -1.0f, loop_len_set_ = -1.0f, modify_set_ = -1.0f;
-    bool  synced_set_ = false;
+    float synced_set_ = 0.0f;
 
     // Tape: the play head, frames into the window that loops, which is the
     // newest part of the loop.

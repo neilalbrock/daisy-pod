@@ -21,8 +21,9 @@ constexpr float kRateAt[kRatePoints] = {0.0f, 7.5f, 23.0f, 38.5f, 53.5f, 61.0f,
 constexpr float kRate[kRatePoints]   = {-1.0f, -1.0f, -0.667f, -0.5f, -0.25f, 0.0f,
                                         0.0f, 0.25f, 0.5f, 0.667f, 1.0f};
 
-// Synced LENGTH in Tape mode: whole fractions of the loop, where each zone
-// starts in MIDI values (MOOD's synced LENGTH table).
+// Synced LENGTH in Tape mode: fractions of the synced length (a note value
+// at the tempo), where each zone starts in MIDI values (MOOD's synced
+// LENGTH table).
 constexpr float kSyncedFractions[6] = {1.0f / 32, 1.0f / 16, 1.0f / 8, 1.0f / 4, 1.0f / 2, 1.0f};
 constexpr int   kSyncedStart[5]     = {13, 37, 62, 85, 111};
 
@@ -75,15 +76,20 @@ void MicroLooper::SetLength(float length)
     loop_len_set_ = loop_len_;
     synced_set_   = options_.synced;
 
-    // Tape: full at max, down to 1/32 of the loop at min, or in whole
-    // fractions while synced.
-    if(options_.synced)
+    // Tape: full at max, down to 1/32 of the loop at min, or while synced in
+    // fractions of the synced length, halved until it fits the loop. The
+    // window ends where the loop does, so a loop caught on the beat plays in
+    // time.
+    if(options_.synced > 0.0f)
     {
         int v    = (int)(length_ * 127.0f + 0.5f);
         int zone = 0;
         while(zone < 5 && v >= kSyncedStart[zone])
             zone++;
-        window_ = loop_len_ * kSyncedFractions[zone];
+        float whole = options_.synced;
+        while(whole > loop_len_)
+            whole *= 0.5f;
+        window_ = fmaxf(1.0f, whole * kSyncedFractions[zone]);
     }
     else
         window_ = loop_len_ * exp2f(5.0f * (length_ - 1.0f));
