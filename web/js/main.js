@@ -24,6 +24,7 @@ const controls = new Controls($("#controls"), (index, raw) => link.send(set(inde
 let hello = null;
 let params = [];
 let app = Promise.resolve({}); // the app's extras, loading
+let extras = {}; // ... and once they've loaded
 let lastState = null;
 
 // ---------------------------------------------------------------- Messages
@@ -58,16 +59,24 @@ link.addEventListener("message", async (e) => {
       $("#trace-panel").hidden = msg.traces.length === 0;
       $("#xy").hidden = !msg.xy;
       $("#xy-title").textContent = msg.xy;
-      $("#tempo").hidden = true; // until a frame brings a tempo
-      app.then((extras) => {
+      $("#tempo").hidden = true; // until a frame brings a tempo, or the app says it has one
+      tempo.idle();
+      extras = {};
+      app.then((loaded) => {
         if (msg !== hello) return;
+        extras = loaded;
         $("#trace-title").textContent = extras.tracesTitle || "Traces";
         // An app can draw its buffer its own way, under its own title.
         view = extras.View ? (appViews[msg.app] ??= new extras.View($("#buffer"))) : bufferView;
         view.setLayout(msg);
         $("#scope h2").textContent = extras.scopeTitle || "Buffer";
-        $("#scope .legend").hidden = Boolean(extras.View);
+        // The legend entries this app's view uses (all of them by default).
+        const legend = extras.legend || ["speed", "tap", "onset"];
+        for (const item of document.querySelectorAll("[data-legend]")) item.hidden = !legend.includes(item.dataset.legend);
         $("#scope .span").hidden = Boolean(extras.View);
+        $("#scope-meta").hidden = !view.status;
+        // An app whose tempo comes and goes keeps its panel, so the page doesn't jump.
+        if (extras.tempo) $("#tempo").hidden = false;
       });
       break;
     case "param":
@@ -92,6 +101,8 @@ link.addEventListener("message", async (e) => {
       if (msg.tempo) {
         $("#tempo").hidden = false;
         tempo.update(msg.tempo, now);
+      } else if (extras.tempo) {
+        tempo.idle();
       }
       if (msg.traces) traces.add(msg.traces, now);
       if (msg.xy) xy.add(msg.xy);
@@ -120,8 +131,11 @@ function fillPorts() {
 
 function showStatus() {
   const state = link.live ? "live" : link.connected ? "waiting" : "off";
+  if (state === "live" && status.dataset.state !== "live") $("#ports").open = false; // found it: tuck the ports away
   status.dataset.state = state;
-  status.textContent = { live: "Connected", waiting: "Waiting for the Pod…", off: "Not connected" }[state];
+  status.querySelector(".status-text").textContent = { live: "Connected", waiting: "Waiting for the Pod…", off: "Not connected" }[state];
+  const port = inputSel.selectedOptions[0]?.textContent;
+  $("#status-port").textContent = link.connected && port ? ` · ${port}` : "";
   $("#connect").textContent = link.connected ? "Disconnect" : "Connect";
   document.body.classList.toggle("is-live", link.live);
 }
@@ -169,18 +183,25 @@ async function start() {
   if (pref.input) inputSel.value = pref.input.id;
   if (pref.output) outputSel.value = pref.output.id;
   if (pref.input && pref.output && /daisy/i.test(pref.input.name)) link.connect(pref.input.id, pref.output.id);
+  else $("#ports").open = true; // no Daisy found: show the ports to pick from
   showStatus();
 }
 
 // ---------------------------------------------------------------- Drawing
 
 const panels = { scope: $("#scope"), traces: $("#trace-panel"), xy: $("#xy") };
+const scopeMeta = $("#scope-meta");
 
 function frame() {
   // performance.now(), the clock the frames were stamped with (the
   // callback's own timestamp can lag it).
   const now = performance.now();
-  if (!panels.scope.hidden) view.draw(now);
+  if (!panels.scope.hidden) {
+    view.draw(now);
+    // A view can say what it's showing, in the panel's head ("Playing · 1.37 s at 16k").
+    const meta = view.status?.() ?? "";
+    if (scopeMeta.textContent !== meta) scopeMeta.textContent = meta;
+  }
   if (!panels.traces.hidden) traces.draw(now);
   if (!panels.xy.hidden) xy.draw();
   tempo.draw(now);

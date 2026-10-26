@@ -24,7 +24,6 @@ const FORMATS = {
 
 export default {
   groupColour: (name) => PAGE_COLOURS[name],
-  groupTitle: (name, params) => (name.startsWith("Page") ? `${name} · ${params.join(" & ")}` : name),
   optionColour: (param, index) => (param === "Effect" ? VARIATION_COLOURS[index % 4] : undefined),
   format: (name) => FORMATS[name] || pct,
 };

@@ -19,7 +19,6 @@ const FORMATS = {
 export default {
   tracesTitle: "Tape transport",
   groupColour: (name) => PAGE_COLOURS[name],
-  groupTitle: (name, params) => (name.startsWith("Page") ? `${name} · ${params.join(" & ")}` : name),
   optionColour: (param, index) => (param === "AUX type" ? AUX_COLOURS[index] : undefined),
   format: (name) => FORMATS[name] || pct,
 };

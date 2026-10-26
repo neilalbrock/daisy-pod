@@ -27,7 +27,7 @@ const char *const kMeterNames[] = {"In", "Wet", "Loop", "Out"};
 
 const weblink::Trace kTraces[kNumTraces] = {
     {"Clock", "kHz", 0, 64},
-    {"Input", "dB", -60, 0},
+    {"Env input", "dB", -60, 0},
     {"Env threshold", "dB", -60, 0},
     {"Ramp", "%", 0, 100},
 };

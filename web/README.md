@@ -32,7 +32,7 @@ modules, with no build step.
   scrolling right to left. While it plays, the loop laid out oldest to
   newest, with what's playing it on top: Tape's window, the Env slice being
   held, or Stretch's two grains (fading in and out), each with its play head.
-  The footer gives the loop's length at the current CLOCK.
+  The panel's head gives the loop's length at the current CLOCK.
 - **Clock, Env and ramp** (driftnet): the clock rate, the input level against
   Env's threshold (a slice is held while it's above), and where a ramp or
   bounce is.
@@ -44,14 +44,19 @@ modules, with no build step.
   the last 8 ms, the latest few frames fading out. A straight diagonal would
   be clean; the S-curve is the squash and the loop's width is the hysteresis.
   Each axis is scaled to fill the plot, so it shows the shape at any level.
-- **Tempo** (grainfall): BPM, whether it comes from tap tempo or MIDI clock,
-  and where you are in the bar and the beat.
+- **Tempo** (grainfall, and driftnet while synced): BPM, whether it comes
+  from tap tempo or MIDI clock, and where you are in the bar and the beat.
+  Driftnet keeps the panel, marked "Not synced", while it runs free.
 - **Levels**: input, wet and output peaks (and the loop, for driftnet).
 - **CPU**: the audio callback's average and peak load over the last 30 s.
 - **Controls**: built from the parameter list the app sends, grouped as on the
-  Pod (grainfall's knob pages in their LED colours). Drag a knob up and down
-  (Shift for fine), scroll it, or use the arrow keys. Moving a control on the
-  Pod or over MIDI moves it here too.
+  Pod, in three zones the same for every app: a group that is one big choice
+  (grainfall's effects, tapeworn's tape models) across the top, the knob pages
+  in a row (in their LED colours, numbered, titled by their knobs), and the
+  rest in columns. Every card lays out knobs, then choices (segmented
+  controls), then switches (toggles with a light, triggers with a ring). Drag
+  a knob up and down (Shift for fine), scroll it, or use the arrow keys.
+  Moving a control on the Pod or over MIDI moves it here too.
 
 ## How it talks to the Pod
 
@@ -101,6 +106,9 @@ On the firmware side (see `web_view.{h,cpp}` and the web link section of
 
 On the page, add `js/apps/<app>.js` for colours and units if you like; the
 plain controls work without it. It can also give a `View`, a class with the
-buffer view's methods (`setLayout`, `addOverview`, `setFrame`, `draw`), to
-draw the buffer section its own way under its own `scopeTitle`, as driftnet
-does with `js/views/loop.js`.
+buffer view's methods (`setLayout`, `addOverview`, `setFrame`, `draw`, and
+optionally `status`, a line for the panel's head), to draw the buffer section
+its own way under its own `scopeTitle`, as driftnet does with
+`js/views/loop.js`. `legend` picks the buffer legend's entries (`speed`,
+`tap`, `onset`), and `tempo: true` keeps the Tempo panel for an app that only
+sends a tempo some of the time.

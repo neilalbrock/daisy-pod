@@ -15,10 +15,10 @@ function toDb(level) {
 // Tempo, its source, and where we are in the bar and the beat.
 export class TempoView {
   constructor(root) {
+    this.root = root;
     root.innerHTML = `
-      <div class="readout-title">Tempo</div>
+      <div class="panel-head"><h2>Tempo</h2><span class="panel-meta tempo-source">–</span></div>
       <div class="tempo-bpm"><span class="tempo-value">–</span> <span class="unit">BPM</span></div>
-      <div class="tempo-source">–</div>
       <div class="tempo-beats" aria-hidden="true"></div>
       <div class="tempo-steps" aria-hidden="true"></div>`;
     this.value = root.querySelector(".tempo-value");
@@ -36,9 +36,21 @@ export class TempoView {
     this.at = 0;
   }
 
+  // No tempo (driftnet before Synced is on): keep the panel, dim it.
+  idle() {
+    if (this.root.classList.contains("idle") && !this.tempo) return;
+    this.tempo = null;
+    this.root.classList.add("idle");
+    this.value.textContent = "–";
+    this.source.textContent = "Not synced";
+    this.source.classList.remove("clock");
+    for (const d of [...this.beatDots, ...this.stepDots]) d.classList.remove("on");
+  }
+
   update(tempo, at) {
     this.tempo = tempo;
     this.at = at;
+    this.root.classList.remove("idle");
     this.value.textContent = tempo.bpm.toFixed(1);
     this.source.textContent = tempo.following ? "MIDI clock" : "Tap tempo";
     this.source.classList.toggle("clock", tempo.following);
@@ -80,12 +92,14 @@ export class Meters {
   }
 
   setNames(names) {
-    this.root.innerHTML = `<div class="readout-title">Levels</div><div class="meters"></div>`;
+    this.root.innerHTML = `<div class="panel-head"><h2>Levels</h2><span class="panel-meta">peak dBFS</span></div><div class="meters"></div>`;
     const wrap = this.root.querySelector(".meters");
     this.bars = names.map((name) => {
       const m = document.createElement("div");
       m.className = "meter";
-      m.innerHTML = `<div class="meter-track"><div class="meter-fill"></div><div class="meter-hold"></div></div>
+      // The track is the whole scale, coloured by level; the cover hides what's above the
+      // level, so yellow and red only show when the level is up there.
+      m.innerHTML = `<div class="meter-track"><div class="meter-cover"></div><div class="meter-hold"></div></div>
         <div class="meter-name">${name}</div><div class="meter-db">–</div>`;
       m.setAttribute("role", "meter");
       m.setAttribute("aria-label", `${name} level`);
@@ -94,7 +108,7 @@ export class Meters {
       wrap.append(m);
       return {
         el: m,
-        fill: m.querySelector(".meter-fill"),
+        cover: m.querySelector(".meter-cover"),
         hold: m.querySelector(".meter-hold"),
         db: m.querySelector(".meter-db"),
         level: -Infinity,
@@ -121,7 +135,7 @@ export class Meters {
   draw() {
     for (const b of this.bars) {
       const frac = (d) => (Number.isFinite(d) ? Math.max(0, Math.min(1, (d - DB_FLOOR) / -DB_FLOOR)) : 0);
-      b.fill.style.transform = `scaleY(${frac(b.level)})`;
+      b.cover.style.transform = `scaleY(${1 - frac(b.level)})`;
       b.hold.style.bottom = `${frac(b.held) * 100}%`;
       b.hold.classList.toggle("over", b.held > -1);
       b.db.textContent = Number.isFinite(b.held) && b.held > DB_FLOOR ? b.held.toFixed(1) : "–∞";
@@ -134,7 +148,7 @@ export class Meters {
 export class CpuView {
   constructor(root) {
     root.innerHTML = `
-      <div class="readout-title">CPU</div>
+      <div class="panel-head"><h2>CPU</h2><span class="panel-meta">last 30 s</span></div>
       <div class="cpu-numbers"><span class="cpu-avg">–</span> avg · <span class="cpu-max">–</span> peak</div>
       <canvas class="cpu-graph" aria-label="CPU load over the last 30 seconds" role="img"></canvas>`;
     this.avg = root.querySelector(".cpu-avg");

@@ -79,6 +79,7 @@ export class LoopView {
       ctx.font = "13px system-ui, sans-serif";
       ctx.textAlign = "center";
       ctx.fillText(L ? "Waiting for the Pod…" : "Not connected", w / 2, h / 2);
+      this.statusText = "";
       return;
     }
 
@@ -97,22 +98,22 @@ export class LoopView {
       // Listening: the whole ring, newest at the right.
       span = N;
       first = this.frame.write + ahead - N;
-      label = "listening";
+      label = "Listening";
     } else {
       span = loop.length;
       first = loop.start;
-      label = "playing";
+      label = "Playing";
     }
     const xOf = (frame) => (mod(frame - first, N) / span) * w;
 
     this.drawWave(w, mid, plotH, first, span, N);
 
     // What plays the loop: boxes over the part each one loops, with their
-    // play heads. Grains sit one above the other.
+    // play heads. Grains sit one above the other, kept inside the plot.
     const pad = 10;
     for (const v of heads) {
-      const y = heads.length > 1 ? top + pad + v.pan * (plotH - 2 * pad) : mid;
       const bh = heads.length > 1 ? plotH * 0.3 : plotH - 2 * pad;
+      const y = heads.length > 1 ? top + pad + bh / 2 + v.pan * (plotH - 2 * pad - bh) : mid;
       const x0 = xOf(v.start);
       const x1 = x0 + (v.length / span) * w;
       const hue = rateHue(v.rate);
@@ -144,14 +145,21 @@ export class LoopView {
       ctx.fillRect(w - 2, top, 2, plotH);
     }
 
-    // Labels: the loop's length in seconds at the current clock.
+    // The loop's length in seconds at the current clock goes in the panel's
+    // head (status()); the ends are labelled here.
     const secs = span / (L.sampleRate * loop.rate);
+    this.statusText = `${label} · ${secs.toFixed(secs < 10 ? 2 : 1)} s at ${Math.round((L.sampleRate * loop.rate) / 1000)}k`;
     ctx.fillStyle = this.colours.text;
     ctx.font = "11px system-ui, sans-serif";
     ctx.textAlign = "left";
-    ctx.fillText(`${label} · ${secs.toFixed(secs < 10 ? 2 : 1)} s at ${Math.round(L.sampleRate * loop.rate / 1000)}k`, 4, bottom + 13);
+    ctx.fillText("oldest", 4, bottom + 13);
     ctx.textAlign = "right";
     ctx.fillText(loop.length === 0 ? "now" : "newest", w - 4, bottom + 13);
+  }
+
+  // What the view is showing, for the panel's head.
+  status() {
+    return this.statusText || "";
   }
 
   drawWave(w, mid, plotH, first, span, N) {

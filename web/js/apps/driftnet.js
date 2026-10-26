@@ -30,9 +30,10 @@ const FORMATS = {
 export default {
   View: LoopView,
   scopeTitle: "Loop",
+  legend: ["speed"], // the grains are coloured by speed; no taps or notes
+  tempo: true, // keep the Tempo panel while unsynced, so the page doesn't jump
   tracesTitle: "Clock, Env and ramp",
   groupColour: (name) => PAGE_COLOURS[name],
-  groupTitle: (name, params) => (name.startsWith("Page") ? `${name} · ${params.join(" & ")}` : name),
   optionColour: (param, index) => (TOGGLES.includes(param) ? POSITION_COLOURS[index] : undefined),
   format: (name) => FORMATS[name] || pct,
 };

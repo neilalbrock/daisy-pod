@@ -12,13 +12,21 @@
       <div class="brand">
         <span class="brand-mark" aria-hidden="true"></span>
         <span class="brand-name">Daisy Pod</span>
+        <span class="brand-divider" aria-hidden="true"></span>
         <span class="app-name" id="app-name"></span>
       </div>
       <div class="connection">
-        <label>In <select id="input" aria-label="MIDI input from the Pod"></select></label>
-        <label>Out <select id="output" aria-label="MIDI output to the Pod"></select></label>
-        <button type="button" id="connect" class="connect">Connect</button>
-        <span class="status" id="status" data-state="off" role="status">Not connected</span>
+        <span class="status" id="status" data-state="off" role="status"
+          ><span class="status-text">Not connected</span><span class="status-port" id="status-port"></span
+        ></span>
+        <details class="ports" id="ports">
+          <summary class="button">MIDI ports</summary>
+          <div class="ports-panel">
+            <label>In <select id="input" aria-label="MIDI input from the Pod"></select></label>
+            <label>Out <select id="output" aria-label="MIDI output to the Pod"></select></label>
+          </div>
+        </details>
+        <button type="button" id="connect" class="button">Connect</button>
       </div>
     </header>
 
@@ -26,16 +34,17 @@
       <p class="notice" id="notice" hidden></p>
 
       <section class="scope" id="scope" aria-label="Sample buffer">
-        <div class="scope-head">
+        <div class="panel-head">
           <h2>Buffer</h2>
           <div class="legend" aria-hidden="true">
-            <span><i class="sw sw-slow"></i>slower</span>
-            <span><i class="sw sw-unity"></i>normal</span>
-            <span><i class="sw sw-fast"></i>faster</span>
-            <span><i class="sw sw-tap"></i>delay tap</span>
-            <span><i class="sw sw-onset"></i>note</span>
+            <span data-legend="speed"><i class="sw sw-slow"></i>slower</span>
+            <span data-legend="speed"><i class="sw sw-unity"></i>normal</span>
+            <span data-legend="speed"><i class="sw sw-fast"></i>faster</span>
+            <span data-legend="tap"><i class="sw sw-tap"></i>delay tap</span>
+            <span data-legend="onset"><i class="sw sw-onset"></i>note</span>
           </div>
-          <div class="span" role="group" aria-label="Time shown">
+          <span class="panel-meta" id="scope-meta" hidden></span>
+          <div class="segmented span" role="group" aria-label="Time shown">
             <button type="button" data-span="2" aria-pressed="false">2 s</button>
             <button type="button" data-span="8" aria-pressed="true">8 s</button>
             <button type="button" data-span="22" aria-pressed="false">All</button>
@@ -46,9 +55,9 @@
       </section>
 
       <section class="scope" id="trace-panel" aria-label="Traces" hidden>
-        <div class="scope-head">
+        <div class="panel-head">
           <h2 id="trace-title">Traces</h2>
-          <div class="span" role="group" aria-label="Time shown">
+          <div class="segmented span" role="group" aria-label="Time shown">
             <button type="button" data-trace-span="2" aria-pressed="false">2 s</button>
             <button type="button" data-trace-span="8" aria-pressed="true">8 s</button>
             <button type="button" data-trace-span="20" aria-pressed="false">20 s</button>
@@ -60,10 +69,10 @@
       <section class="readouts">
         <div class="readout" id="tempo" hidden></div>
         <div class="readout" id="xy" hidden>
-          <div class="readout-title" id="xy-title"></div>
+          <div class="panel-head"><h2 id="xy-title"></h2><span class="panel-meta">in against out</span></div>
           <canvas class="xy-plot" role="img" aria-label="Input against output"></canvas>
         </div>
-        <div class="readout" id="levels"><div class="readout-title">Levels</div></div>
+        <div class="readout" id="levels"></div>
         <div class="readout" id="cpu"></div>
       </section>
 
