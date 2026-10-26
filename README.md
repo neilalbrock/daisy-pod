@@ -8,9 +8,11 @@ a separate app under `apps/`, all built from `main`.
 | [grainfall](apps/grainfall/README.md) | Granular and micro-loop effects after the Hologram Microcosm, with tap tempo, MIDI clock and the Microcosm's MIDI map (default) |
 | [driftnet](apps/driftnet/README.md) | Always-listening micro-looper and spatial effect after Chase Bliss's MOOD MKII, with a CLOCK that sets the sample rate of both, MOOD's MIDI map, hidden options, ramping and Synth Mode |
 | [tapeworn](apps/tapeworn/README.md) | Lo-fi tape machine: wow, flutter, hysteresis saturation, tape models, failures |
+| [slowdrift](apps/slowdrift/README.md) | Stereo ambient reverb after Walrus Audio's Slöer: a modulated plate with five modes (shimmer, octave down, echoes, swells, a frozen pad) and Stretch, which lowers its sample rate |
 | [starter](apps/starter/README.md) | Low-pass filter toolchain and hardware check; template for new apps |
 
-Code shared between apps goes in `common/`: `MidiClock` and `Tempo` (tap tempo or MIDI clock), `PagedKnobs`,
+Code shared between apps goes in `common/`: `MidiClock` and `Tempo` (tap tempo or MIDI clock), `ClockDomain` (a
+second, variable sample rate), `OnsetDetector` (note onsets), `PagedKnobs`,
 `PressHold` (tap vs hold on a button), `BypassFade`, `Limiter`, `SampleBuffer`
 (a stereo ring for SDRAM), `Hue()` for LED colours, the DSP helpers in `dsp.h` (`Rng`, `Biquad`, `Svf`, `DcBlock` and
 friends), and the web link protocol (`web_link.h`).
@@ -21,10 +23,10 @@ friends), and the web link protocol (`web_link.h`).
 app is doing (for grainfall, the buffer with every voice and delay tap, the
 beat grid and note onsets; for tapeworn, tape speed, dropouts and the
 saturator's hysteresis loop; for driftnet, the loop and what's playing it,
-with its clock and Env's detector; for all, levels and CPU) next to all its
-controls. Run `make web` and open
-http://localhost:8000 in Chrome or Edge. Grainfall, tapeworn and driftnet
-support it; see [web/README.md](web/README.md).
+with its clock and Env's detector; for slowdrift, the LFO, swells and decay
+time; for all, levels and CPU) next to all its controls. Run `make web` and
+open http://localhost:8000 in Chrome or Edge. Grainfall, tapeworn, driftnet
+and slowdrift support it; see [web/README.md](web/README.md).
 
 ## Toolchain
 
@@ -112,7 +114,7 @@ first so every object is rebuilt with the new flags.
   `apps/<name>/app.mk`, but flashing it overwrites the bootloader.
 - Large audio buffers (grain/delay buffers) belong in the 64 MB SDRAM:
   `float DSY_SDRAM_BSS buffer[48000 * 10];`
-- Buffers read many times a sample (grainfall's and driftnet's reverbs) go
+- Buffers read many times a sample (the reverbs in grainfall, driftnet and slowdrift) go
   in the 256 KB of RAM_D2, which reads faster, through the linker script's
   `.heap` section. Leave room there: malloc's heap starts where it ends.
 

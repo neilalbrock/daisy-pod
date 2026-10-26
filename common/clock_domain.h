@@ -1,4 +1,4 @@
-// Driftnet - the CLOCK: a second, variable sample rate
+// A second, variable sample rate (driftnet's CLOCK, slowdrift's Stretch)
 //
 // Everything after the dry split runs at the core rate, from 2 kHz to
 // 64 kHz, while the codec stays at 48 kHz. Each output sample adds
@@ -9,9 +9,10 @@
 // ticks can fall in one sample.
 //
 // Buffers count core frames, so a lower clock lengthens loops and delays and
-// slows down whatever is already recorded. The knob moves in the pedal's
-// steps, alternating fifths and fourths, so those changes stay in harmony;
-// SMOOTH and Synth Mode set any rate in between with SetHz().
+// slows down whatever is already recorded. SetKnob() moves in MOOD's steps,
+// alternating fifths and fourths, so those changes stay in harmony; SetHz()
+// sets any rate in between (driftnet's SMOOTH and Synth Mode, slowdrift's
+// Stretch).
 //
 // Header only, libDaisy-free.
 

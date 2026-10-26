@@ -2,8 +2,8 @@
 
 A page that connects to the Pod over USB MIDI (Web MIDI), shows what the app
 is doing and gives you every control at once. It works with any app that
-speaks the web link protocol (`common/web_link.h`): grainfall, tapeworn and
-driftnet so far. The page shows whichever views the app sends data for.
+speaks the web link protocol (`common/web_link.h`): grainfall, tapeworn,
+driftnet and slowdrift so far. The page shows whichever views the app sends data for.
 
 ```sh
 make web    # serves this folder on http://localhost:8000
@@ -44,6 +44,9 @@ modules, with no build step.
   the last 8 ms, the latest few frames fading out. A straight diagonal would
   be clean; the S-curve is the squash and the loop's width is the hysteresis.
   Each axis is scaled to fill the plot, so it shows the shape at any level.
+- **LFO, swell and decay** (slowdrift): the modulation LFO, the reverb's
+  input gain (Rise's swells, and the gate closing while off or frozen) and
+  the decay time, which Sustain, Freeze and Stretch lengthen.
 - **Tempo** (grainfall, and driftnet while synced): BPM, whether it comes
   from tap tempo or MIDI clock, and where you are in the bar and the beat.
   Driftnet keeps the panel, marked "Not synced", while it runs free.
