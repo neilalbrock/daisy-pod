@@ -9,8 +9,9 @@ grittier tails.
 make APP=slowdrift program-dfu
 ```
 
-Nothing is saved: presets may come later, and for now everything starts
-from the defaults at power-up.
+Every control is also over MIDI (see [MIDI](#midi)) and on the
+[web page](#the-web-page). Nothing is saved: presets may come later, and for
+now everything starts from the defaults at power-up.
 
 ## Signal flow
 
@@ -108,6 +109,35 @@ Moving Stretch while a tail rings bends its pitch, like a tape slowing down.
 | Wide | Full spread, and the left and right inputs go into the plate's two halves separately |
 
 Narrow and medium make up the level they lose.
+
+## MIDI
+
+The Slöer has no MIDI, so this map is our own. Slowdrift listens on every
+channel, on the Pod's TRS MIDI input and over USB. A CC that sets a knob's
+value takes over from the Pod's knob, which does nothing until you move it
+again.
+
+| CC | Control | Values |
+|---|---|---|
+| 14 | Decay | 0-127 |
+| 15 | Mix | 0-127 |
+| 16 | Filter | 0-127 |
+| 17 | Depth | 0-127 |
+| 18 | X | 0-127 |
+| 19 | Stretch | 0-127 |
+| 20 | Rate | 0-127 |
+| 21 | Pan | 0-127, 64 is centred |
+| 22 | Mode | 0-25 Dream, 26-51 Light, 52-76 Rain, 77-102 Dark, 103-127 Rise |
+| 23 | Waveshape | 0-25 sine, 26-51 warp, 52-76 sink, 77-102 square, 103-127 random |
+| 24 | Width | 0-42 narrow, 43-85 medium, 86-127 wide |
+| 25 | Trails | 0-63 off, 64-127 on |
+| 64 | Sustain pedal | Works like button 2: down (64-127) and up (0-63). Sustain while down, or in Dream, each press freezes the pad or lets it go |
+| 102 | On/off | 0-63 off, 64-127 on |
+| 103 | Freeze (Dream only) | 0-63 off, 64-127 on |
+| 104 | Mono in | 0-63 off, 64-127 on |
+
+The choices split 0-127 evenly, so a controller's knob sweeps through them.
+LED 2 flashes a choice changed over MIDI only if its page is showing.
 
 ## The web page
 

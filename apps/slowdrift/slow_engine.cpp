@@ -7,7 +7,8 @@ using namespace dsp;
 namespace
 {
 // Each mode's predelay, the plate's damping at the Filter's ends, the
-// low-pass after it at the Filter's ends, and its level.
+// low-pass after it at the Filter's ends, and its level (the plate's 0.6 is
+// about unity).
 struct ModeDef
 {
     float predelay_ms;
@@ -16,11 +17,11 @@ struct ModeDef
     float gain;
 };
 constexpr ModeDef kModes[SlowEngine::kNumModes] = {
-    {20.0f, 0.6f, 0.1f, 500.0f, 12000.0f, 1.0f},  // Dream
-    {10.0f, 0.4f, 0.0f, 1200.0f, 18000.0f, 0.9f}, // Light
-    {45.0f, 0.5f, 0.1f, 800.0f, 12000.0f, 1.0f},  // Rain
-    {25.0f, 0.7f, 0.3f, 300.0f, 7000.0f, 1.1f},   // Dark
-    {15.0f, 0.6f, 0.1f, 600.0f, 14000.0f, 1.0f},  // Rise
+    {20.0f, 0.6f, 0.1f, 500.0f, 12000.0f, 0.6f},   // Dream
+    {10.0f, 0.4f, 0.0f, 1200.0f, 18000.0f, 0.54f}, // Light
+    {45.0f, 0.5f, 0.1f, 800.0f, 12000.0f, 0.6f},   // Rain
+    {25.0f, 0.7f, 0.3f, 300.0f, 7000.0f, 0.66f},   // Dark
+    {15.0f, 0.6f, 0.1f, 600.0f, 14000.0f, 0.6f},   // Rise
 };
 
 constexpr float kMinStretchRate = 12000.0f; // two octaves down
@@ -51,7 +52,7 @@ void SlowEngine::Init(float sample_rate, size_t block_size, float *mem)
     rate_ = sample_rate;
     clock_.SetHz(rate_);
 
-    plate_.Init(mem, mem + Plate::kFloats);
+    plate_.Init(mem, mem + Plate::kFloats, true);
     mem += Plate::kFloats + PitchShift::kFloats;
     down_.Init(mem, 0.5f, 1600.0f);
     mem += PitchShift::kFloats;

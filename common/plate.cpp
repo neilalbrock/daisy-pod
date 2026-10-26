@@ -18,7 +18,7 @@ constexpr float kDelay1[2]  = {4453.0f, 4217.0f};
 constexpr float kAp[2]      = {1800.0f, 2656.0f};
 constexpr float kDelay2[2]  = {3720.0f, 3163.0f};
 constexpr float kDiffusion1 = 0.7f;
-constexpr float kGain       = 0.6f; // output level
+constexpr float kMinSize    = 0.25f;
 
 // Output taps, as in the paper: which tank line, how far back, which way.
 enum TankLine
@@ -43,7 +43,7 @@ constexpr Tap kTaps[2][7] = {
      {kDelay1R, 2111, -1}, {kApR, 335, -1}, {kDelay2R, 121, -1}},
 };
 
-// Room for a line at its longest, and a frame for interpolation.
+// Room for a line at its longest (full size), and a frame for interpolation.
 constexpr uint32_t Cap(float frames)
 {
     return (uint32_t)frames + 3;
@@ -77,13 +77,17 @@ float *Plate::Take(Line &line, uint32_t cap, float *mem)
     return mem + cap;
 }
 
-void Plate::Init(float *mem, float *shifter_mem)
+void Plate::Init(float *mem, float *shifter_mem, bool stereo_in)
 {
     for(size_t i = 0; i < kFloats; i++)
         mem[i] = 0.0f;
-    up_.Init(shifter_mem, 2.0f, 1024.0f);
+    mem_       = mem;
+    stereo_in_ = stereo_in;
+    shimmer_on_ = shifter_mem != nullptr;
+    if(shimmer_on_)
+        up_.Init(shifter_mem, 2.0f, 1024.0f);
 
-    for(int s = 0; s < 2; s++)
+    for(int s = 0; s < (stereo_in ? 2 : 1); s++)
     {
         mem = Take(pre_[s], Cap(kMaxPredelay), mem);
         for(int i = 0; i < 4; i++)
@@ -92,25 +96,54 @@ void Plate::Init(float *mem, float *shifter_mem)
     for(int i = 0; i < 4; i++)
         in_len_[i] = (uint32_t)(kInDiff[i] * kScale);
 
-    loop_ = 0.0f;
     for(int k = 0; k < 2; k++)
     {
         mem = Take(mod_[k], Cap(kMod[k] * kScale + kMaxExcursion), mem);
         mem = Take(delay1_[k], Cap(kDelay1[k] * kScale), mem);
         mem = Take(ap_[k], Cap(kAp[k] * kScale), mem);
         mem = Take(delay2_[k], Cap(kDelay2[k] * kScale), mem);
+    }
+    used_    = (size_t)(mem - mem_);
+    cleared_ = used_; // already empty: the first Clear() is done at once
 
-        mod_len_[k]    = kMod[k] * kScale;
-        delay1_len_[k] = (uint32_t)(kDelay1[k] * kScale);
-        ap_len_[k]     = (uint32_t)(kAp[k] * kScale);
-        delay2_len_[k] = (uint32_t)(kDelay2[k] * kScale);
+    SetSize(1.0f);
+    SetDiffusion(1.0f);
+}
+
+void Plate::SetSize(float size)
+{
+    float s = kScale * Clamp(size, kMinSize, 1.0f);
+    loop_   = 0.0f;
+    for(int k = 0; k < 2; k++)
+    {
+        mod_len_[k]    = kMod[k] * s;
+        delay1_len_[k] = (uint32_t)(kDelay1[k] * s);
+        ap_len_[k]     = (uint32_t)(kAp[k] * s);
+        delay2_len_[k] = (uint32_t)(kDelay2[k] * s);
         loop_ += mod_len_[k] + (float)(delay1_len_[k] + ap_len_[k] + delay2_len_[k]);
     }
     for(int side = 0; side < 2; side++)
         for(int j = 0; j < 7; j++)
-            taps_[side][j] = (uint32_t)(kTaps[side][j].back * kScale);
+        {
+            uint32_t back  = (uint32_t)(kTaps[side][j].back * s);
+            taps_[side][j] = back < 1 ? 1 : back;
+        }
+}
 
-    SetDiffusion(1.0f);
+bool Plate::Clear(size_t floats)
+{
+    // A volatile pointer, so the compiler can't make the loop a memset.
+    volatile float *p   = mem_ + cleared_;
+    size_t          end = cleared_ + floats < used_ ? cleared_ + floats : used_;
+    for(size_t i = cleared_; i < end; i++)
+        *p++ = 0.0f;
+    cleared_ = end;
+    if(cleared_ < used_)
+        return false;
+    for(int k = 0; k < 2; k++)
+        bw_lp_[k] = damp_lp_[k] = cross_[k] = 0.0f;
+    cleared_ = 0;
+    return true;
 }
 
 float Plate::DecayForRt60(float frames) const
@@ -152,18 +185,20 @@ float Plate::Diffuse(Line *lines, float x)
     return x;
 }
 
+// Predelay, bandwidth, diffusers: for mid (0) or side (1).
+float Plate::Input(int s, float x)
+{
+    float delayed = pre_[s].ReadFrac(predelay_);
+    pre_[s].Write(x);
+    bw_lp_[s] += bandwidth_ * (delayed - bw_lp_[s]);
+    return Diffuse(in_[s], bw_lp_[s]);
+}
+
 void Plate::Process(float mid, float side, float lfo0, float lfo1, float *l, float *r)
 {
-    // Input: predelay, bandwidth, diffusers, for mid and side.
-    float in[2] = {mid, side};
-    for(int s = 0; s < 2; s++)
-    {
-        float x = pre_[s].ReadFrac(predelay_);
-        pre_[s].Write(in[s]);
-        bw_lp_[s] += bandwidth_ * (x - bw_lp_[s]);
-        in[s] = Diffuse(in_[s], bw_lp_[s]);
-    }
-    float half_in[2] = {in[0] + in_side_ * in[1], in[0] - in_side_ * in[1]};
+    mid               = Input(0, mid);
+    side              = stereo_in_ ? in_side_ * Input(1, side) : 0.0f;
+    float half_in[2]  = {mid + side, mid - side};
 
     // As in the paper, the decay diffusion follows the decay, so short
     // decays don't ring.
@@ -172,9 +207,10 @@ void Plate::Process(float mid, float side, float lfo0, float lfo1, float *l, flo
     // The tank: each half takes the input and the other half's output, the
     // first with the shimmer's share an octave up. The shifter runs even
     // when unheard, so it's ready.
-    float up       = up_.Process(cross_[1]);
-    float cross[2] = {cross_[1] + shimmer_ * (up - cross_[1]), cross_[0]};
-    float lfo[2]   = {lfo0, lfo1};
+    float cross[2] = {cross_[1], cross_[0]};
+    if(shimmer_on_)
+        cross[0] += shimmer_ * (up_.Process(cross_[1]) - cross_[1]);
+    float lfo[2] = {lfo0, lfo1};
     float out[2];
     for(int k = 0; k < 2; k++)
     {
@@ -204,7 +240,7 @@ void Plate::Process(float mid, float side, float lfo0, float lfo1, float *l, flo
         float sum = 0.0f;
         for(int j = 0; j < 7; j++)
             sum += kTaps[s][j].sign * lines[kTaps[s][j].line]->Read(taps_[s][j]);
-        wet[s] = sum * kGain;
+        wet[s] = sum;
     }
     *l = wet[0];
     *r = wet[1];

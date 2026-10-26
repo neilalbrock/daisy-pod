@@ -8,11 +8,12 @@ a separate app under `apps/`, all built from `main`.
 | [grainfall](apps/grainfall/README.md) | Granular and micro-loop effects after the Hologram Microcosm, with tap tempo, MIDI clock and the Microcosm's MIDI map (default) |
 | [driftnet](apps/driftnet/README.md) | Always-listening micro-looper and spatial effect after Chase Bliss's MOOD MKII, with a CLOCK that sets the sample rate of both, MOOD's MIDI map, hidden options, ramping and Synth Mode |
 | [tapeworn](apps/tapeworn/README.md) | Lo-fi tape machine: wow, flutter, hysteresis saturation, tape models, failures |
-| [slowdrift](apps/slowdrift/README.md) | Stereo ambient reverb after Walrus Audio's Slöer: a modulated plate with five modes (shimmer, octave down, echoes, swells, a frozen pad) and Stretch, which lowers its sample rate |
+| [slowdrift](apps/slowdrift/README.md) | Stereo ambient reverb after Walrus Audio's Slöer: a modulated plate with five modes (shimmer, octave down, echoes, swells, a frozen pad), Stretch, which lowers its sample rate, and a MIDI CC map |
 | [starter](apps/starter/README.md) | Low-pass filter toolchain and hardware check; template for new apps |
 
 Code shared between apps goes in `common/`: `MidiClock` and `Tempo` (tap tempo or MIDI clock), `ClockDomain` (a
-second, variable sample rate), `OnsetDetector` (note onsets), `PagedKnobs`,
+second, variable sample rate), `OnsetDetector` (note onsets), `Plate` (a Dattorro plate reverb, the
+reverb in grainfall and slowdrift) and the `PitchShift` octave shifter it uses, `PagedKnobs`,
 `PressHold` (tap vs hold on a button), `BypassFade`, `Limiter`, `SampleBuffer`
 (a stereo ring for SDRAM), `Hue()` for LED colours, the DSP helpers in `dsp.h` (`Rng`, `Biquad`, `Svf`, `DcBlock` and
 friends), and the web link protocol (`web_link.h`).

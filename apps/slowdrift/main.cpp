@@ -42,10 +42,19 @@
 // LED 2 with the choice: the mode's colour, a hue per waveshape, red, green
 // or blue for the widths, and green or red for trails on or off.
 //
-// Over USB MIDI it talks to the web control surface (web/, `make web`),
-// streaming levels, CPU, the LFO, the reverb's input gain and the decay
-// time while the page is open. Nothing is saved: it all starts from the
-// defaults at power-up.
+// MIDI CCs on any channel, from the TRS input or USB (see README.md):
+//
+//   14 Decay   15 Mix   16 Filter   17 Depth   18 X   19 Stretch
+//   20 Rate    21 Pan
+//   22 Mode    23 Waveshape   24 Width (0-127 split evenly between them)
+//   25 Trails  (64 and up: on)
+//   64 Sustain pedal: as button 2
+//   102 On/off   103 Freeze (Dream)   104 Mono in   (64 and up: on)
+//
+// Over USB MIDI it also talks to the web control surface (web/, `make
+// web`), streaming levels, CPU, the LFO, the reverb's input gain and the
+// decay time while the page is open. Nothing is saved: it all starts from
+// the defaults at power-up.
 
 #include "daisy_pod.h"
 #include "colour.h"
@@ -134,11 +143,26 @@ volatile bool  reset_peaks = false;
 
 Telemetry DSY_SDRAM_BSS telemetry; // the main loop's copy
 
+// LED 2 flashes the new choice if its page is showing.
 void SetChoice(int page, int value, uint32_t now_ms)
 {
-    int n              = kChoiceCounts[page];
-    choices[page]      = value < 0 ? 0 : (value >= n ? n - 1 : value);
-    choice_flash_until = now_ms + 1000;
+    int n         = kChoiceCounts[page];
+    choices[page] = value < 0 ? 0 : (value >= n ? n - 1 : value);
+    if(page == pages.Page())
+        choice_flash_until = now_ms + 1000;
+}
+
+// Button 2 or a sustain pedal: in Dream a press freezes the pad or lets it
+// go; in the other modes, Sustain while it's down.
+void SustainSwitch(bool down)
+{
+    if(choices[0] == SlowEngine::kDream)
+    {
+        if(down)
+            freeze = !freeze;
+    }
+    else
+        sustain = down;
 }
 
 // A value from the page, in the audio callback.
@@ -261,6 +285,65 @@ void SendWeb(uint32_t now_ms)
         usb_midi.SendMessage(w.Data(), size);
 }
 
+// ---------------------------------------------------------------- MIDI
+//
+// CCs on any channel, from the TRS input or USB. The knobs take over as
+// from the web page: the Pod's knob lets go until it's moved. Choices
+// split 0-127 evenly, so a controller's knob sweeps through them.
+
+bool pedal_down = false; // CC 64, for its edges
+
+void HandleCc(uint8_t cc, uint8_t value, uint32_t now_ms)
+{
+    bool on = value >= 64;
+    switch(cc)
+    {
+        case 22: SetChoice(0, value * SlowEngine::kNumModes / 128, now_ms); break;
+        case 23: SetChoice(1, value * Lfo::kNumShapes / 128, now_ms); break;
+        case 24: SetChoice(2, value * SlowEngine::kNumWidths / 128, now_ms); break;
+        case 25: SetChoice(3, on, now_ms); break;
+        case 64:
+            if(on != pedal_down)
+                SustainSwitch(on);
+            pedal_down = on;
+            break;
+        case 102:
+            active    = on;
+            momentary = false;
+            break;
+        case 103: freeze = on; break; // Dream only
+        case 104: mono_in = on; break;
+        default:
+            // 14-21: the knobs, page by page
+            if(cc >= 14 && cc < 14 + kNumKnobParams)
+                pages.Set((cc - 14) / 2, (cc - 14) % 2, value / 127.0f);
+            break;
+    }
+}
+
+void HandleMidi(MidiEvent e, uint32_t now_ms)
+{
+    switch(e.type)
+    {
+        case ControlChange:
+        {
+            ControlChangeEvent cc = e.AsControlChange();
+            HandleCc(cc.control_number, cc.value, now_ms);
+            break;
+        }
+        case SystemCommon:
+            // The web page's settings.
+            if(e.sc_type == SystemExclusive)
+            {
+                weblink::Command c;
+                if(web.Receive(e.sysex_data, e.sysex_message_len, now_ms, &c))
+                    SetParam(c.index, c.raw, now_ms);
+            }
+            break;
+        default: break;
+    }
+}
+
 // ---------------------------------------------------------------- Audio
 
 void AudioCallback(AudioHandle::InputBuffer  in,
@@ -271,16 +354,12 @@ void AudioCallback(AudioHandle::InputBuffer  in,
     hw.ProcessAllControls();
     uint32_t now_ms = System::GetNow();
 
-    // The web page's settings, over USB MIDI SysEx.
+    hw.midi.Listen();
     usb_midi.Listen();
+    while(hw.midi.HasEvents())
+        HandleMidi(hw.midi.PopEvent(), now_ms);
     while(usb_midi.HasEvents())
-    {
-        MidiEvent        e = usb_midi.PopEvent();
-        weblink::Command c;
-        if(e.type == SystemCommon && e.sc_type == SystemExclusive
-           && web.Receive(e.sysex_data, e.sysex_message_len, now_ms, &c))
-            SetParam(c.index, c.raw, now_ms);
-    }
+        HandleMidi(usb_midi.PopEvent(), now_ms);
 
     // Button 1: pressed while off, on at once, and off again on release if
     // held (smart bypass); pressed while on, off on release.
@@ -299,22 +378,15 @@ void AudioCallback(AudioHandle::InputBuffer  in,
     }
 
     // Button 2: Sustain while held, or in Dream, a press freezes the pad
-    // or lets it go.
-    bool dream = choices[0] == SlowEngine::kDream;
-    if(dream)
-    {
-        if(hw.button2.RisingEdge())
-            freeze = !freeze;
+    // or lets it go. Freeze is Dream's alone, and Sustain the others'.
+    if(hw.button2.RisingEdge())
+        SustainSwitch(true);
+    if(hw.button2.FallingEdge())
+        SustainSwitch(false);
+    if(choices[0] == SlowEngine::kDream)
         sustain = false;
-    }
     else
-    {
         freeze = false;
-        if(hw.button2.RisingEdge())
-            sustain = true;
-        if(hw.button2.FallingEdge())
-            sustain = false;
-    }
 
     const DaisyPod::Knob knob_ids[kNumKnobs] = {DaisyPod::KNOB_1, DaisyPod::KNOB_2};
     float                knob[kNumKnobs];
@@ -415,6 +487,7 @@ int main(void)
     HAL_NVIC_SetPriority(OTG_FS_IRQn, 1, 0);
     HAL_NVIC_SetPriority(OTG_FS_EP1_OUT_IRQn, 1, 0);
     HAL_NVIC_SetPriority(OTG_FS_EP1_IN_IRQn, 1, 0);
+    hw.midi.StartReceive();
     trace_period = (int)(hw.AudioSampleRate() * kTracePeriodMs / 1000.0f);
 
     // Every knob starts "not live" so the defaults above hold until a knob moves.
