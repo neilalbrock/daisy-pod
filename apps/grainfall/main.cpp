@@ -455,8 +455,13 @@ void AudioCallback(AudioHandle::InputBuffer  in,
     tempo.Update(now);
     beat_phase = tempo.BeatPos() - floorf(tempo.BeatPos());
 
+    // Equal-power mix: the dry and wet are mostly uncorrelated.
+    float mix      = pages.Value(2, 1);
+    float dry_gain = cosf(mix * 1.57079633f);
+    float wet_gain = sinf(mix * 1.57079633f);
+
     GrainEngine::Params p;
-    p.effect           = (GrainEngine::EffectId)(slot / GrainEngine::kNumVariations);
+    p.effect          = (GrainEngine::EffectId)(slot / GrainEngine::kNumVariations);
     p.variation        = slot % GrainEngine::kNumVariations;
     p.activity         = pages.Value(0, 0);
     p.repeats          = pages.Value(0, 1);
@@ -465,6 +470,7 @@ void AudioCallback(AudioHandle::InputBuffer  in,
                           GrainEngine::kNumSubdivs - 1);
     p.reverse          = reverse;
     p.hold             = hold_on;
+    p.through          = tanf(mix * 0.78539816f); // dry_gain + wet_gain * through = 1
     p.samples_per_beat = tempo.SamplesPerBeat();
     p.beat_pos         = tempo.BeatPos();
     p.post.filter      = pages.Value(2, 0);
@@ -473,11 +479,6 @@ void AudioCallback(AudioHandle::InputBuffer  in,
     p.post.resonance   = pages.Value(4, 0);
     p.post.volume      = pages.Value(4, 1);
     engine.BeginBlock(p, (int)size);
-
-    // Equal-power mix: the dry and wet are mostly uncorrelated.
-    float mix      = pages.Value(2, 1);
-    float dry_gain = cosf(mix * 1.57079633f);
-    float wet_gain = sinf(mix * 1.57079633f);
 
     for(size_t i = 0; i < size; i++)
     {

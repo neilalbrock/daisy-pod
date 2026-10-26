@@ -63,10 +63,11 @@ void FxBlocks::Reset()
     last_quarter_ = -1;
     run_left_     = 0;
     anchor_       = 0;
-    skip_         = false;
+    note_         = 0;
+    first_        = false;
 }
 
-void FxBlocks::PlayBlock(const EffectContext &ctx, float tick)
+void FxBlocks::PlayBlock(const EffectContext &ctx, float tick, bool first)
 {
     dsp::Rng &rng = *ctx.rng;
     float     a   = ctx.activity;
@@ -96,11 +97,22 @@ void FxBlocks::PlayBlock(const EffectContext &ctx, float tick)
     }
 
     // `len` of output (a tick, C two) at `rate`, ending where the block
-    // ends, so even a reversed block reads only what's recorded.
-    uint32_t    start = anchor_ - (uint32_t)((float)back * tick + len * rate) - 2;
-    VoiceParams p     = Slice(ctx, start, len * rate, rate);
+    // ends, so even a reversed block reads only what's recorded. Except the
+    // burst's first: it starts at the attack, which is still being recorded,
+    // so it plays forwards at no more than normal speed to stay behind the
+    // write head.
+    bool     live  = first && back == 0;
+    uint32_t start = anchor_ - (uint32_t)((float)back * tick + len * rate) - 2;
+    if(live)
+    {
+        rate  = fminf(rate, 1.0f);
+        start = note_;
+    }
+    VoiceParams p = Slice(ctx, start, len * rate, rate);
 
-    if(rng.Uni() < 0.25f * a)
+    if(live)
+        p.reverse = false;
+    else if(rng.Uni() < 0.25f * a)
         p.reverse = !p.reverse;
     if(ctx.variation != 2 && rng.Uni() < 0.35f * a)
     {
@@ -140,9 +152,9 @@ void FxBlocks::Block(const EffectContext &ctx)
                         : (int)(2.0f * powf(16.0f, ctx.repeats / 0.97f) + 0.5f);
         if(left_ == 0)
         {
-            // Wait a tick, so the note is in the first blocks taken.
-            pos_  = 0;
-            skip_ = true;
+            pos_   = 0;
+            first_ = true;
+            note_  = ctx.onsets->Get(0);
         }
         left_ = ticks;
     }
@@ -174,18 +186,15 @@ void FxBlocks::Block(const EffectContext &ctx)
     last_tick_ = t;
     if(left_ == 0 || run_left_ > 0)
         return;
-    if(skip_)
-    {
-        skip_ = false;
-        return;
-    }
     if(left_ > 0)
         left_--;
 
     // Every four ticks the blocks are taken from the two steps just played.
+    // The burst's first four end a tick after the attack, so it opens with
+    // the note.
     if(pos_ % 4 == 0)
     {
-        anchor_ = ctx.write_pos;
+        anchor_ = first_ ? note_ + (uint32_t)tick : ctx.write_pos;
         for(int i = pos_; i < pos_ + 4; i++)
         {
             back_[i] = kBlocksBase[i];
@@ -193,8 +202,9 @@ void FxBlocks::Block(const EffectContext &ctx)
                 back_[i] = (int)(ctx.rng->Uni() * 3.99f);
         }
     }
-    PlayBlock(ctx, tick);
-    pos_ = (pos_ + 1) % kPattern;
+    PlayBlock(ctx, tick, first_);
+    first_ = false;
+    pos_   = (pos_ + 1) % kPattern;
 }
 
 // ---------------------------------------------------------------- Interrupt
@@ -300,6 +310,7 @@ void FxInterrupt::Block(const EffectContext &ctx)
 {
     if(duck_coef_ == 0.0f)
         duck_coef_ = SmoothCoef(0.003f, ctx.sample_rate);
+    through_ = ctx.through;
 
     if(left_ > 0.0f)
     {
@@ -313,8 +324,12 @@ void FxInterrupt::Block(const EffectContext &ctx)
             ctx.voices->SetFilter(sweep_, 4000.0f * powf(0.075f, pos_ / length_), 3.0f);
     }
 
-    // Repeats: the chance of a glitch on each step, 4% to every step.
-    if(ctx.step && left_ <= 0.0f && ctx.rng->Uni() < 0.04f + 0.96f * ctx.repeats * ctx.repeats)
+    // Repeats: the chance of a glitch on each step, 4% to every step. A
+    // glitch a step long is counted down in blocks, so it can have a few
+    // frames left when the next step comes; one with less than half a step
+    // to go gives way.
+    if(ctx.step && left_ < 0.5f * ctx.step_frames
+       && ctx.rng->Uni() < 0.04f + 0.96f * ctx.repeats * ctx.repeats)
         Start(ctx);
 }
 
@@ -328,8 +343,9 @@ void FxInterrupt::Process(const SampleBuffer &,
 {
     // The live signal passes through, except while a glitch plays.
     duck_ += duck_coef_ * (duck_target_ - duck_);
-    *l += in_l * (1.0f - duck_);
-    *r += in_r * (1.0f - duck_);
+    float pass = through_ * (1.0f - duck_);
+    *l += in_l * pass;
+    *r += in_r * pass;
 }
 
 // ---------------------------------------------------------------- Arp
@@ -342,9 +358,8 @@ const float kArpRates[8] = {1.0f, 1.2599f, 1.4983f, 2.0f, 2.5198f, 2.0f, 1.4983f
 
 void FxArp::Reset()
 {
-    last_tick_ = -1;
-    pos_       = 0;
-    level_     = 0.0f;
+    pos_   = 0;
+    level_ = 0.0f;
 }
 
 void FxArp::Roll(const EffectContext &ctx)
@@ -368,10 +383,8 @@ void FxArp::Block(const EffectContext &ctx)
         Roll(ctx);
     }
 
-    int32_t tick = (int32_t)floorf(ctx.step_pos * 2.0f);
-    if(tick == last_tick_)
+    if(!ctx.step)
         return;
-    last_tick_ = tick;
 
     int steps = 2 + (int)(ctx.activity * 6.99f);
     int n     = ctx.onsets->Count() < steps ? ctx.onsets->Count() : steps;
@@ -387,7 +400,7 @@ void FxArp::Block(const EffectContext &ctx)
         return;
 
     float sr      = ctx.sample_rate;
-    float spacing = 0.5f * ctx.step_frames;
+    float spacing = ctx.step_frames;
     float len     = Clamp(spacing, 0.04f * sr, 0.5f * sr);
     float rate    = ctx.variation == 1 ? kArpRates[i] : 1.0f;
 

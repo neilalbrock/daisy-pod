@@ -1,7 +1,8 @@
 // Grainfall - Glitch: Blocks, Interrupt and Arp
 //
 // Blocks: each note you play sets off a burst of blocks, half-step slices of
-// the last two steps played back rearranged on the grid.
+// the last two steps played back rearranged on the grid. The burst starts
+// on the next half-step, with the note's attack.
 //   Activity - how far the blocks stray from a steady, repeating order:
 //              reshuffles, stutters and each variation's manipulation
 //   Repeats  - how long a burst goes on: 2 to 32 half-steps, and at the top
@@ -13,17 +14,18 @@
 //   D  pitch-shifted and bit-crushed
 //
 // Interrupt: glitches cut into the live signal, which the effect passes
-// through between them. The dry signal is not touched, so at 100% Mix the
-// glitches truly interrupt the input.
+// through between them, scaled so that with the dry it adds up to unity at
+// any Mix. The dry signal is not touched, so at 100% Mix the glitches truly
+// interrupt the input.
 //   Activity - how much each glitch is chopped up and manipulated
-//   Repeats  - how often glitches come: from a rare one to every other step
+//   Repeats  - how often glitches come: from a rare one to every step
 //   Shape    - each chop's contour
 //   A  rearranged chops of your playing
 //   B  chops pitch-shifted
 //   C  a slice echoing through a falling band-pass sweep
 //   D  bit-crushed, with drastic speeds and tiny stutters
 //
-// Arp: the last few notes you played, sequenced two to a step.
+// Arp: the last few notes you played, sequenced one to a step.
 //   Activity - steps in the arpeggio, 2 to 8 (the recent notes in turn,
 //              round again if there are fewer)
 //   Repeats  - how long it plays on after a note: it fades over 0.3 s to
@@ -49,16 +51,17 @@ class FxBlocks : public Effect
     static constexpr int kPattern = 8;
     static constexpr int kRun     = 4; // notes in an A run
 
-    void PlayBlock(const EffectContext &ctx, float tick);
+    void PlayBlock(const EffectContext &ctx, float tick, bool first);
 
     int      back_[kPattern] = {}; // blocks back from the anchor
-    uint32_t anchor_         = 0;  // write head when the blocks were taken
+    uint32_t anchor_         = 0;  // where the blocks taken end
+    uint32_t note_           = 0;  // the attack that set the burst off
     int      pos_            = 0;
     int      left_           = 0; // ticks left in the burst, < 0 = endless
     int32_t  last_tick_      = -1;
     int32_t  last_quarter_   = -1;
     int      run_left_       = 0; // A: notes left in the current run
-    bool     skip_           = false;
+    bool     first_          = false; // the burst's first block is next
 };
 
 class FxInterrupt : public Effect
@@ -80,6 +83,7 @@ class FxInterrupt : public Effect
     float   next_chop_ = 0.0f; // frames into the glitch for the next chop
     float   pos_       = 0.0f; // frames into the glitch
     VoicePool::Handle sweep_ = 0; // C
+    float through_ = 1.0f; // gain on the live signal between glitches
 
     float duck_ = 0.0f, duck_target_ = 0.0f, duck_coef_ = 0.0f;
 };
@@ -95,9 +99,8 @@ class FxArp : public Effect
 
     void Roll(const EffectContext &ctx);
 
-    int32_t last_tick_ = -1;
-    int     pos_       = 0;
-    float   level_     = 0.0f; // 1 after a new note, fading with each step
+    int   pos_   = 0;
+    float level_ = 0.0f; // 1 after a new note, fading with each step
 
     // C, D: each step's filter or crush, rolled with each new note.
     float cutoff_[kMaxSteps] = {};

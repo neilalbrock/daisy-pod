@@ -64,6 +64,11 @@ class GrainEngine
         bool     reverse   = false;
         bool     hold      = false;
 
+        // Gain for live signal an effect passes through its wet output
+        // (Interrupt), set by the caller's mix so that it and the dry add
+        // up to unity.
+        float through = 1.0f;
+
         // From Tempo, at the start of the block
         float samples_per_beat = 24000.0f;
         float beat_pos         = 0.0f;

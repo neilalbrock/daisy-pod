@@ -108,6 +108,7 @@ void GrainEngine::BeginBlock(const Params &p, int block_frames)
     ctx.onset         = onset_;
     ctx.onsets        = &onsets_;
     ctx.input_level   = onset_detector_.Envelope();
+    ctx.through       = p.through;
     ctx.write_pos     = buffer_.WritePos();
     ctx.buffer_frames = buffer_.Frames();
     ctx.voices        = &voices_;

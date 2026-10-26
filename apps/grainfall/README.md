@@ -213,8 +213,9 @@ tape.
 
 **Blocks**: each note you play sets off a burst of blocks: half-step slices
 of the last two steps, played back rearranged on the grid. Every four blocks,
-fresh ones are taken from what you just played. A burst starts a block after
-the note, so the note is in it.
+fresh ones are taken from what you just played. A burst starts on the next
+block after the note, opening with its attack (that first block plays
+forwards, at no more than normal speed).
 
 | Control | Effect |
 |---|---|
@@ -233,12 +234,13 @@ the note, so the note is in it.
 **Interrupt**: glitches cut into the live signal, which the effect passes
 through between them. The dry signal isn't touched, so at 100% Mix the
 glitches truly interrupt your playing. Below that, the live signal is heard
-both dry and through the effect between glitches.
+both dry and through the effect between glitches, the two adding up to its
+normal level.
 
 | Control | Effect |
 |---|---|
 | Activity | How much each glitch is chopped up (1 to 4 chops, D 2 to 8) and manipulated; glitches sometimes run half or twice as long |
-| Repeats | How often glitches come: a 4% chance each step, up to every other step |
+| Repeats | How often glitches come: a 4% chance each step, up to every step |
 | Shape | Each chop's contour |
 | Time | The grid, and the glitch length (one step, 60 ms to 1.5 s) |
 
@@ -249,14 +251,14 @@ both dry and through the effect between glitches.
 | C | A slice echoing through a band-pass that falls from 4 kHz to 300 Hz |
 | D | Bit-crushed chops at drastic speeds (two octaves down to two up), and tiny stutters |
 
-**Arp**: the last few notes you played, sequenced two to a step.
+**Arp**: the last few notes you played, sequenced one to a step.
 
 | Control | Effect |
 |---|---|
 | Activity | Steps in the arpeggio, 2 to 8: the recent notes oldest to newest, round again if there are fewer |
 | Repeats | How long it plays on after you play: it fades over 0.3 s to 12 s, and at the top of the knob never stops |
 | Shape | Each note's contour |
-| Time | The grid: notes are half a step apart and long (40 ms to 500 ms) |
+| Time | The grid: notes are a step apart and long (40 ms to 500 ms) |
 
 | Variation | |
 |---|---|

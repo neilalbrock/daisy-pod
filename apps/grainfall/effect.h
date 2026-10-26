@@ -36,6 +36,7 @@ struct EffectContext
     bool            onset = false; // a note started since the last block
     const OnsetLog *onsets = nullptr;
     float           input_level = 0.0f; // envelope of the effect input
+    float           through = 1.0f; // gain for live signal passed to the wet output
     uint32_t        write_pos = 0; // sample buffer write head
     uint32_t        buffer_frames = 0;
 
