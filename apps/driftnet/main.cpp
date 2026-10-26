@@ -9,16 +9,31 @@
 // pedal; press the encoder to change page (LED 2 shows which). After a page
 // change a knob does nothing until it is moved, so values don't jump.
 //
-//   Page 1 (LED 2 blue)    Knob 1 - TIME: delay time
-//                          Knob 2 - MODIFY: feedback (holds at max)
-//   Page 2 (LED 2 magenta) Knob 1 - LENGTH: shortens the loop, to 1/32
-//                          Knob 2 - MODIFY: loop speed, 4x reverse .. 4x forward
+//   Page 1 (LED 2 blue)    Wet Channel, by mode:
+//                            Reverb: Knob 1 - TIME: size and decay
+//                                    Knob 2 - MODIFY: smear, multi-tap to wash
+//                            Delay:  Knob 1 - TIME: delay time
+//                                    Knob 2 - MODIFY: feedback (holds at max)
+//                            Slip:   Knob 1 - TIME: sampling window
+//                                    Knob 2 - MODIFY: speed in semitones,
+//                                             2x reversed .. 1x at noon .. 2x
+//   Page 2 (LED 2 magenta) Micro-Looper, by mode:
+//                            Env:     Knob 1 - LENGTH: slice size
+//                                     Knob 2 - MODIFY: input sensitivity
+//                            Tape:    Knob 1 - LENGTH: shortens the loop, to 1/32
+//                                     Knob 2 - MODIFY: speed, 4x reverse .. 4x forward
+//                            Stretch: Knob 1 - LENGTH: grain size
+//                                     Knob 2 - MODIFY: stretch, frozen at noon,
+//                                              none at either end (reversed at min)
 //   Page 3 (LED 2 yellow)  Knob 1 - CLOCK: 2k .. 64k in steps of fifths and fourths
 //                          Knob 2 - MIX: dry and wet both full at noon
 //                          (a limiter holds dry + wet under -1 dBFS)
-//   Encoder turn (page 3)  - routing: what the Wet Channel hears while the
-//                            loop plays: input, input + loop, loop only.
-//                            LED 2 flashes red, green or blue
+//   Encoder turn - the page's three-way toggle; LED 2 flashes red, green or
+//                  blue for left, middle or right:
+//                    page 1: Reverb, Delay, Slip
+//                    page 2: Env, Tape, Stretch
+//                    page 3: routing, what the Wet Channel hears while the
+//                            loop plays: input, input + loop, loop only
 //   Encoder long press - mono in: the left input feeds both channels
 //                        (LED 1 flashes cyan for on, dark for off)
 //   Button 1           - Wet Channel on; tap again for off
@@ -40,10 +55,20 @@
 
 using namespace daisy;
 
-constexpr size_t kLoopFrames  = 1 << 17; // 2.7 s at 48k, 65 s at 2k
-constexpr size_t kDelayFrames = 1 << 17;
+constexpr size_t kLoopFrames   = 1 << 17; // 2.7 s at 48k, 65 s at 2k
+constexpr size_t kDelayFrames  = 1 << 17;
+constexpr size_t kSlipFrames   = 1 << 19; // over three of Slip's longest windows
+constexpr size_t kReverbFrames = 28672; // 224 KB
 float DSY_SDRAM_BSS loop_buffer[kLoopFrames * 2];
 float DSY_SDRAM_BSS delay_buffer[kDelayFrames * 2];
+float DSY_SDRAM_BSS slip_buffer[kSlipFrames * 2];
+
+// The Reverb reads 16 taps a tick, so its line goes in the 256 KB of RAM_D2,
+// which reads far faster than SDRAM. BOOT_SRAM apps leave RAM_D2 to the
+// heap, so the linker script's .heap section is the way in. Leave room:
+// malloc's heap starts where .heap ends and has no limit check, and printf
+// uses it.
+float __attribute__((section(".heap"))) reverb_buffer[kReverbFrames * 2];
 
 DaisyPod    hw;
 DriftEngine engine;
@@ -62,10 +87,11 @@ PagedKnobs<kNumPages, kNumKnobs> pages({
 
 constexpr uint32_t kHoldMs = 400; // a button held this long freezes or overdubs
 
-DriftEngine::Routing routing = DriftEngine::Routing::kIn;
-bool                 wet_on  = false;
-bool                 freeze  = false;
-bool                 mono_in = false;
+// Each page's three-way toggle, 0..2: wet mode, loop mode, routing.
+int  toggles[kNumPages] = {1, 1, 0}; // Delay, Tape, input only
+bool wet_on             = false;
+bool freeze             = false;
+bool mono_in            = false;
 
 PressHold encoder_press(600); // hold: mono in
 PressHold button1_press(kHoldMs);
@@ -74,8 +100,8 @@ bool      b1_switched_on = false; // this press turned its channel on, so
 bool      b2_switched_on = false; // its release mustn't turn it off again
 
 // Read by the main loop for the LEDs: flash until these times (ms).
-volatile uint32_t routing_flash_until = 0;
-volatile uint32_t mono_flash_until    = 0;
+volatile uint32_t toggle_flash_until = 0;
+volatile uint32_t mono_flash_until   = 0;
 
 void AudioCallback(AudioHandle::InputBuffer  in,
                    AudioHandle::OutputBuffer out,
@@ -126,15 +152,18 @@ void AudioCallback(AudioHandle::InputBuffer  in,
         mono_flash_until = now_ms + 500;
     }
     else if(enc == PressHold::Event::kTap)
+    {
         pages.NextPage(knob);
+        toggle_flash_until = 0;
+    }
     pages.Update(knob);
 
     int inc = hw.encoder.Increment();
-    if(inc != 0 && pages.Page() == 2)
+    if(inc != 0)
     {
-        int r               = (int)routing + inc;
-        routing             = (DriftEngine::Routing)(r < 0 ? 0 : (r > 2 ? 2 : r));
-        routing_flash_until = now_ms + 1000;
+        int &t             = toggles[pages.Page()];
+        t                  = t + inc < 0 ? 0 : (t + inc > 2 ? 2 : t + inc);
+        toggle_flash_until = now_ms + 1000;
     }
 
     DriftEngine::Params p;
@@ -144,7 +173,9 @@ void AudioCallback(AudioHandle::InputBuffer  in,
     p.loop_modify = pages.Value(1, 1);
     p.clock       = pages.Value(2, 0);
     p.mix         = pages.Value(2, 1);
-    p.routing     = routing;
+    p.wet_mode    = (DriftEngine::WetMode)toggles[0];
+    p.loop_mode   = (DriftEngine::LoopMode)toggles[1];
+    p.routing     = (DriftEngine::Routing)toggles[2];
     p.wet_on      = wet_on;
     p.freeze      = freeze;
     engine.SetParams(p);
@@ -171,7 +202,15 @@ int main(void)
     hw.SetAudioBlockSize(4);
     hw.SetAudioSampleRate(SaiHandle::Config::SampleRate::SAI_48KHZ);
 
-    engine.Init(hw.AudioSampleRate(), loop_buffer, kLoopFrames, delay_buffer, kDelayFrames);
+    engine.Init(hw.AudioSampleRate(),
+                {loop_buffer,
+                 kLoopFrames,
+                 delay_buffer,
+                 kDelayFrames,
+                 slip_buffer,
+                 kSlipFrames,
+                 reverb_buffer,
+                 kReverbFrames});
     limiter.Init(hw.AudioSampleRate());
     bypass_fade.Init(hw.AudioSampleRate());
 
@@ -226,9 +265,10 @@ int main(void)
             hw.led1.Set(red, wet_on ? 1.0f : 0.0f, 0.0f);
         }
 
-        // LED 2: page colour, or the routing position just after a change.
-        const float *c = now < routing_flash_until ? position_colours[(int)routing]
-                                                   : page_colours[pages.Page()];
+        // LED 2: page colour, or the page's toggle just after a change.
+        int          page = pages.Page();
+        const float *c    = now < toggle_flash_until ? position_colours[toggles[page]]
+                                                     : page_colours[page];
         hw.led2.Set(c[0], c[1], c[2]);
         hw.UpdateLeds();
 

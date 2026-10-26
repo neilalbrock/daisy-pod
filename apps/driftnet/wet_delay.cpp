@@ -50,15 +50,15 @@ void WetDelay::Process(float in_l, float in_r, float *out_l, float *out_r)
         }
     }
 
-    uint32_t     write = buffer_.WritePos();
-    const float *a     = buffer_.At(write - delay_[active_]);
-    float        l = a[0], r = a[1];
+    float l, r;
+    Head(delay_[active_], &l, &r);
     if(fading_)
     {
-        const float *b = buffer_.At(write - delay_[1 - active_]);
-        float       x  = active_ == 0 ? fade_ : 1.0f - fade_; // towards the idle head
-        l += x * (b[0] - l);
-        r += x * (b[1] - r);
+        float bl, br;
+        Head(delay_[1 - active_], &bl, &br);
+        float x = active_ == 0 ? fade_ : 1.0f - fade_; // towards the idle head
+        l += x * (bl - l);
+        r += x * (br - r);
 
         fade_ += active_ == 0 ? fade_inc_ : -fade_inc_;
         if(fade_ >= 1.0f || fade_ <= 0.0f)
@@ -77,4 +77,18 @@ void WetDelay::Process(float in_l, float in_r, float *out_l, float *out_r)
     float g  = freeze_ ? 0.0f : 1.0f;
     buffer_.Write(2.0f * dsp::SoftClip(0.5f * (in_l * g + l * fb)),
                   2.0f * dsp::SoftClip(0.5f * (in_r * g + r * fb)));
+    if(fresh_ < buffer_.Frames())
+        fresh_++;
+}
+
+void WetDelay::Head(uint32_t delay, float *l, float *r) const
+{
+    if(delay > fresh_)
+    {
+        *l = *r = 0.0f;
+        return;
+    }
+    const float *f = buffer_.At(buffer_.WritePos() - delay);
+    *l             = f[0];
+    *r             = f[1];
 }

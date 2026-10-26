@@ -25,10 +25,17 @@ class WetDelay
     void SetFeedback(float modify);
     void SetFreeze(bool on) { freeze_ = on; }
 
+    // Forget what's in the ring, without clearing it: switching back to
+    // Delay doesn't bring old echoes back.
+    void Reset() { fresh_ = 0; }
+
     void Process(float in_l, float in_r, float *out_l, float *out_r);
 
   private:
+    void Head(uint32_t delay, float *l, float *r) const; // 0 if not yet written
+
     SampleBuffer buffer_;
+    uint32_t     fresh_     = 0; // frames written since Reset()
     uint32_t     max_delay_ = 0;
     uint32_t     target_    = 0;
     uint32_t     delay_[2]  = {}; // read heads, frames behind the write head

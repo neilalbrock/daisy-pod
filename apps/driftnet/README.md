@@ -10,9 +10,7 @@ the sample rate both run at.
 make APP=driftnet program-dfu
 ```
 
-So far the Wet Channel has Delay and the Micro-Looper has Tape. MOOD's
-other modes (Reverb, Slip, Env, Stretch), its MIDI map, hidden options and
-the web page are still to come.
+MOOD's MIDI map, hidden options and the web page are still to come.
 
 ## The CLOCK
 
@@ -36,9 +34,15 @@ change a knob does nothing until it is moved, so values don't jump.
 
 | Page | LED 2 | Knob 1 | Knob 2 | Encoder turn |
 |---|---|---|---|---|
-| 1 Wet | Blue | TIME: delay time, 1 ms to 2.7 s at 48k | MODIFY: feedback (holds like a looper at max) | – |
-| 2 Loop | Magenta | LENGTH: shortens the loop to as little as 1/32, keeping its newest end | MODIFY: speed, 4x reverse to 4x forward | – |
+| 1 Wet | Blue | TIME | MODIFY | Reverb, Delay, Slip |
+| 2 Loop | Magenta | LENGTH | MODIFY | Env, Tape, Stretch |
 | 3 Global | Yellow | CLOCK: 2k to 64k | MIX: dry and wet, both at full at noon | Routing |
+
+What TIME, LENGTH and the two MODIFYs do depends on the mode; see
+[The Wet Channel](#the-wet-channel) and [The Micro-Looper](#the-micro-looper).
+Turning the encoder moves the page's three-way toggle, and LED 2 flashes
+red, green or blue for left, middle or right. It starts on Delay, Tape and
+In.
 
 A limiter holds dry plus wet under -1 dBFS.
 
@@ -58,7 +62,7 @@ off at the start of each pass, and its red flickers while overdubbing.
 ### Routing
 
 Routing decides what the Wet Channel processes while the loop plays. Turn the
-encoder on page 3; LED 2 flashes the position.
+encoder on page 3.
 
 | Position | LED 2 flash | The Wet Channel hears |
 |---|---|---|
@@ -80,14 +84,57 @@ While the looper is off, it records the Wet Channel as well as your input,
 so trails end up in the loop. Overdubs take only your clean input; anything
 else would feed the loop back into itself through the effect.
 
-**Tape mode:** MODIFY sets the speed (4x, 2x, 1x or 0.5x, reverse below noon
-and forward above). LENGTH shortens the loop. Overdubs are written wherever
-the play head is, so at other speeds they land somewhere unexpected.
+Switching between the looper's modes keeps the loop. Overdubs are written
+wherever the play head is, so anywhere but Tape at 1x they can land
+somewhere unexpected.
+
+| Mode | LENGTH | MODIFY |
+|---|---|---|
+| Env | Slice size, 5 ms to 1 s | Sensitivity: how quietly you can play to hold a slice |
+| Tape | Shortens the loop to as little as 1/32, keeping its newest end | Speed: 4x, 2x, 1x or 0.5x, reversed below noon and forward above |
+| Stretch | Grain size, 2 ms (grainy) to 1 s (clear, with repeating phrases) | Stretch: frozen at noon, less stretched further out, none at either end (reversed at min) |
+
+**Env mode** cuts the loop into slices and plays it at 1x. While your input
+is louder than the threshold, it repeats the slice it's in, until you stop.
+Turn MODIFY up and touch the strings lightly to slow the loop to a crawl
+without being heard.
+
+**Tape mode** changes speed in octaves. Use it to offset the CLOCK: lower the
+clock for grit, then speed the loop back up.
+
+**Stretch mode** plays two overlapping grains at 1x, while the place they
+read from moves through the loop more slowly. It's stretched 1.5x, 2x and
+then 4x on the way towards noon, where it stops and repeats one grain;
+LENGTH then shrinks or grows that moment. Below noon it runs backwards. The
+steps follow MOOD's MIDI chart, with the knob moving smoothly between them.
+To get to know it, set LENGTH and MODIFY to max, turn MODIFY slowly towards
+noon, then turn LENGTH down.
 
 ## The Wet Channel
+
+Changing mode fades out, then fades in the new one with nothing in it, so
+old echoes don't come back.
+
+| Mode | TIME | MODIFY |
+|---|---|---|
+| Reverb | Size and decay, 30 ms to 500 ms at 48k | Smear: clean multi-tap at min, reverb at max |
+| Delay | Delay time, 1 ms to 2.7 s at 48k | Feedback, holding like a looper at max |
+| Slip | Sampling window, 5 ms to 2 s at 48k | Speed in semitones: 1x forward at noon, up to 2x forward, or 1x to 2x reversed below noon |
+
+**Reverb mode:** a dense cluster of echoes, eight taps a side, which the
+smear turns into a wash. Each pass of the feedback smears it further.
+Moving TIME slides the taps, which bends the pitch of what's sounding.
+Freeze holds it, and turning MODIFY up while frozen smears it further.
 
 **Delay mode:** a clean delay. Changing TIME crossfades to the new time
 instead of bending the pitch of the echoes. At maximum MODIFY the feedback is
 exactly 1, so the repeats hold and pile up like a looper. Turning TIME slowly
 while they hold records a stretch into them. Freeze cuts the input and holds
 whatever is repeating.
+
+**Slip mode:** samples your input continuously and plays its newest moments
+back at another speed. Short windows make it a pitch shifter; long ones
+make harmonised phrases that follow behind you. Each window keeps the
+speed it started with, so turning MODIFY steps the harmony. Freeze stops
+the sampling, so it repeats the same window like a synth note. Try a loop
+routed through it, moving MODIFY as you punch it in and out.

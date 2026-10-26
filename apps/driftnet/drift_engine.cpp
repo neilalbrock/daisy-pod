@@ -4,18 +4,16 @@
 
 namespace
 {
-constexpr float kFadeSeconds = 0.005f; // the Wet Channel switching on and off
+constexpr float kFadeSeconds = 0.005f; // the Wet Channel on and off, and each half of a mode change
 }
 
-void DriftEngine::Init(float  sample_rate,
-                       float *loop_data,
-                       size_t loop_frames,
-                       float *delay_data,
-                       size_t delay_frames)
+void DriftEngine::Init(float sample_rate, const Buffers &buffers)
 {
     clock_.Init(sample_rate);
-    looper_.Init(loop_data, loop_frames);
-    delay_.Init(delay_data, delay_frames);
+    looper_.Init(buffers.loop, buffers.loop_frames);
+    delay_.Init(buffers.delay, buffers.delay_frames);
+    slip_.Init(buffers.slip, buffers.slip_frames);
+    reverb_.Init(buffers.reverb, buffers.reverb_frames);
     SetParams(params_);
 }
 
@@ -28,6 +26,7 @@ void DriftEngine::SetParams(const Params &p)
     wet_inc_   = 1.0f / (kFadeSeconds * rate);
 
     looper_.SetRate(rate);
+    looper_.SetMode(p.loop_mode);
     looper_.SetLength(p.length);
     looper_.SetModify(p.loop_modify);
 
@@ -36,15 +35,59 @@ void DriftEngine::SetParams(const Params &p)
     delay_.SetFeedback(p.wet_modify);
     delay_.SetFreeze(p.freeze);
 
+    reverb_.SetRate(rate);
+    reverb_.SetTime(p.time);
+    reverb_.SetModify(p.wet_modify);
+    reverb_.SetFreeze(p.freeze);
+
+    slip_.SetTime(p.time);
+    slip_.SetModify(p.wet_modify);
+    slip_.SetFreeze(p.freeze);
+
     // Both at full at noon: Mix turns one down, never both up.
     float mix = dsp::Clamp(p.mix, 0.0f, 1.0f);
     dry_      = fminf(1.0f, 2.0f * (1.0f - mix));
     wet_      = fminf(1.0f, 2.0f * mix);
 }
 
+void DriftEngine::ProcessWet(float in_l, float in_r, float *out_l, float *out_r)
+{
+    // A mode change fades out, resets the new mode, and fades back in.
+    if(params_.wet_mode != wet_mode_)
+    {
+        mode_gain_ -= wet_inc_;
+        if(mode_gain_ <= 0.0f)
+        {
+            mode_gain_ = 0.0f;
+            wet_mode_  = params_.wet_mode;
+            switch(wet_mode_)
+            {
+                case WetMode::kReverb: reverb_.Reset(); break;
+                case WetMode::kDelay: delay_.Reset(); break;
+                case WetMode::kSlip: slip_.Reset(); break;
+            }
+        }
+    }
+    else if(mode_gain_ < 1.0f)
+        mode_gain_ = fminf(mode_gain_ + wet_inc_, 1.0f);
+
+    // The input fades too, so a fresh mode's first echoes fade in.
+    in_l *= mode_gain_;
+    in_r *= mode_gain_;
+    switch(wet_mode_)
+    {
+        case WetMode::kReverb: reverb_.Process(in_l, in_r, out_l, out_r); break;
+        case WetMode::kDelay: delay_.Process(in_l, in_r, out_l, out_r); break;
+        case WetMode::kSlip: slip_.Process(in_l, in_r, out_l, out_r); break;
+    }
+    *out_l *= mode_gain_;
+    *out_r *= mode_gain_;
+}
+
 void DriftEngine::Tick(float in_l, float in_r, float *out_l, float *out_r)
 {
     float loop_l, loop_r;
+    looper_.Sense(in_l, in_r);
     looper_.Read(&loop_l, &loop_r);
     float loop_gain = looper_.Gain(); // the loop's fade, already in loop_l/r
 
@@ -71,7 +114,7 @@ void DriftEngine::Tick(float in_l, float in_r, float *out_l, float *out_r)
     }
 
     float wet_l, wet_r;
-    delay_.Process(send_l * wet_gain_, send_r * wet_gain_, &wet_l, &wet_r);
+    ProcessWet(send_l * wet_gain_, send_r * wet_gain_, &wet_l, &wet_r);
     wet_l *= wet_gain_;
     wet_r *= wet_gain_;
 
