@@ -1,10 +1,10 @@
 // Web link protocol: the page's half of common/web_link.h, which it must
-// match. Every message is F0 7D 01 <type> <payload> F7. Numbers are 7, 14
+// match. Every message is F0 7D 02 <type> <payload> F7. Numbers are 7, 14
 // or 21 bits, most significant 7 bits first; strings are 7-bit ASCII ending
 // in 0.
 
 export const ID = 0x7d;
-export const VERSION = 1;
+export const VERSION = 2; // 2: 14-bit parameter indices
 
 export const Msg = {
   HELLO: 0x01,
@@ -160,7 +160,7 @@ export function decode(bytes) {
       for (let i = r.u7(); i > 0; i--) hello.groups.push(r.str());
       hello.meters = [];
       for (let i = r.u7(); i > 0; i--) hello.meters.push(r.str());
-      hello.numParams = r.u7();
+      hello.numParams = r.u14();
       // Added later: traces and an X-Y plot, if the app has them.
       hello.traces = [];
       hello.tracePeriodMs = 1;
@@ -178,22 +178,22 @@ export function decode(bytes) {
       return hello;
     }
     case Msg.PARAM: {
-      const param = {
-        type: "param",
-        index: r.u7(),
-        kind: r.u7(),
-        group: r.u7(),
-        columns: r.u7(),
-        name: r.str(),
-      };
-      param.options = [];
-      for (let i = r.u7(); i > 0; i--) param.options.push(r.str());
-      return param;
+      // As many descriptions as fit.
+      const params = [];
+      while (r.more) {
+        const param = { index: r.u14(), kind: r.u7(), group: r.u7(), columns: r.u7(), name: r.str() };
+        param.options = [];
+        for (let i = r.u7(); i > 0; i--) param.options.push(r.str());
+        params.push(param);
+      }
+      return { type: "params", params };
     }
     case Msg.STATE: {
+      // A run of the values, from parameter `first`.
+      const first = r.u14();
       const values = [];
-      for (let i = r.u7(); i > 0; i--) values.push(r.u14());
-      return { type: "state", values };
+      for (let i = r.u14(); i > 0; i--) values.push(r.u14());
+      return { type: "state", first, values };
     }
     case Msg.FRAME:
       return { type: "frame", ...readFrame(r) };
@@ -216,5 +216,5 @@ export const presetReset = () => message(Msg.PRESET_RESET);
 // for toggles.
 export function set(index, raw) {
   raw = Math.max(0, Math.min(UNIT_MAX, Math.round(raw)));
-  return message(Msg.SET, [index & 0x7f, raw >> 7, raw & 0x7f]);
+  return message(Msg.SET, [(index >> 7) & 0x7f, index & 0x7f, raw >> 7, raw & 0x7f]);
 }

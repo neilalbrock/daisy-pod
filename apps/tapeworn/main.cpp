@@ -70,7 +70,6 @@ TapeEngine     tape_engine;
 Limiter        limiter; // on dry + wet, so turning both up doesn't clip
 CpuLoadMeter   cpu_meter;
 QspiFlash      flash(hw.seed.qspi);
-Presets        presets;
 
 constexpr int kNumKnobPages = 4;
 constexpr int kPresetPage   = kNumKnobPages; // after the knob pages; its knobs do nothing
@@ -111,7 +110,7 @@ volatile uint32_t mono_flash_until  = 0;
 
 using namespace web_view;
 
-static_assert(kNumParams <= Presets::kMaxParams, "too many parameters for a preset");
+PresetsFor<kNumParams> presets;
 
 uint8_t DSY_SDRAM_BSS web_buffer[weblink::kMaxMessage];
 weblink::Session      web;
@@ -257,21 +256,12 @@ void SendWeb(uint32_t now_ms)
             changed = true;
     }
 
-    weblink::Writer &w     = web_out;
-    int              param = 0;
-    switch(web.Next(now_ms, changed, &param))
+    weblink::Writer &w = web_out;
+    switch(web.Next(now_ms, changed))
     {
         case weblink::Session::Send::kHello: WriteHello(w, hw.AudioSampleRate()); break;
-        case weblink::Session::Send::kParam: weblink::WriteParam(w, param, kParams[param]); break;
-        case weblink::Session::Send::kState:
-            w.Begin(weblink::Msg::kState);
-            w.U7(kNumParams);
-            for(int i = 0; i < kNumParams; i++)
-            {
-                w.U14((uint32_t)raw[i]);
-                web_state[i] = raw[i];
-            }
-            break;
+        case weblink::Session::Send::kParam: web.WriteParams(w); break;
+        case weblink::Session::Send::kState: web.WriteState(w, raw, web_state); break;
         case weblink::Session::Send::kFrame:
             ReadTelemetry();
             WriteFrame(w, telemetry, cpu_meter.GetAvgCpuLoad(), cpu_meter.GetMaxCpuLoad());
@@ -431,7 +421,7 @@ int main(void)
     limiter.Init(hw.AudioSampleRate());
     bypass_fade.Init(hw.AudioSampleRate());
     cpu_meter.Init(hw.AudioSampleRate(), hw.AudioBlockSize());
-    web.Init(kNumParams);
+    web.Init(kParams, kNumParams);
     web_out.Init(web_buffer);
 
     MidiUsbHandler::Config usb_cfg;

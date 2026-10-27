@@ -30,7 +30,7 @@ constexpr uint8_t Count(const T (&)[N])
 }
 } // namespace
 
-const weblink::Param kParams[kNumParams] = {
+constexpr weblink::Param kParams[kNumParams] = {
     {"Decay", Kind::kContinuous, 0, nullptr, 0, 0, Store::kPreset},
     {"Mix", Kind::kContinuous, 0, nullptr, 0, 0, Store::kPreset},
     {"Filter", Kind::kContinuous, 1, nullptr, 0, 0, Store::kPreset},
@@ -48,6 +48,7 @@ const weblink::Param kParams[kNumParams] = {
     {"Freeze", Kind::kToggle, 4, nullptr, 0, 0, Store::kNone},
     {"Mono in", Kind::kToggle, 4, nullptr, 0, 0, Store::kGlobal},
 };
+static_assert(UniqueKeys(kParams, kNumParams), "two parameter names share a preset key");
 
 void WriteHello(weblink::Writer &w, float sample_rate)
 {

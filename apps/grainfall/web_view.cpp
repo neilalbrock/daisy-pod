@@ -39,7 +39,7 @@ constexpr uint8_t Count(const T (&)[N])
 }
 } // namespace
 
-const weblink::Param kParams[kNumParams] = {
+constexpr weblink::Param kParams[kNumParams] = {
     {"Effect", Kind::kChoice, 0, kSlotNames, Count(kSlotNames), 4, Store::kPreset},
     {"Activity", Kind::kContinuous, 1, nullptr, 0, 0, Store::kPreset},
     {"Repeats", Kind::kContinuous, 1, nullptr, 0, 0, Store::kPreset},
@@ -60,6 +60,7 @@ const weblink::Param kParams[kNumParams] = {
     {"Bypass", Kind::kToggle, 8, nullptr, 0, 0, Store::kNone},
     {"Mono in", Kind::kToggle, 8, nullptr, 0, 0, Store::kGlobal},
 };
+static_assert(UniqueKeys(kParams, kNumParams), "two parameter names share a preset key");
 
 void Snapshot(const GrainEngine &engine, Telemetry *t)
 {

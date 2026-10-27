@@ -103,7 +103,6 @@ Limiter        limiter; // on dry + wet, so a loud wet signal doesn't clip
 BypassFade     bypass_fade;
 CpuLoadMeter   cpu_meter;
 QspiFlash      flash(hw.seed.qspi);
-Presets        presets;
 
 constexpr int kNumKnobPages = 6;
 constexpr int kPresetPage   = kNumKnobPages; // after the knob pages; its knobs do nothing
@@ -214,7 +213,7 @@ void HandleCc(uint8_t cc, uint8_t value, uint32_t now)
 
 using namespace web_view;
 
-static_assert(kNumParams <= Presets::kMaxParams, "too many parameters for a preset");
+PresetsFor<kNumParams> presets;
 
 weblink::Session web;
 weblink::Writer  web_out;
@@ -328,23 +327,14 @@ void SendWeb(uint32_t now_ms)
             changed = true;
     }
 
-    weblink::Writer &w     = web_out;
-    int              param = 0;
-    switch(web.Next(now_ms, changed, &param))
+    weblink::Writer &w = web_out;
+    switch(web.Next(now_ms, changed))
     {
         case weblink::Session::Send::kHello:
             WriteHello(w, hw.AudioSampleRate(), kBufferFrames, kOverviewColumns);
             break;
-        case weblink::Session::Send::kParam: weblink::WriteParam(w, param, kParams[param]); break;
-        case weblink::Session::Send::kState:
-            w.Begin(weblink::Msg::kState);
-            w.U7(kNumParams);
-            for(int i = 0; i < kNumParams; i++)
-            {
-                w.U14((uint32_t)raw[i]);
-                web_state[i] = raw[i];
-            }
-            break;
+        case weblink::Session::Send::kParam: web.WriteParams(w); break;
+        case weblink::Session::Send::kState: web.WriteState(w, raw, web_state); break;
         case weblink::Session::Send::kFrame:
             if(!TakeTelemetry())
                 return;
@@ -581,7 +571,7 @@ int main(void)
                 kHoldFrames, mod_buffer, reverb_buffer);
     engine.SetOverview(overview, kOverviewColumns);
     cpu_meter.Init(hw.AudioSampleRate(), hw.AudioBlockSize());
-    web.Init(kNumParams);
+    web.Init(kParams, kNumParams);
     web_out.Init(web_buffer);
     tempo.Init(hw.AudioSampleRate());
     limiter.Init(hw.AudioSampleRate());

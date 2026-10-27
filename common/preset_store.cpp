@@ -28,46 +28,43 @@ uint32_t PresetStore::Offset(int record) const
     return kBase + region_ * kRegionSize + sector * kSector;
 }
 
-int PresetStore::Read(int record, Entry *out, int max) const
+const PresetStore::Entry *PresetStore::Read(int record, int *n) const
 {
+    *n = 0;
     if(flash_ == nullptr || record < 0 || record > kGlobals)
-        return 0;
+        return nullptr;
     const uint8_t *data = flash_->Read(Offset(record));
     Header         h;
     memcpy(&h, data, sizeof(h));
     if(h.magic != kMagic || h.version != kVersion || h.count == 0 || h.count > kMaxEntries)
-        return 0;
+        return nullptr;
     const uint8_t *entries = data + sizeof(Header);
     if(Fnv(entries, h.count * sizeof(Entry)) != h.checksum)
-        return 0;
-    int n = h.count < max ? h.count : max;
-    if(out != nullptr && n > 0)
-        memcpy(out, entries, n * sizeof(Entry));
-    return out != nullptr ? n : h.count;
+        return nullptr;
+    *n = h.count;
+    return reinterpret_cast<const Entry *>(entries);
 }
 
-bool PresetStore::Write(int record, const Entry *entries, int n)
+bool PresetStore::Has(int record) const
+{
+    int n;
+    return Read(record, &n) != nullptr;
+}
+
+bool PresetStore::Write(int record, uint8_t *buf, int n)
 {
     if(flash_ == nullptr || record < 0 || record > kGlobals || n <= 0 || n > kMaxEntries)
         return false;
-    uint8_t buf[sizeof(Header) + kMaxEntries * sizeof(Entry)];
-    Header  h;
+    Header h;
     h.magic    = kMagic;
     h.version  = kVersion;
     h.count    = (uint16_t)n;
-    h.checksum = Fnv((const uint8_t *)entries, n * sizeof(Entry));
+    h.checksum = Fnv(buf + sizeof(Header), n * sizeof(Entry));
     memcpy(buf, &h, sizeof(h));
-    memcpy(buf + sizeof(h), entries, n * sizeof(Entry));
-    return flash_->Write(Offset(record), buf, sizeof(h) + n * sizeof(Entry));
+    return flash_->Write(Offset(record), buf, RecordSize(n));
 }
 
 bool PresetStore::EraseAll()
 {
     return flash_ != nullptr && flash_->Erase(kBase + region_ * kRegionSize, kRegionSize);
-}
-
-uint16_t PresetStore::Key(const char *name)
-{
-    uint32_t h = Fnv((const uint8_t *)name, strlen(name));
-    return (uint16_t)(h ^ (h >> 16));
 }

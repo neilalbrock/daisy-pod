@@ -8,9 +8,7 @@ using weblink::Store;
 
 namespace
 {
-// The slot last selected is saved with the globals, under a key no
-// parameter's name hashes to in practice.
-const uint16_t kSlotKey = PresetStore::Key("@slot");
+constexpr uint16_t kSlotKey = PresetStore::Key(kPresetSlotName);
 } // namespace
 
 void Presets::Init(Flash *flash, int region, const weblink::Param *params, int num_params,
@@ -18,7 +16,7 @@ void Presets::Init(Flash *flash, int region, const weblink::Param *params, int n
 {
     store_.Init(flash, region);
     params_     = params;
-    num_params_ = num_params < kMaxParams ? num_params : kMaxParams;
+    num_params_ = num_params < capacity_ ? num_params : capacity_;
     get_        = get;
     set_        = set;
     for(int i = 0; i < num_params_; i++)
@@ -35,9 +33,9 @@ void Presets::Init(Flash *flash, int region, const weblink::Param *params, int n
             used_ = used_ | (1u << s);
 
     // The globals, and the slot last selected.
-    PresetStore::Entry entries[PresetStore::kMaxEntries];
-    int                n    = store_.Read(PresetStore::kGlobals, entries, PresetStore::kMaxEntries);
-    int                slot = -1;
+    int                       n;
+    const PresetStore::Entry *entries = store_.Read(PresetStore::kGlobals, &n);
+    int                       slot    = -1;
     for(int e = 0; e < n; e++)
     {
         if(entries[e].key == kSlotKey)
@@ -48,11 +46,10 @@ void Presets::Init(Flash *flash, int region, const weblink::Param *params, int n
     }
 
     // Then the preset.
-    int16_t values[kMaxParams];
-    if(slot >= 0 && Load(slot, values))
+    if(slot >= 0 && Load(slot, scratch_))
         for(int i = 0; i < num_params_; i++)
-            if(values[i] >= 0)
-                set_(i, values[i]);
+            if(scratch_[i] >= 0)
+                set_(i, scratch_[i]);
     slot_   = slot;
     target_ = slot;
 
@@ -122,8 +119,8 @@ void Presets::Apply()
 
 bool Presets::Load(int slot, int16_t *values)
 {
-    PresetStore::Entry entries[PresetStore::kMaxEntries];
-    int                n = store_.Read(slot, entries, PresetStore::kMaxEntries);
+    int                       n;
+    const PresetStore::Entry *entries = store_.Read(slot, &n);
     for(int i = 0; i < num_params_; i++)
     {
         values[i] = -1;
@@ -155,15 +152,15 @@ bool Presets::Differs(Store store, const int16_t *a, const int16_t *b) const
 
 void Presets::SaveGlobals()
 {
-    PresetStore::Entry entries[kMaxParams + 1];
-    int                n = 0;
+    PresetStore::Entry *entries = PresetStore::Entries(record_);
+    int                 n       = 0;
     for(int i = 0; i < num_params_; i++)
         if(params_[i].store == Store::kGlobal)
             entries[n++] = {keys_[i], (uint16_t)seen_[i]};
     if(seen_slot_ >= 0)
         entries[n++] = {kSlotKey, (uint16_t)seen_slot_};
     if(n > 0)
-        store_.Write(PresetStore::kGlobals, entries, n);
+        store_.Write(PresetStore::kGlobals, record_, n);
     for(int i = 0; i < num_params_; i++)
         saved_[i] = seen_[i];
     saved_slot_ = seen_slot_;
@@ -221,12 +218,12 @@ void Presets::Poll(uint32_t now_ms)
         {
             save_req_ = -1;
             Snapshot(Store::kPreset, loaded_);
-            PresetStore::Entry entries[kMaxParams];
-            int                n = 0;
+            PresetStore::Entry *entries = PresetStore::Entries(record_);
+            int                 n       = 0;
             for(int i = 0; i < num_params_; i++)
                 if(params_[i].store == Store::kPreset)
                     entries[n++] = {keys_[i], (uint16_t)loaded_[i]};
-            if(n > 0 && store_.Write(slot, entries, n))
+            if(n > 0 && store_.Write(slot, record_, n))
                 used_ = used_ | (1u << slot);
             slot_     = slot;
             saved_at_ = now_ms == 0 ? 1 : now_ms;
@@ -235,18 +232,16 @@ void Presets::Poll(uint32_t now_ms)
 
     if(!pending_ready_ && !applied_)
     {
-        int16_t now[kMaxParams];
-        Snapshot(Store::kPreset, now);
-        modified_ = Used(slot_) && Differs(Store::kPreset, now, loaded_);
+        Snapshot(Store::kPreset, scratch_);
+        modified_ = Used(slot_) && Differs(Store::kPreset, scratch_, loaded_);
     }
 
     // The globals and the slot: saved once they've settled.
-    int16_t globals[kMaxParams];
-    Snapshot(Store::kGlobal, globals);
-    if(Differs(Store::kGlobal, globals, seen_) || slot_ != seen_slot_)
+    Snapshot(Store::kGlobal, scratch_);
+    if(Differs(Store::kGlobal, scratch_, seen_) || slot_ != seen_slot_)
     {
         for(int i = 0; i < num_params_; i++)
-            seen_[i] = globals[i];
+            seen_[i] = scratch_[i];
         seen_slot_  = slot_;
         changed_at_ = now_ms;
     }

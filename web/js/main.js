@@ -86,9 +86,9 @@ link.addEventListener("message", async (e) => {
         if (extras.tempo) $("#tempo").hidden = false;
       });
       break;
-    case "param":
+    case "params":
       if (!hello) return;
-      params[msg.index] = msg;
+      for (const p of msg.params) if (p.index < params.length) params[p.index] = p;
       // Build once the whole list is in.
       if (params.filter(Boolean).length === hello.numParams) {
         const forHello = hello;
@@ -99,8 +99,11 @@ link.addEventListener("message", async (e) => {
       }
       break;
     case "state":
-      lastState = msg.values;
-      controls.state(msg.values);
+      // The values come in runs: keep them all, and set what changed.
+      if (!hello) return;
+      lastState ??= new Array(hello.numParams);
+      msg.values.forEach((raw, i) => (lastState[msg.first + i] = raw));
+      controls.state(lastState);
       break;
     case "frame":
       view.setFrame(msg, now);

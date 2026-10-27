@@ -122,14 +122,13 @@ BypassFade     bypass_fade;
 CpuLoadMeter   cpu_meter;
 
 QspiFlash flash(hw.seed.qspi);
-Presets   presets;
+PresetsFor<kNumParams> presets;
 
 constexpr int kNumKnobPages = 3;
 constexpr int kPresetPage   = kNumKnobPages; // after the knob pages; its knobs do nothing
 constexpr int kNumPages     = kNumKnobPages + 1;
 constexpr int kNumKnobs     = 2;
 
-static_assert(kNumParams <= Presets::kMaxParams, "too many parameters for a preset");
 
 // Raw knob positions (0..1) per page, initial values chosen to sound sensible.
 PagedKnobs<kNumPages, kNumKnobs> pages({
@@ -577,23 +576,14 @@ void SendWeb(uint32_t now_ms)
             changed = true;
     }
 
-    weblink::Writer &w     = web_out;
-    int              param = 0;
-    switch(web.Next(now_ms, changed, &param))
+    weblink::Writer &w = web_out;
+    switch(web.Next(now_ms, changed))
     {
         case weblink::Session::Send::kHello:
             WriteHello(w, hw.AudioSampleRate(), kLoopFrames);
             break;
-        case weblink::Session::Send::kParam: weblink::WriteParam(w, param, kParams[param]); break;
-        case weblink::Session::Send::kState:
-            w.Begin(weblink::Msg::kState);
-            w.U7(kNumParams);
-            for(int i = 0; i < kNumParams; i++)
-            {
-                w.U14((uint32_t)raw[i]);
-                web_state[i] = raw[i];
-            }
-            break;
+        case weblink::Session::Send::kParam: web.WriteParams(w); break;
+        case weblink::Session::Send::kState: web.WriteState(w, raw, web_state); break;
         case weblink::Session::Send::kFrame:
             if(!TakeTelemetry())
                 return;
@@ -883,7 +873,7 @@ int main(void)
     limiter.Init(sr);
     bypass_fade.Init(sr);
     cpu_meter.Init(sr, hw.AudioBlockSize());
-    web.Init(kNumParams);
+    web.Init(kParams, kNumParams);
     web_out.Init(web_buffer);
     for(size_t i = 0; i < kOverviewColumns; i++)
         overview[i] = 0;

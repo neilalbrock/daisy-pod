@@ -102,14 +102,13 @@ SlowEngine     engine;
 Limiter        limiter; // on dry + wet, so a loud wet signal doesn't clip
 CpuLoadMeter   cpu_meter;
 QspiFlash      flash(hw.seed.qspi);
-Presets        presets;
+PresetsFor<kNumParams> presets;
 
 constexpr int kNumKnobPages = 4;
 constexpr int kPresetPage   = kNumKnobPages; // after the knob pages; its knobs do nothing
 constexpr int kNumPages     = kNumKnobPages + 1;
 constexpr int kNumKnobs     = 2;
 
-static_assert(kNumParams <= Presets::kMaxParams, "too many parameters for a preset");
 
 // Raw knob positions (0..1) per page, initial values chosen to sound sensible.
 PagedKnobs<kNumPages, kNumKnobs> pages({
@@ -288,21 +287,12 @@ void SendWeb(uint32_t now_ms)
             changed = true;
     }
 
-    weblink::Writer &w     = web_out;
-    int              param = 0;
-    switch(web.Next(now_ms, changed, &param))
+    weblink::Writer &w = web_out;
+    switch(web.Next(now_ms, changed))
     {
         case weblink::Session::Send::kHello: WriteHello(w, hw.AudioSampleRate()); break;
-        case weblink::Session::Send::kParam: weblink::WriteParam(w, param, kParams[param]); break;
-        case weblink::Session::Send::kState:
-            w.Begin(weblink::Msg::kState);
-            w.U7(kNumParams);
-            for(int i = 0; i < kNumParams; i++)
-            {
-                w.U14((uint32_t)raw[i]);
-                web_state[i] = raw[i];
-            }
-            break;
+        case weblink::Session::Send::kParam: web.WriteParams(w); break;
+        case weblink::Session::Send::kState: web.WriteState(w, raw, web_state); break;
         case weblink::Session::Send::kFrame:
             ReadTelemetry();
             WriteFrame(w, telemetry, cpu_meter.GetAvgCpuLoad(), cpu_meter.GetMaxCpuLoad());
@@ -510,7 +500,7 @@ int main(void)
     engine.Init(hw.AudioSampleRate(), hw.AudioBlockSize(), reverb_mem);
     limiter.Init(hw.AudioSampleRate());
     cpu_meter.Init(hw.AudioSampleRate(), hw.AudioBlockSize());
-    web.Init(kNumParams);
+    web.Init(kParams, kNumParams);
     web_out.Init(web_buffer);
 
     MidiUsbHandler::Config usb_cfg;

@@ -18,6 +18,9 @@
 // applied anything saved. Init does it at power-up when asked (both buttons
 // held: see factory_reset.h), and Reset() while running.
 //
+// Its arrays are sized by the app: declare a PresetsFor<kNumParams>, and
+// check the list's names with UniqueKeys where it's defined.
+//
 // Threads: the audio callback asks (Select, Step, Save) and applies what
 // the main loop has read (Apply), so it stays the only writer of the app's
 // state. The main loop does all the flash work (Poll): an erase blocks for
@@ -32,11 +35,31 @@
 #include "preset_store.h"
 #include "web_link.h"
 
+// The key the slot last selected is saved under, with the globals.
+constexpr const char *kPresetSlotName = "@slot";
+
+// True if no two of the parameters' names (nor one and the slot's) have
+// the same key, so each value comes back where it was saved. For a
+// static_assert beside the app's parameter list.
+constexpr bool UniqueKeys(const weblink::Param *params, int n)
+{
+    for(int i = 0; i < n; i++)
+    {
+        if(PresetStore::Key(params[i].name) == PresetStore::Key(kPresetSlotName))
+            return false;
+        for(int j = i + 1; j < n; j++)
+            if(PresetStore::Key(params[i].name) == PresetStore::Key(params[j].name))
+                return false;
+    }
+    return true;
+}
+
 class Presets
 {
   public:
-    static constexpr int kSlots     = PresetStore::kSlots;
-    static constexpr int kMaxParams = 64;
+    static constexpr int kSlots = PresetStore::kSlots;
+    // Stored parameters, plus the slot saved with the globals.
+    static constexpr int kMaxParams = PresetStore::kMaxEntries - 1;
 
     using GetFn = int (*)(int index);
     using SetFn = void (*)(int index, int raw);
@@ -74,6 +97,24 @@ class Presets
     // after a save; dim white before any slot is selected.
     void LedColour(uint32_t now_ms, float *r, float *g, float *b) const;
 
+  protected:
+    static constexpr int kArrays = 6; // of values, each num_params long: see below
+
+    // PresetsFor's arrays: keys, kArrays x capacity values, and a record's
+    // buffer for capacity + 1 entries.
+    Presets(int capacity, uint16_t *keys, int16_t *values, uint8_t *record)
+    : capacity_(capacity),
+      keys_(keys),
+      pending_(values),
+      defaults_(values + capacity),
+      loaded_(values + 2 * capacity),
+      seen_(values + 3 * capacity),
+      saved_(values + 4 * capacity),
+      scratch_(values + 5 * capacity),
+      record_(record)
+    {
+    }
+
   private:
     static constexpr uint32_t kGlobalsDelayMs = 3000; // after the last change
 
@@ -87,7 +128,8 @@ class Presets
     int                   num_params_ = 0;
     GetFn                 get_        = nullptr;
     SetFn                 set_        = nullptr;
-    uint16_t              keys_[kMaxParams] = {};
+    int                   capacity_;
+    uint16_t             *keys_;
 
     // Callback to main loop: requests, -1 for none.
     volatile int  select_req_ = -1, save_req_ = -1;
@@ -96,7 +138,7 @@ class Presets
 
     // Main loop to callback: a preset read and waiting to be applied, then
     // back once it has been.
-    int16_t       pending_[kMaxParams] = {};
+    int16_t      *pending_;
     volatile bool pending_ready_ = false, applied_ = false;
 
     // The main loop's.
@@ -104,10 +146,27 @@ class Presets
     volatile uint32_t used_     = 0; // a bit per slot holding a preset
     volatile bool     modified_ = false;
     volatile uint32_t saved_at_ = 0;
-    int16_t           defaults_[kMaxParams] = {}; // every stored setting, before Init
-    int16_t           loaded_[kMaxParams] = {}; // the preset as selected or saved
-    int16_t           seen_[kMaxParams]   = {}; // the globals, as last seen
-    int16_t           saved_[kMaxParams]  = {}; // ... and as last saved
+    int16_t          *defaults_; // every stored setting, before Init
+    int16_t          *loaded_;   // the preset as selected or saved
+    int16_t          *seen_;     // the globals, as last seen
+    int16_t          *saved_;    // ... and as last saved
+    int16_t          *scratch_;  // for a snapshot
+    uint8_t          *record_;   // a record being written
     int               seen_slot_ = -1, saved_slot_ = -1;
     uint32_t          changed_at_ = 0;
+};
+
+// Presets for an app with num_params parameters.
+template <int num_params>
+class PresetsFor : public Presets
+{
+    static_assert(num_params <= kMaxParams, "too many parameters for a preset");
+
+  public:
+    PresetsFor() : Presets(num_params, keys_, values_, record_) {}
+
+  private:
+    uint16_t keys_[num_params]               = {};
+    int16_t  values_[kArrays * num_params]   = {};
+    alignas(4) uint8_t record_[PresetStore::RecordSize(num_params + 1)] = {};
 };

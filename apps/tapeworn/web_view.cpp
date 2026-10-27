@@ -35,7 +35,7 @@ constexpr uint8_t Count(const T (&)[N])
 }
 } // namespace
 
-const weblink::Param kParams[kNumParams] = {
+constexpr weblink::Param kParams[kNumParams] = {
     {"Model", Kind::kChoice, 0, model_names, TapeModel::kNumModels, 1, Store::kPreset},
     {"Wow", Kind::kContinuous, 1, nullptr, 0, 0, Store::kPreset},
     {"Flutter", Kind::kContinuous, 1, nullptr, 0, 0, Store::kPreset},
@@ -50,6 +50,7 @@ const weblink::Param kParams[kNumParams] = {
     {"Bypass", Kind::kToggle, 6, nullptr, 0, 0, Store::kNone},
     {"Mono in", Kind::kToggle, 6, nullptr, 0, 0, Store::kGlobal},
 };
+static_assert(UniqueKeys(kParams, kNumParams), "two parameter names share a preset key");
 
 float SpeedCents(float speed)
 {

@@ -84,7 +84,7 @@ void WriteHello(Writer &w, const Hello &h)
     w.U7(h.num_meters);
     for(int i = 0; i < h.num_meters; i++)
         w.Str(h.meters[i]);
-    w.U7(h.num_params);
+    w.U14(h.num_params);
 
     // Added after the first version; the page reads them if present.
     w.U7(h.num_traces);
@@ -103,8 +103,7 @@ void WriteHello(Writer &w, const Hello &h)
 
 void WriteParam(Writer &w, int index, const Param &p)
 {
-    w.Begin(Msg::kParam);
-    w.U7((uint32_t)index);
+    w.U14((uint32_t)index);
     w.U7((uint32_t)p.kind);
     w.U7(p.group);
     w.U7(p.columns);
@@ -149,10 +148,10 @@ bool Parse(const uint8_t *data, int length, Command *out)
         case Msg::kRequest:
         case Msg::kKeepAlive: return true;
         case Msg::kSet:
-            if(length < 6)
+            if(length < 7)
                 return false;
-            out->index = data[3];
-            out->raw   = (data[4] << 7) | data[5];
+            out->index = (uint16_t)((data[3] << 7) | data[4]);
+            out->raw   = (data[5] << 7) | data[6];
             return true;
         case Msg::kPresetSelect:
         case Msg::kPresetSave:
@@ -181,7 +180,7 @@ bool Session::Receive(const uint8_t *data, int length, uint32_t now_ms, Command 
     return true;
 }
 
-Session::Send Session::Next(uint32_t now_ms, bool state_changed, int *param)
+Session::Send Session::Next(uint32_t now_ms, bool state_changed)
 {
     if(!heard_ || now_ms - last_heard_ > kTimeoutMs)
         return Send::kNothing;
@@ -190,23 +189,26 @@ Session::Send Session::Next(uint32_t now_ms, bool state_changed, int *param)
     {
         requested_  = false;
         next_param_ = -1;
+        next_value_ = 0; // the state follows the parameters
     }
-    if(next_param_ < num_params_)
+    if(next_param_ < 0)
     {
-        // Hello, then each parameter, one per call.
-        int i = next_param_++;
-        if(i < 0)
-        {
-            restart_ = true;
-            return Send::kHello;
-        }
-        *param = i;
-        return Send::kParam;
+        next_param_ = 0;
+        restart_    = true;
+        return Send::kHello;
     }
+    // Then the parameters, a message's worth per call.
+    if(next_param_ < num_params_)
+        return Send::kParam;
+
+    // The state goes out in runs, one per call, back to back.
+    if(next_value_ < num_params_)
+        return Send::kState;
     uint32_t since = now_ms - last_state_;
     if((state_changed && since >= kChangeMs) || since >= kStateMs)
     {
         last_state_ = now_ms;
+        next_value_ = 0;
         return Send::kState;
     }
     if(now_ms - last_frame_ >= kFrameMs)
@@ -215,6 +217,43 @@ Session::Send Session::Next(uint32_t now_ms, bool state_changed, int *param)
         return Send::kFrame;
     }
     return Send::kNothing;
+}
+
+void Session::WriteParams(Writer &w)
+{
+    w.Begin(Msg::kParam);
+    while(next_param_ < num_params_)
+    {
+        size_t mark = w.Mark();
+        WriteParam(w, next_param_, params_[next_param_]);
+        if(w.Overflowed())
+        {
+            // Into the next message, unless it fits nowhere: then skip it.
+            if(mark > 4)
+                w.Rewind(mark);
+            else
+                next_param_++;
+            break;
+        }
+        next_param_++;
+    }
+}
+
+void Session::WriteState(Writer &w, const int *raw, int *sent)
+{
+    int first = next_value_;
+    int count = num_params_ - first;
+    if(count > kStateRun)
+        count = kStateRun;
+    w.Begin(Msg::kState);
+    w.U14((uint32_t)first);
+    w.U14((uint32_t)count);
+    for(int i = first; i < first + count; i++)
+    {
+        w.U14((uint32_t)raw[i]);
+        sent[i] = raw[i];
+    }
+    next_value_ = first + count;
 }
 
 bool Session::TakeRestart()

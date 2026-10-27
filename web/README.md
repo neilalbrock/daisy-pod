@@ -68,11 +68,12 @@ modules, with no build step.
 
 ## How it talks to the Pod
 
-All in SysEx, `F0 7D 01 <type> <payload> F7` (`7D` is the ID set aside for
-non-commercial use). The page sends a request when it connects and a
+All in SysEx, `F0 7D 02 <type> <payload> F7` (`7D` is the ID set aside for
+non-commercial use, `02` the protocol version). The page sends a request when it connects and a
 keep-alive every second; the app answers with a hello (its name, buffer
-layout, group and meter names, and any traces and X-Y plot), one message per
-parameter, and then its state (on change, and every half second) and a
+layout, group and meter names, and any traces and X-Y plot), the parameters'
+descriptions (as many to a message as fit), and then its state (on change, and every half second,
+in runs of up to 256 values) and a
 telemetry frame every 30 ms, until the keep-alives stop. So nothing is sent to a DAW unless this page is
 open. Settings go back as `set` messages, by parameter index, and presets as
 `preset select` and `preset save` messages, by slot, and `preset reset`; each frame says which
@@ -109,8 +110,9 @@ On the firmware side (see `web_view.{h,cpp}` and the web link section of
 2. Feed SysEx from the MIDI handler to `weblink::Session::Receive` in the
    audio callback, and apply the `set` commands it returns.
 3. From the main loop, call `Session::Next` every 10 ms or so and send what
-   it asks for: the hello (`weblink::WriteHello`), each parameter, the state,
-   or a frame. A frame holds whichever sections the app has (tempo, levels,
+   it asks for: the hello (`weblink::WriteHello`), the parameters
+   (`Session::WriteParams`), the state (`Session::WriteState`), or a frame.
+   A frame holds whichever sections the app has (tempo, levels,
    CPU, buffer and heads, overview, traces, X-Y); the page draws the ones it
    gets. Traces are the easiest way to show something new: describe them in
    the hello and send their values, and the page plots them.

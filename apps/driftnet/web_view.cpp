@@ -47,7 +47,7 @@ float Db(float gain)
 }
 } // namespace
 
-const weblink::Param kParams[kNumParams] = {
+constexpr weblink::Param kParams[kNumParams] = {
     {"Time", Kind::kContinuous, 0, nullptr, 0, 0, Store::kPreset},
     {"Wet modify", Kind::kContinuous, 0, nullptr, 0, 0, Store::kPreset},
     {"Length", Kind::kContinuous, 1, nullptr, 0, 0, Store::kPreset},
@@ -106,6 +106,7 @@ const weblink::Param kParams[kNumParams] = {
     {"Release", Kind::kContinuous, 8, nullptr, 0, 0, Store::kPreset},
     {"Portamento", Kind::kContinuous, 8, nullptr, 0, 0, Store::kPreset},
 };
+static_assert(UniqueKeys(kParams, kNumParams), "two parameter names share a preset key");
 
 void WriteHello(weblink::Writer &w, float sample_rate, uint32_t ring_frames)
 {

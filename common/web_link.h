@@ -6,8 +6,8 @@
 // frame (tempo, levels, CPU, buffer and read heads) back as SysEx. Nothing
 // is sent when no page is listening, so a DAW never sees it.
 //
-// Every message is F0 7D 01 <type> <payload> F7: 7D is the manufacturer ID
-// set aside for non-commercial use, 01 the protocol version. Payload
+// Every message is F0 7D 02 <type> <payload> F7: 7D is the manufacturer ID
+// set aside for non-commercial use, 02 the protocol version. Payload
 // numbers are 7, 14 or 21 bits wide, most significant 7 bits first, and
 // strings are 7-bit ASCII ending in 0. web/js/protocol.js is the other half
 // and must match.
@@ -24,7 +24,7 @@
 namespace weblink
 {
 constexpr uint8_t kId      = 0x7D;
-constexpr uint8_t kVersion = 1;
+constexpr uint8_t kVersion = 2; // 2: 14-bit parameter indices
 
 // libDaisy's USB MIDI transmit buffer holds 768 bytes of SysEx and doesn't
 // check, so stay well under it.
@@ -34,13 +34,13 @@ enum class Msg : uint8_t
 {
     // App to page
     kHello = 0x01, // a Hello
-    kParam = 0x02, // one parameter's description
-    kState = 0x03, // every parameter's value
+    kParam = 0x02, // parameters' descriptions, as many as fit
+    kState = 0x03, // first (14), count (14), then that run of values (14 each)
     kFrame = 0x04, // telemetry sections, below
 
     // Page to app
     kRequest      = 0x40, // send everything from the start
-    kSet          = 0x41, // index (7), value (14)
+    kSet          = 0x41, // index (14), value (14)
     kKeepAlive    = 0x42,
     kPresetSelect = 0x43, // slot (7): load it, or just select it if empty
     kPresetSave   = 0x44, // slot (7): save the current settings there
@@ -99,7 +99,7 @@ struct Hello
     uint8_t            num_groups;
     const char *const *meters; // kLevels, in order
     uint8_t            num_meters;
-    uint8_t            num_params;
+    uint16_t           num_params;
     const Trace       *traces; // kTraces, in order
     uint8_t            num_traces;
     uint8_t            trace_period_ms; // between points
@@ -151,6 +151,16 @@ class Writer
     // Bytes left before kMaxMessage, keeping one for F7.
     size_t Room() const { return n_ + 1 < kMaxMessage ? kMaxMessage - 1 - n_ : 0; }
 
+    // To take back what didn't fit: Mark() before writing it, then, if
+    // Overflowed(), Rewind() to the mark.
+    size_t Mark() const { return n_; }
+    bool   Overflowed() const { return overflow_; }
+    void   Rewind(size_t mark)
+    {
+        n_        = mark;
+        overflow_ = false;
+    }
+
     uint8_t *Data() { return buf_; }
 
   private:
@@ -163,7 +173,7 @@ class Writer
 
 // Standard messages.
 void WriteHello(Writer &w, const Hello &h);
-void WriteParam(Writer &w, int index, const Param &p);
+void WriteParam(Writer &w, int index, const Param &p); // one description, within a kParam
 void WriteHead(Writer &w, const Head &h);
 
 // Values for the kTraces and kXY sections.
@@ -173,9 +183,9 @@ void WriteXY(Writer &w, float x, float y);                // each -1..1
 // What a command from the page asks for.
 struct Command
 {
-    Msg     type;
-    uint8_t index; // kSet: the parameter; kPresetSelect, kPresetSave: the slot
-    int     raw;   // kSet: the 14-bit value
+    Msg      type;
+    uint16_t index; // kSet: the parameter; kPresetSelect, kPresetSave: the slot
+    int      raw;   // kSet: the 14-bit value
 };
 
 // Parses a SysEx payload as libDaisy delivers it (no F0 or F7). False if
@@ -192,8 +202,13 @@ class Session
     static constexpr uint32_t kStateMs   = 500; // resend state at least this often
     static constexpr uint32_t kChangeMs  = 50;  // and changes at most this often
     static constexpr uint32_t kFrameMs   = 30;
+    static constexpr int      kStateRun  = 256; // values in one kState message
 
-    void Init(int num_params) { num_params_ = num_params; }
+    void Init(const Param *params, int num_params)
+    {
+        params_     = params;
+        num_params_ = num_params;
+    }
 
     // Handles a request or keep-alive. Returns true, with *command filled,
     // for a kSet or a preset command the app should act on.
@@ -208,20 +223,29 @@ class Session
         kFrame,
     };
 
-    // The message to send now, if any. For kParam, *param is its index.
-    // state_changed: the app's values differ from the last state sent.
-    Send Next(uint32_t now_ms, bool state_changed, int *param);
+    // The message to send now, if any. state_changed: the app's values
+    // differ from the last state sent. For kHello and kFrame the app writes
+    // the message; for kParam and kState, WriteParams and WriteState do.
+    Send Next(uint32_t now_ms, bool state_changed);
+
+    // The next parameters' descriptions, as many as fit in one message.
+    void WriteParams(Writer &w);
+    // The next run of values, from raw (every parameter's, as the app reads
+    // them), copying what it sends into sent (the app's last state sent).
+    void WriteState(Writer &w, const int *raw, int *sent);
 
     // True once each time the hello goes out (to a new page, or on
     // request): the app should start its buffer overview from scratch.
     bool TakeRestart();
 
   private:
+    const Param      *params_     = nullptr;
     int               num_params_ = 0;
     volatile uint32_t last_heard_ = 0;
     volatile bool     heard_      = false;
     volatile bool     requested_  = false;
     int               next_param_ = -1; // -1: hello next
+    int               next_value_ = 0;  // the state's next run, until num_params_
     bool              restart_    = false;
     uint32_t          last_state_ = 0;
     uint32_t          last_frame_ = 0;
