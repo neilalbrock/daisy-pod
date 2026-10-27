@@ -20,6 +20,7 @@ void SynthEngine::Init(const Wavetables *tables, float sample_rate, size_t block
     sample_rate_ = sample_rate;
     block_rate_  = sample_rate / (float)block_size;
     VoiceFilter::Init(sample_rate);
+    Voice::SetFullScale(kVoiceLevel);
     for(int i = 0; i < kVoices; i++)
         voices_[i].Init(tables, sample_rate, block_size, 0x1234567u + 7919u * (uint32_t)i);
     SetPatch(patch_);
@@ -63,7 +64,20 @@ void SynthEngine::SetPatch(const Patch &p)
     f.filter_env = Bipolar(p.filter_env) * 8.0f;
     f.filter_vel = Bipolar(p.filter_vel) * 8.0f;
     f.track      = Bipolar(p.track) * 2.0f;
-    f.dirt       = p.dirt * p.dirt * 0.5f;
+    f.dirt       = p.dirt * p.dirt;
+    f.dirt_type  = (Dirt::Type)p.dirt_type;
+
+    // Flavour's pitch drift on osc 1 is a share of Bend Range, as on the
+    // Protein: none at a range of 0.
+    f.flavour       = p.flavour;
+    f.flavour_pitch = 0.08f * (float)BendRange(p.bend_range);
+    f.clean         = p.osc_mode == kOscClean;
+    f.dac           = p.dac;
+    if(p.dac != dac_set_)
+    {
+        dac_set_   = p.dac;
+        f.dac_step = p.dac > 0.0f ? exp2f(1.0f - DacBits(p.dac)) : 0.0f;
+    }
 
     for(int e = 0; e < Voice::kNumEnvs; e++)
     {
@@ -258,6 +272,7 @@ SynthEngine::Probe SynthEngine::GetProbe() const
     p.cutoff  = v.CutoffHz();
     p.amp     = v.AmpEnv();
     p.note    = v.Note();
+    p.drift   = v.DriftCents();
     p.voices  = 0;
     for(const Voice &u : voices_)
         if(u.Active())

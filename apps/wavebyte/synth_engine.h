@@ -46,6 +46,13 @@ class SynthEngine
 
     static constexpr int kNumPanModes = 6; // Fix, then Rand 1-5
 
+    enum OscMode
+    {
+        kOsc8Bit,
+        kOscClean,
+        kNumOscModes,
+    };
+
     struct Patch
     {
         struct Osc
@@ -73,6 +80,11 @@ class SynthEngine
         float filter_vel = 0.5f; // bipolar
         float track      = 0.625f; // bipolar, -200%..+200%
         float dirt       = 0.0f;
+        int   dirt_type  = Dirt::kStatic;
+
+        float flavour  = 0.0f;
+        float dac      = 0.3f;
+        int   osc_mode = kOsc8Bit;
 
         // Wave, filter and amp envelopes: attack, decay, sustain, release.
         float env[Voice::kNumEnvs][4] = {
@@ -94,6 +106,7 @@ class SynthEngine
         float cutoff;  // Hz
         float amp;     // its amp envelope
         int   note;
+        float drift;  // Flavour's on osc 1, cents
         int   voices; // sounding
     };
 
@@ -118,6 +131,7 @@ class SynthEngine
     static int   BendRange(float x) { return (int)(x * 12.0f + 0.5f); }
     static float GlideSeconds(float x); // 0: off
     static float Bipolar(float x) { return 2.0f * x - 1.0f; }
+    static float DacBits(float x) { return 12.0f - 6.0f * x; } // for x > 0; 0 is off
 
   private:
     static constexpr int kMaxHeld = 16;
@@ -133,6 +147,7 @@ class SynthEngine
     Voice::Frame      frame_ = {};
     Patch             patch_;
     float             glide_set_ = -1.0f; // the settings frame_'s coefficients are for
+    float             dac_set_   = -1.0f;
     float             env_set_[Voice::kNumEnvs][4] = {{-1.0f}, {-1.0f}, {-1.0f}};
     uint32_t          started_ = 0; // notes so far, to age the voices
     int               last_voice_ = 0;

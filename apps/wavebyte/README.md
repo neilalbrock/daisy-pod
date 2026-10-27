@@ -2,9 +2,11 @@
 
 An 8-voice wavetable synth, our own take on the Waldorf Protein. Each voice
 has two wavetable oscillators reading 8-bit waves with no interpolation,
-as the Microwave's chip did. A filter follows, after the Protein's model of
-the CEM chip, or a Drive in its place, then three envelopes. Play it over
-MIDI, or with button 1.
+as the Microwave's chip did (or smoothly, in Clean mode), and Dirt's
+noises. A filter follows, after the Protein's model of the CEM chip, or a
+Drive in its place, then an amplifier that models the voice's DAC, and
+three envelopes. Flavour adds small, steady variations. Play it over MIDI,
+or with button 1.
 
 ```sh
 make APP=wavebyte program-dfu
@@ -13,9 +15,9 @@ make APP=wavebyte program-dfu
 Every control is also on the [web page](#the-web-page). Eight
 [presets](#presets) are kept in flash.
 
-This is the first of several stages (see [Roadmap](#roadmap)). It has one
-layer, the oscillators, filter, envelopes, voice modes and glide. Next come
-Dirt's other noises and Flavour, then the LFOs, mod matrix and MPE, the
+This is the second of several stages (see [Roadmap](#roadmap)). It has one
+layer, the oscillators, Dirt, filter, envelopes, voice modes, glide,
+Flavour and the DAC model. Next come the LFOs, mod matrix and MPE, the
 effects, the arpeggiator and sequencer, and the Protein's four layers.
 
 ## Signal flow
@@ -23,11 +25,12 @@ effects, the arpeggiator and sequencer, and the Protein's four layers.
 ```
 per voice (8):
   osc 1 (table, wave) --+
-  osc 2 (table, wave) --+-- + Dirt -> filter or Drive -> amp (pan) --+
-                                                                     |
-  wave env -> both waves   filter env -> cutoff   amp env -> level   |
-                                                                     |
-all voices --------------------------------------------------------- + -> Master -> limiter -> out
+  osc 2 (table, wave) --+-- + Dirt -> filter or Drive -> amp, DAC (pan) --+
+                                                                          |
+  wave env -> both waves   filter env -> cutoff   amp env -> level        |
+  Flavour -> waves, osc 1 pitch, cutoff, level                            |
+                                                                          |
+all voices -------------------------------------------------------------- + -> Master -> limiter -> out
 ```
 
 ## Wavetables
@@ -46,34 +49,39 @@ FM, bells and mallets, organ drawbars, combs, echoes within the cycle,
 phase distortion, fewer steps or bits, random spectra, morphs between basic
 shapes, and byte patterns.
 
-An oscillator steps from wave to wave rather than crossfading, and plays
-each wave's 128 samples with no interpolation. That stepping and the 8-bit
-samples are the grit: the aliasing is part of the sound.
+In 8-bit mode an oscillator steps from wave to wave rather than
+crossfading, and plays each wave's 128 samples with no interpolation. That
+stepping and the 8-bit samples are the grit: the aliasing is part of the
+sound. **Clean** mode (on the Character page) interpolates between samples
+and crossfades between neighbouring waves, so a sweep through a table is
+smooth and the top end is softer. It costs a little more CPU.
 
 ## Controls
 
-The two knobs are shared across seven pages. Press the encoder to change
+The two knobs are shared across eight pages. Press the encoder to change
 page (LED 2 shows which). As on the Protein's panel, each knob has a second
 job under **Shift** (button 2): hold Shift while turning, or tap it to keep
 it on (LED 1 glows blue) and tap again to let go. After a change of page or
 Shift a knob does nothing until you move it, so values don't jump. Turning
-the encoder sets that page's choice, and LED 2 flashes it for a second.
+the encoder sets that page's choice, and LED 2 flashes it for a second. On
+the Filter page, turning it with Shift sets the Dirt type instead.
 
 | Page (LED 2) | Knob 1 / Shift | Knob 2 / Shift | Encoder turn |
 |---|---|---|---|
 | 1 Osc 1 (red) | Wave / Level | Env Amnt / Vel | Table |
-| 2 Osc 2 (yellow) | Wave / Level | Env Amnt / Vel | Table |
-| 3 Pitch (green) | Semitone 2 / Semitone 1 | Detune 2 / Detune 1 | Voice: Poly, Mono, Legato |
-| 4 Filter (teal) | Cutoff / Keytrack | Resonance / Dirt | Type: LP 24, LP 12, HP, Drive, Off |
-| 5 Env & Glide (blue) | Filter Env / Filter Vel | Glide / Bend Range | Glide: Onset, Legato |
-| 6 Envelopes (violet) | Attack / Sustain | Decay / Release | Envelope: Wave, Filter, Amp |
-| 7 Amp (magenta) | Volume / Vel Amnt | Pan / Master | Pan: Fix, Rand 1-5 |
+| 2 Osc 2 (orange) | Wave / Level | Env Amnt / Vel | Table |
+| 3 Pitch (lime) | Semitone 2 / Semitone 1 | Detune 2 / Detune 1 | Voice: Poly, Mono, Legato |
+| 4 Filter (green) | Cutoff / Keytrack | Resonance / Dirt | Type: LP 24, LP 12, HP, Drive, Off. With Shift, Dirt type: Static, Crackle, Geiger, Click, Burst 1-3, Ring Mod |
+| 5 Env & Glide (teal) | Filter Env / Filter Vel | Glide / Bend Range | Glide: Onset, Legato |
+| 6 Envelopes (blue) | Attack / Sustain | Decay / Release | Envelope: Wave, Filter, Amp |
+| 7 Amp (violet) | Volume / Vel Amnt | Pan / Master | Pan: Fix, Rand 1-5 |
+| 8 Character (pink) | Flavour (Shift: the same) | DAC (Shift: the same) | Osc: 8-bit, Clean |
 
 | Control | Function |
 |---|---|
 | Encoder press | Next page |
 | Encoder long press (0.6 s) | All notes off (LED 1 flashes red). On the preset page, it saves instead |
-| Page 8 (LED 2: the slot) | Presets: the encoder turn selects a slot (see [Presets](#presets)) |
+| Page 9 (LED 2: the slot) | Presets: the encoder turn selects a slot (see [Presets](#presets)) |
 | Button 1 | Play: sounds the play note while held, as the Protein's Play button does. Turn the encoder while holding it to change the note, by octaves with Shift |
 | Button 2 | Shift |
 
@@ -112,7 +120,15 @@ LED 1 shows the last voice's amp envelope, and glows blue with Shift on.
   - PickUp: folds back as the level rises, so it changes with the envelope
   - Diode: hard
   - Crunch: a sine folder, FM-like at high amounts
-- **Dirt:** white noise into the filter. More kinds come in the next stage.
+- **Dirt:** noise into the filter, beside the oscillators, at the Dirt
+  level. The type is set with Shift and the encoder on the Filter page:
+  - Static: white noise
+  - Crackle: short random pulses, many faint and a few loud, like a record
+  - Geiger: sparse random ticks, like a Geiger counter
+  - Click: one short noise pulse as each note starts
+  - Burst 1, 2, 3: one noise burst as each note starts, 10, 40 and 150 ms
+  - Ring Mod: osc 1 times osc 2, at their full level whatever the Level
+    knobs say. Turn both Levels down to hear only the ring modulation
 - **Envelopes:** attack 0.5 ms to 10 s, in a straight line. Decay and
   release are exponential, 1 ms to 20 s. A new note attacks from wherever
   the envelope is, so a retriggered voice doesn't click.
@@ -121,9 +137,23 @@ LED 1 shows the last voice's amp envelope, and glows blue with Shift on.
   preset, like the Protein's Volume dial.
 - **Pan:** Fix holds every voice at Pan. Rand 1-5 throws each note further
   from it at random.
+- **Flavour:** small, steady variations, mostly in wave position and
+  pitch, as on the Protein. Each voice drifts at rates of its own, so the
+  variations are methodical rather than random, and each note starts a
+  little differently. At full: both wave positions move about ±3 waves,
+  the cutoff ±0.3 octaves, the level a little per note, and osc 1's pitch
+  drifts by up to 8% of Bend Range (±16 cents at a range of 2). As on the
+  Protein, a Bend Range of 0 means no pitch drift at all.
+- **DAC:** the amplifier models each voice's digital-to-analog converter.
+  The level is applied before conversion, at 12 bits just above 0 down to
+  6 bits at full, so quiet tails and soft notes turn grainy. Each voice's
+  converter also has its own small gain error and a little crossover
+  distortion around zero. At 0 the converter is ideal.
+- **Osc:** 8-bit, or Clean (see [Wavetables](#wavetables)).
 
 Starting values: Reso Saw on both oscillators, osc 2 a few cents up,
-LP 24 at 7 kHz with a little resonance and filter envelope, Poly, no glide.
+LP 24 at 7 kHz with a little resonance and filter envelope, Poly, no glide,
+no Flavour, DAC at 0.3, 8-bit.
 
 ## MIDI
 
@@ -142,7 +172,7 @@ Wavebyte listens on every channel, on the Pod's TRS MIDI input and over USB:
 Eight preset slots, kept in the Seed's flash, so they survive power-off and
 reflashing. Every app keeps its own.
 
-- **On the Pod:** page 8 is the preset page. Turning the encoder there
+- **On the Pod:** page 9 is the preset page. Turning the encoder there
   selects a slot and loads its preset; an empty slot is only selected,
   keeping the sound, ready to save into. A long press on the encoder saves
   the current settings to the slot. The knobs do nothing on this page.
@@ -154,7 +184,7 @@ reflashing. Every app keeps its own.
   already selected reloads it, dropping any changes.
 
 A preset holds the sound: every knob but Master, the tables and the other
-choices, Limit Waves and Fixed. Master and the play note are saved on their
+choices (Dirt type and Osc mode among them), Limit Waves and Fixed. Master and the play note are saved on their
 own, a few seconds after they last change. At power-up they come back, then
 the preset last selected.
 
@@ -168,8 +198,8 @@ back to its defaults.
 
 Run `make web` and open http://localhost:8000 in Chrome or Edge with the Pod
 connected by USB. The page shows the output level, CPU, and traces of the
-last voice played: both wave positions, its cutoff, its amp envelope, and
-how many voices are sounding. Every control is there too, with Limit Waves,
+last voice played: both wave positions, its cutoff, its amp envelope,
+Flavour's pitch drift on osc 1, and how many voices are sounding. Every control is there too, with Limit Waves,
 Fixed, the play note and a Play switch, which the Pod doesn't have. See
 [web/README.md](../../web/README.md).
 
@@ -181,12 +211,12 @@ before the next.
 1. **Done:** one layer of 8 voices, 64 generated tables, oscillators,
    filter types and Drive, three ADSRs with velocity, Poly, Mono and Legato,
    Glide, pitch bend, Play and Shift, presets and the web page.
-2. **Character:** Dirt's other noises (Crackle, Geiger, Click, Burst 1-3,
-   and Ring Mod of osc 1 by osc 2); Flavour, small deliberate variations,
-   mostly in wave position and pitch (its osc 1 pitch drift scales with Bend
-   Range, as on the Protein, so a range of 0 means none); a model of the
-   per-voice DACs; and a Clean mode for the oscillators beside the 8-bit
-   one.
+2. **Done:** Character: Dirt's other noises (Crackle, Geiger, Click, Burst
+   1-3, and Ring Mod of osc 1 by osc 2); Flavour, small deliberate
+   variations, mostly in wave position and pitch (its osc 1 pitch drift
+   scales with Bend Range, as on the Protein, so a range of 0 means none);
+   a model of the per-voice DACs; and a Clean mode for the oscillators
+   beside the 8-bit one.
 3. **Modulation:** two LFOs (seven shapes, Speed or a tempo Ratio from 4
    bars to 1/64, Free or Clocked, Global or per Voice); the 8-slot matrix
    with the Protein's sources and targets; aftertouch; MPE (per-note bend

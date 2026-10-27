@@ -1,8 +1,8 @@
 // Wavebyte's touches on the generic page: the Pod's page colours (LED 2,
-// Hue(page / 7)) and readable units. Matches apps/wavebyte/main.cpp and
+// Hue(page / 8)) and readable units. Matches apps/wavebyte/main.cpp and
 // synth_engine.h, adsr.h and voice_filter.h.
 
-const GROUPS = ["Osc 1", "Osc 2", "Pitch", "Filter", "Env & Glide", "Envelopes", "Amp"];
+const GROUPS = ["Osc 1", "Osc 2", "Pitch", "Filter", "Env & Glide", "Envelopes", "Amp", "Character"];
 
 // common/colour.h's Hue(), as a CSS colour.
 function hue(h) {
@@ -65,6 +65,8 @@ const FORMATS = {
   "Bend Range": (v) => `${Math.round(v * 12)} st`,
   Pan: (v) => (Math.abs(v - 0.5) < 0.01 ? "centre" : v < 0.5 ? `L ${pct(1 - 2 * v)}` : `R ${pct(2 * v - 1)}`),
   "Play Note": (v) => noteName(24 + Math.round(v * 72)),
+  // SynthEngine::DacBits: 12 bits just above 0, 6 at full.
+  DAC: (v) => (v <= 0 ? "ideal" : `${(12 - 6 * v).toFixed(1)} bit`),
 };
 for (const env of ["Wave", "Filter", "Amp"]) {
   FORMATS[`${env} Attack`] = attack;

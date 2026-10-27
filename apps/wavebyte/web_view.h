@@ -3,7 +3,8 @@
 // The parameter list in the page's order, and the hello and telemetry
 // frame messages (common/web_link.h). Frames carry the output level, CPU,
 // and traces of the last voice played: both oscillators' wave positions,
-// its cutoff and amp envelope, and how many voices are sounding. main.cpp
+// its cutoff, amp envelope and Flavour's pitch drift, and how many voices
+// are sounding. main.cpp
 // reads and sets the values, collects the Telemetry in the audio callback
 // and sends the messages. libDaisy-free.
 
@@ -57,6 +58,8 @@ enum ParamId
     kParamPan,
     kParamAmpVel,
     kParamMaster,
+    kParamFlavour,
+    kParamDac,
     // The pages' encoder choices.
     kParamTable1,
     kParamTable2,
@@ -65,6 +68,9 @@ enum ParamId
     kParamGlideMode,
     kParamEnvSelect,
     kParamPanMode,
+    kParamOscMode,
+    // The Filter page's encoder turn with Shift.
+    kParamDirtType,
     // The web page's alone.
     kParamLimit1,
     kParamLimit2,
@@ -74,7 +80,7 @@ enum ParamId
     kParamPlay,
     kNumParams,
 };
-constexpr int kNumKnobParams = kParamMaster + 1;
+constexpr int kNumKnobParams = kParamDac + 1;
 constexpr int kFirstChoice   = kParamTable1;
 
 extern const weblink::Param kParams[kNumParams];
@@ -85,6 +91,7 @@ enum TraceId
     kTraceWave2,
     kTraceCutoff,
     kTraceAmp,
+    kTraceDrift,
     kTraceVoices,
     kNumTraces,
 };

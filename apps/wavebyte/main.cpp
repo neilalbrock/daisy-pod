@@ -1,28 +1,35 @@
 // Wavebyte - an 8-voice wavetable synth for the Daisy Pod (Daisy Seed 3)
 //
 // Our own take on the Waldorf Protein: two wavetable oscillators per voice
-// reading 8-bit waves with no interpolation, as the Microwave's chip did,
-// a filter after the Protein's model of the CEM chip (or a Drive in its
-// place), three envelopes and eight voices. Play it over MIDI, or with
+// reading 8-bit waves with no interpolation, as the Microwave's chip did
+// (or a Clean mode), Dirt's noises, a filter after the Protein's model of
+// the CEM chip (or a Drive in its place), three envelopes, Flavour and a
+// model of each voice's DAC, and eight voices. Play it over MIDI, or with
 // button 1.
 //
-// The two knobs are shared across seven pages; press the encoder to change
+// The two knobs are shared across eight pages; press the encoder to change
 // page (LED 2 shows which). Like the Protein's panel, each knob has a
 // second job under Shift (button 2): hold Shift while turning, or tap it to
 // keep it on (LED 1 glows blue) and tap again to let go. After a change of
 // page or Shift a knob does nothing until it is moved, so values don't
-// jump. Turning the encoder sets the page's choice.
+// jump. Turning the encoder sets the page's choice (on the Filter page,
+// with Shift, the Dirt type).
 //
-//   Page (LED 2)        Knob 1 / Shift          Knob 2 / Shift         Encoder turn
-//   1 Osc 1 (red)       Wave / Level            Env Amnt / Vel         Table
-//   2 Osc 2 (yellow)    Wave / Level            Env Amnt / Vel         Table
-//   3 Pitch (green)     Semitone 2 / 1          Detune 2 / 1           Voice: Poly, Mono, Legato
-//   4 Filter (teal)     Cutoff / Keytrack       Resonance / Dirt       LP 24, LP 12, HP, Drive, Off
-//   5 Env & Glide (blue) Filter Env / Vel       Glide / Bend Range     Glide: Onset, Legato
-//   6 Envelopes (violet) Attack / Sustain       Decay / Release        Envelope: Wave, Filter, Amp
-//   7 Amp (magenta)     Volume / Vel Amnt       Pan / Master           Pan: Fix, Rand 1-5
+//   Page (LED 2)          Knob 1 / Shift      Knob 2 / Shift      Encoder turn
+//   1 Osc 1 (red)         Wave / Level        Env Amnt / Vel      Table
+//   2 Osc 2 (orange)      Wave / Level        Env Amnt / Vel      Table
+//   3 Pitch (lime)        Semitone 2 / 1      Detune 2 / 1        Voice: Poly, Mono, Legato
+//   4 Filter (green)      Cutoff / Keytrack   Resonance / Dirt    LP 24, LP 12, HP, Drive, Off
+//                                                                 With Shift: Dirt type: Static,
+//                                                                 Crackle, Geiger, Click, Burst 1-3,
+//                                                                 Ring Mod
+//   5 Env & Glide (teal)  Filter Env / Vel    Glide / Bend Range  Glide: Onset, Legato
+//   6 Envelopes (blue)    Attack / Sustain    Decay / Release     Envelope: Wave, Filter, Amp
+//   7 Amp (violet)        Volume / Vel Amnt   Pan / Master        Pan: Fix, Rand 1-5
+//   8 Character (pink)    Flavour             DAC                 Osc: 8-bit, Clean
+//                         (Shift does nothing here)
 //
-//   Page 8 (LED 2: the slot) Presets. Encoder turn - select a slot, loading
+//   Page 9 (LED 2: the slot) Presets. Encoder turn - select a slot, loading
 //                            its preset; an empty one keeps the sound.
 //                            Encoder long press - save to the slot. LED 2
 //                            shows the slot's colour: dim if empty,
@@ -89,15 +96,17 @@ QspiFlash      flash(hw.seed.qspi);
 
 PresetsFor<kNumParams> presets;
 
-constexpr int kNumKnobPages = 7;
+constexpr int kNumKnobPages = 8;
 constexpr int kPresetPage   = kNumKnobPages; // after the knob pages; its knobs do nothing
 constexpr int kNumPages     = kNumKnobPages + 1;
 constexpr int kNumKnobs     = 2;
+constexpr int kFilterPage   = 3;
 constexpr int kEnvPage      = 5;
+constexpr int kCharPage     = 7; // one layer: Shift does nothing
 
 // Layers of the knobs: each page's, and its Shift layer; the envelope page
-// has a pair per envelope. A layer's knobs are parameters 2 x layer and
-// 2 x layer + 1 (web_view.h).
+// has a pair per envelope, and the Character page has no Shift layer. A
+// layer's knobs are parameters 2 x layer and 2 x layer + 1 (web_view.h).
 constexpr int kNumLayers  = kNumKnobParams / kNumKnobs + 1; // and the preset page's
 constexpr int kPresetLayer = kNumLayers - 1;
 
@@ -107,6 +116,8 @@ int Layer(int page, bool shift, int envelope)
         return kPresetLayer;
     if(page == kEnvPage)
         return 2 * kEnvPage + 2 * envelope + shift;
+    if(page == kCharPage)
+        return 2 * (kCharPage + 2);
     return 2 * (page < kEnvPage ? page : page + 2) + shift;
 }
 
@@ -130,6 +141,7 @@ PagedKnobs<kNumLayers, kNumKnobs> knobs({
     {1.0f, 0.4f},
     {0.8f, 0.5f},   // volume, pan centred
     {0.5f, 0.8f},   // amp vel, master
+    {0.0f, 0.3f},   // flavour, dac
     {0.0f, 0.0f},   // presets: unused
 });
 
@@ -139,13 +151,14 @@ PagedKnobs<kNumLayers, kNumKnobs> knobs({
 // the main loop reads it for the LEDs and the page.
 
 // Each knob page's encoder choice: tables, voice mode, filter type, glide
-// mode, the envelope shown, pan mode.
+// mode, the envelope shown, pan mode, oscillator mode.
 constexpr int kChoiceCounts[kNumKnobPages] = {Wavetables::kTables, Wavetables::kTables,
                                               SynthEngine::kNumVoiceModes, VoiceFilter::kNumTypes,
                                               SynthEngine::kNumGlideModes, Voice::kNumEnvs,
-                                              SynthEngine::kNumPanModes};
+                                              SynthEngine::kNumPanModes, SynthEngine::kNumOscModes};
 int  choices[kNumKnobPages] = {0, 0, SynthEngine::kPoly, VoiceFilter::kLp24,
-                               SynthEngine::kGlideOnset, Voice::kAmpEnv, 0};
+                               SynthEngine::kGlideOnset, Voice::kAmpEnv, 0, SynthEngine::kOsc8Bit};
+int  dirt_type = Dirt::kStatic; // the Filter page's choice with Shift
 bool limit[2]  = {};
 bool fixed[2]  = {};
 int  page      = 0;
@@ -162,8 +175,10 @@ bool web_play      = false;
 PressHold encoder_press(600); // hold: all notes off, or on the preset page, save
 PressHold shift_press(400);   // a tap keeps Shift on, or lets it go
 
-// Read by the main loop for the LEDs: flash until these times (ms).
+// Read by the main loop for the LEDs: flash until these times (ms), the
+// choice's colour.
 volatile uint32_t choice_flash_until = 0;
+volatile float    choice_flash_hue   = 0.0f;
 volatile uint32_t panic_flash_until  = 0;
 volatile float    amp_now            = 0.0f;
 
@@ -219,13 +234,31 @@ volatile bool  reset_peaks = false;
 
 Telemetry DSY_SDRAM_BSS telemetry; // the main loop's copy
 
+int Clamp(int value, int n)
+{
+    return value < 0 ? 0 : (value >= n ? n - 1 : value);
+}
+
 // LED 2 flashes the new choice if its page is showing.
 void SetChoice(int p, int value, uint32_t now_ms)
 {
     int n      = kChoiceCounts[p];
-    choices[p] = value < 0 ? 0 : (value >= n ? n - 1 : value);
+    choices[p] = Clamp(value, n);
     if(p == page)
+    {
+        choice_flash_hue   = (float)choices[p] / n;
         choice_flash_until = now_ms + 1000;
+    }
+}
+
+void SetDirtType(int value, uint32_t now_ms)
+{
+    dirt_type = Clamp(value, Dirt::kNumTypes);
+    if(page == kFilterPage)
+    {
+        choice_flash_hue   = (float)dirt_type / Dirt::kNumTypes;
+        choice_flash_until = now_ms + 1000;
+    }
 }
 
 // A value from the page, in the audio callback.
@@ -244,6 +277,7 @@ void SetParam(int index, int raw, uint32_t now_ms)
             web_play = raw != 0;
             PlayGate(web_play);
             break;
+        case kParamDirtType: SetDirtType(raw, now_ms); break;
         default:
             if(index < kNumKnobParams)
                 knobs.Set(index / 2, index % 2, raw / 16383.0f);
@@ -270,6 +304,7 @@ int ParamRaw(int index)
         case kParamFixed2: return fixed[1];
         case kParamPlayNote: return (int)(PlayNoteRaw() * 16383.0f + 0.5f);
         case kParamPlay: return play_sounding >= 0;
+        case kParamDirtType: return dirt_type;
         default:
             if(index < kNumKnobParams)
                 return (int)(knobs.Value(index / 2, index % 2) * 16383.0f + 0.5f);
@@ -290,6 +325,7 @@ void Collect(size_t size)
         point[kTraceWave2]  = p.wave[1];
         point[kTraceCutoff] = p.cutoff * 0.001f;
         point[kTraceAmp]    = 100.0f * p.amp;
+        point[kTraceDrift]  = p.drift;
         point[kTraceVoices] = (float)p.voices;
         trace_written       = trace_written + 1; // after the point is in place
         trace_samples       = 0;
@@ -436,6 +472,10 @@ SynthEngine::Patch MakePatch()
     p.filter_vel = k(kParamFilterVel);
     p.track      = k(kParamTrack);
     p.dirt       = k(kParamDirt);
+    p.dirt_type  = dirt_type;
+    p.flavour    = k(kParamFlavour);
+    p.dac        = k(kParamDac);
+    p.osc_mode   = choices[kCharPage];
     for(int e = 0; e < Voice::kNumEnvs; e++)
         for(int s = 0; s < 4; s++)
             p.env[e][s] = k(kParamWaveAttack + 4 * e + s);
@@ -505,12 +545,15 @@ void AudioCallback(AudioHandle::InputBuffer  in,
         choice_flash_until = 0;
     }
 
-    // Turning: the play note while button 1 is held, else the page's choice.
+    // Turning: the play note while button 1 is held, else the page's choice
+    // (on the Filter page with Shift, the Dirt type).
     int inc = hw.encoder.Increment();
     if(inc != 0 && hw.button1.Pressed())
         SetPlayNote(play_note + inc * (Shift() ? 12 : 1));
     else if(inc != 0 && page == kPresetPage)
         presets.Step(inc);
+    else if(inc != 0 && page == kFilterPage && Shift())
+        SetDirtType(dirt_type + inc, now_ms);
     else if(inc != 0)
         SetChoice(page, choices[page] + inc, now_ms);
     presets.Apply();
@@ -624,7 +667,7 @@ int main(void)
         if(p == kPresetPage)
             presets.LedColour(now, &r, &g, &b);
         else if(now < choice_flash_until)
-            Hue((float)choices[p] / kChoiceCounts[p], &r, &g, &b);
+            Hue(choice_flash_hue, &r, &g, &b);
         else
             Hue((float)p / kNumKnobPages, &r, &g, &b);
         hw.led2.Set(r, g, b);
