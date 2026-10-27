@@ -42,6 +42,7 @@ enum PresetRegion
     kRegionTapeworn  = 1,
     kRegionDriftnet  = 2,
     kRegionSlowdrift = 3,
+    kRegionWavebyte  = 4,
 };
 
 class PresetStore

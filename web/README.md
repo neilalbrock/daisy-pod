@@ -3,7 +3,7 @@
 A page that connects to the Pod over USB MIDI (Web MIDI), shows what the app
 is doing and gives you every control at once. It works with any app that
 speaks the web link protocol (`common/web_link.h`): grainfall, tapeworn,
-driftnet and slowdrift so far. The page shows whichever views the app sends data for.
+driftnet, slowdrift and wavebyte so far. The page shows whichever views the app sends data for.
 
 ```sh
 make web    # serves this folder on http://localhost:8000

@@ -9,6 +9,7 @@ a separate app under `apps/`, all built from `main`.
 | [driftnet](apps/driftnet/README.md) | Always-listening micro-looper and spatial effect after Chase Bliss's MOOD MKII, with a CLOCK that sets the sample rate of both, MOOD's MIDI map, hidden options, ramping and Synth Mode |
 | [tapeworn](apps/tapeworn/README.md) | Lo-fi tape machine: wow, flutter, hysteresis saturation, tape models, failures |
 | [slowdrift](apps/slowdrift/README.md) | Stereo ambient reverb after Walrus Audio's Slöer: a modulated plate with five modes (shimmer, octave down, echoes, swells, a frozen pad), Stretch, which lowers its sample rate, and a MIDI CC map |
+| [wavebyte](apps/wavebyte/README.md) | 8-voice wavetable synth after the Waldorf Protein: two oscillators reading our own 64 tables of 8-bit Microwave-style waves, a CEM-style filter or Drive, three envelopes, Poly, Mono and Legato, and Shift for a second layer of knobs |
 | [starter](apps/starter/README.md) | Low-pass filter toolchain and hardware check; template for new apps |
 
 Code shared between apps goes in `common/`: `MidiClock` and `Tempo` (tap tempo or MIDI clock), `ClockDomain` (a
@@ -33,9 +34,10 @@ app is doing (for grainfall, the buffer with every voice and delay tap, the
 beat grid and note onsets; for tapeworn, tape speed, dropouts and the
 saturator's hysteresis loop; for driftnet, the loop and what's playing it,
 with its clock and Env's detector; for slowdrift, the LFO, swells and decay
-time; for all, levels and CPU) next to all its controls. Run `make web` and
-open http://localhost:8000 in Chrome or Edge. Grainfall, tapeworn, driftnet
-and slowdrift support it; see [web/README.md](web/README.md).
+time; for wavebyte, the last voice's waves, cutoff and envelope; for all,
+levels and CPU) next to all its controls. Run `make web` and open
+http://localhost:8000 in Chrome or Edge. Every app but the starter supports
+it; see [web/README.md](web/README.md).
 
 ## Toolchain
 

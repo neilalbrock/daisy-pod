@@ -36,9 +36,13 @@ class PagedKnobs
     }
 
     // Moves to the next page (wrapping) and latches the knobs there.
-    void NextPage(const float (&knobs)[Knobs])
+    void NextPage(const float (&knobs)[Knobs]) { SetPage((page_ + 1) % Pages, knobs); }
+
+    // Moves to a page and latches the knobs there. An app can treat pages
+    // as layers of the same knobs, such as a Shift button's.
+    void SetPage(int page, const float (&knobs)[Knobs])
     {
-        page_ = (page_ + 1) % Pages;
+        page_ = page;
         Latch(knobs);
     }
 
