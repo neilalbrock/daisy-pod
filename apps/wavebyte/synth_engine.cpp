@@ -19,6 +19,7 @@ void SynthEngine::Init(const Wavetables *tables, float sample_rate, size_t block
     tables_      = tables;
     sample_rate_ = sample_rate;
     block_rate_  = sample_rate / (float)block_size;
+    VoiceFilter::Init(sample_rate);
     for(int i = 0; i < kVoices; i++)
         voices_[i].Init(tables, sample_rate, block_size, 0x1234567u + 7919u * (uint32_t)i);
     SetPatch(patch_);
@@ -47,8 +48,14 @@ void SynthEngine::SetPatch(const Patch &p)
     }
 
     f.bend        = bend_ * (float)BendRange(p.bend_range);
-    float glide_s = GlideSeconds(p.glide);
-    f.glide       = glide_s > 0.0f ? 1.0f - expf(-3.0f / (glide_s * block_rate_)) : 1.0f;
+    // The glide and envelope coefficients cost a few powf and expf each:
+    // only when their settings move.
+    if(p.glide != glide_set_)
+    {
+        glide_set_    = p.glide;
+        float glide_s = GlideSeconds(p.glide);
+        f.glide       = glide_s > 0.0f ? 1.0f - expf(-3.0f / (glide_s * block_rate_)) : 1.0f;
+    }
 
     f.filter     = (VoiceFilter::Type)p.filter;
     f.cutoff     = p.cutoff * VoiceFilter::kOctaves;
@@ -59,7 +66,16 @@ void SynthEngine::SetPatch(const Patch &p)
     f.dirt       = p.dirt * p.dirt * 0.5f;
 
     for(int e = 0; e < Voice::kNumEnvs; e++)
-        f.env[e].Set(p.env[e][0], p.env[e][1], p.env[e][2], p.env[e][3], block_rate_);
+    {
+        const float *s = p.env[e];
+        float       *was = env_set_[e];
+        if(s[0] != was[0] || s[1] != was[1] || s[2] != was[2] || s[3] != was[3])
+        {
+            f.env[e].Set(s[0], s[1], s[2], s[3], block_rate_);
+            for(int i = 0; i < 4; i++)
+                was[i] = s[i];
+        }
+    }
 
     f.volume       = p.volume * p.volume * kVoiceLevel;
     f.amp_velocity = p.amp_velocity;

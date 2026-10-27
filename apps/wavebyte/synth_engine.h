@@ -132,6 +132,8 @@ class SynthEngine
     Voice             voices_[kVoices];
     Voice::Frame      frame_ = {};
     Patch             patch_;
+    float             glide_set_ = -1.0f; // the settings frame_'s coefficients are for
+    float             env_set_[Voice::kNumEnvs][4] = {{-1.0f}, {-1.0f}, {-1.0f}};
     uint32_t          started_ = 0; // notes so far, to age the voices
     int               last_voice_ = 0;
     float             last_note_ = 60.0f; // where the next glide starts

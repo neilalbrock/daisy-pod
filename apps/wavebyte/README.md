@@ -98,7 +98,11 @@ LED 1 shows the last voice's amp envelope, and glows blue with Shift on.
 - **Bend Range:** 0-12 semitones for pitch bend.
 - **Cutoff:** 20 Hz to 20 kHz. **Keytrack:** -200% to +200% around C4 (note
   60). At +100% the cutoff follows the keys exactly.
-- **Resonance:** past about 0.8, LP 24 sings on its own.
+- **Resonance:** past about 0.8, LP 24, LP 12 and HP sing on their own, at
+  the cutoff's pitch, even with both oscillators down. Just past 0.8 the
+  tone takes a moment to build (longest at low cutoffs); at full resonance
+  it's almost instant. On LP 24 a note playing gets quieter as the tone
+  takes over, as on a ladder filter.
 - **Filter Env:** up to 8 octaves either way. **Filter Vel** adds more at
   full velocity.
 - **Drive:** in the filter's place. Cutoff, and everything that moves it,

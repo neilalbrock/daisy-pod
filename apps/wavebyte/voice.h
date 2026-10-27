@@ -75,8 +75,9 @@ class Voice
     void Release();
     void Kill(); // silent at once
 
-    // Adds this block's samples into l and r.
-    void Render(const Frame &f, float *l, float *r, size_t size);
+    // Adds this block's samples into l and r (which nothing else points
+    // into, so the filter's state can stay in registers).
+    void Render(const Frame &f, float *__restrict l, float *__restrict r, size_t size);
 
     bool     Active() const { return !env_[kAmpEnv].Idle(); }
     bool     Released() const { return env_[kAmpEnv].Released(); }

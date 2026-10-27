@@ -44,7 +44,7 @@ void Voice::Kill()
     filter_.Reset();
 }
 
-void Voice::Render(const Frame &f, float *l, float *r, size_t size)
+void Voice::Render(const Frame &f, float *__restrict l, float *__restrict r, size_t size)
 {
     float env[kNumEnvs];
     for(int e = 0; e < kNumEnvs; e++)
@@ -58,7 +58,7 @@ void Voice::Render(const Frame &f, float *l, float *r, size_t size)
     {
         const Frame::Osc &osc = f.osc[o];
         float note = (osc.fixed ? 60.0f : pitch_) + osc.offset + f.bend;
-        float hz   = 440.0f * exp2f((note - 69.0f) * (1.0f / 12.0f));
+        float hz   = 440.0f * dsp::FastExp2((note - 69.0f) * (1.0f / 12.0f));
         inc[o]     = (uint32_t)(dsp::Clamp(hz / sample_rate_, 0.0f, 0.49f) * kPhaseScale);
 
         float pos = osc.wave + env[kWaveEnv] * (osc.env + osc.velocity * velocity_);

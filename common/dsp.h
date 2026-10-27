@@ -56,6 +56,24 @@ inline float WrapPhase(float phase)
     return phase >= 1.0f ? phase - 1.0f : phase;
 }
 
+// 2^x to about 1e-7, far cheaper than exp2f: fine for pitch. The integer
+// part goes straight into the float's exponent, the rest (-0.5..0.5) through
+// a polynomial. x is clamped to +-126.
+inline float FastExp2(float x)
+{
+    x       = Clamp(x, -126.0f, 126.0f);
+    float n = roundf(x);
+    float f = (x - n) * 0.69314718f; // e^f, by Taylor series
+    float p = 1.0f + f * (1.0f + f * (0.5f + f * (0.16666667f + f * (0.041666667f + f * (0.0083333333f + f * 0.0013888889f)))));
+    union
+    {
+        float    f;
+        uint32_t i;
+    } u     = {p};
+    u.i += (uint32_t)(int32_t)n << 23;
+    return u.f;
+}
+
 // xorshift32: cheap and safe to call from the audio callback.
 class Rng
 {
