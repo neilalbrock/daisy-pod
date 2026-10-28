@@ -88,6 +88,10 @@ enum ParamId
     kParamGlideMode,
     kParamPanMode,
     kParamOscMode,
+    // The Osc pages' encoder turns with Shift: a table from the AKWF bank
+    // (0: off, the Table plays), else 1 + its number in akwf_bank.h.
+    kParamAkwf1,
+    kParamAkwf2,
     // The Filter and FX pages' encoder turns with Shift.
     kParamDirtType,
     kParamFxRouting,

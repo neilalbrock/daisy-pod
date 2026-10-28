@@ -59,6 +59,40 @@ FM, bells and mallets, organ drawbars, combs, echoes within the cycle,
 phase distortion, fewer steps or bits, random spectra, morphs between basic
 shapes, and byte patterns.
 
+### The AKWF bank
+
+A second bank of 64 tables comes from
+[AKWF-FREE](https://github.com/KristofferKarlAxelEkstrand/AKWF-FREE), Adventure
+Kid's library of single-cycle waveforms (CC0, public domain: thanks to
+Kristoffer Ekstrand). Pick one with **Shift** and the encoder turn on an Osc
+page (LED 2 flashes it); **Off**, the first, goes back to the Table. Each
+oscillator, in each layer, has its own.
+
+AKWF's waves are single cycles: an instrument's timbre at one moment, not
+a sweep. So each table is built at power-up, like ours, by one of two
+recipes:
+
+- **Key waves crossfaded** across the table, as the Microwave filled its
+  tables between key waves: taken along a path through a folder (each
+  wave the closest left to the one before, from the darkest), or picked by
+  hand. Voices and instruments (Voice, Orchestra, Cello, Violin, Sax,
+  Reeds, Flute, Piano, EPiano, E Organ, Clavinet, guitars, basses,
+  Theremin, Birds, Stringbox, Bass Brass), then synth shapes (FM, Chip,
+  Video Game, Osc Chip, Bitreduce, Distorted, Granular, Overtone, Linear,
+  Hand Drawn, the band-limited shapes and four from the miscellaneous
+  folders). Voice Step, EPiano, FM Steps and Chip step through 61 waves
+  rather than crossfading.
+- **One sampled wave through a family:** hard sync (Sync Cello, Sax,
+  Voice, Organ, Bass), folding (Fold ...), the wave minus a shifted copy
+  of itself (PWM ...), or squeezed into a narrowing window, like a formant
+  (Sqz ...). Unlike ours, these are band-limited, so they're clean until
+  the 8-bit oscillator plays them.
+
+Waves 61-63 are triangle, square and saw here too. The bank was chosen by
+the numbers rather than by ear: `tools/akwf_tables.py` makes it (see
+[docs/akwf.md](docs/akwf.md)), and renders a sweep through each table to
+listen to.
+
 In 8-bit mode an oscillator steps from wave to wave rather than
 crossfading, and plays each wave's 128 samples with no interpolation. That
 stepping and the 8-bit samples are the grit: the aliasing is part of the
@@ -74,8 +108,9 @@ job under **Shift** (button 2): hold Shift while turning, or tap it to keep
 it on (LED 1 glows blue) and tap again to let go. After a change of page,
 Shift or layer a knob does nothing until you move it, so values don't
 jump. Turning the encoder sets that page's choice, and LED 2 flashes it
-for a second. On the Filter page, turning it with Shift sets the Dirt type
-instead, and on the FX page, the routing.
+for a second. With Shift, turning it picks an AKWF table instead on the
+Osc pages, the Dirt type on the Filter page, and the routing on the FX
+page.
 
 The pages edit the layer picked on the Layer page (page 12). Master,
 Flavour, DAC and the effects are shared by the layers, so they're the same
@@ -83,8 +118,8 @@ whichever layer is picked.
 
 | Page (LED 2) | Knob 1 / Shift | Knob 2 / Shift | Encoder turn |
 |---|---|---|---|
-| 1 Osc 1 (red) | Wave / Level | Env Amnt / Vel | Table |
-| 2 Osc 2 (orange) | Wave / Level | Env Amnt / Vel | Table |
+| 1 Osc 1 (red) | Wave / Level | Env Amnt / Vel | Table. With Shift, an [AKWF](#the-akwf-bank) table, or Off |
+| 2 Osc 2 (orange) | Wave / Level | Env Amnt / Vel | Table. With Shift, an [AKWF](#the-akwf-bank) table, or Off |
 | 3 Pitch (yellow) | Semitone 2 / Semitone 1 | Detune 2 / Detune 1 | Voice: Poly, Mono, Legato |
 | 4 Filter (lime) | Cutoff / Keytrack | Resonance / Dirt | Type: LP 24, LP 12, HP, Drive, Off. With Shift, Dirt type: Static, Crackle, Geiger, Click, Burst 1-3, Ring Mod |
 | 5 Env & Glide (green) | Filter Env / Filter Vel | Glide / Bend Range | Glide: Onset, Legato |
@@ -320,6 +355,7 @@ controls.
 | CC | Parameter | CC | Parameter |
 |---|---|---|---|
 | 3, 9 | Table 1, 2 (0-63) | 76 | Dirt |
+| 12, 13 | AKWF 1, 2 (0 off, 1-64) | | |
 | 5 | Glide | 77, 78 | Filter Env, Filter Vel |
 | 7 | Volume | 79 | Bend Range |
 | 10 | Pan | 85 | Amp Vel |
@@ -348,13 +384,14 @@ reflashing. Every app keeps its own.
 - **On the web page:** a button per slot, and Save. Selecting the slot
   already selected reloads it, dropping any changes.
 
-A preset holds the sound: all four layers (every knob but Master, the
-LFOs and mod matrix among them, the tables and the other choices, Dirt
-type, Osc mode and FX routing among them, Limit Waves, Fixed and Active),
-Flavour, DAC, both FX types, every effect's values, the layer mode, the
-layer picked and A All Channels. Master, the play note, MPE, Tempo and the
-split channel are saved on their own, a few seconds after they last
-change. At power-up they come back, then the preset last selected.
+A preset holds the sound: all four layers (every knob but Master, the LFOs
+and mod matrix among them, the tables, AKWF tables and the other choices,
+Dirt type, Osc mode and FX routing among them, Limit Waves, Fixed and
+Active), Flavour, DAC, both FX types, every effect's values, the layer
+mode, the layer picked and A All Channels. Master, the play note, MPE,
+Tempo and the split channel are saved on their own, a few seconds after
+they last change. At power-up they come back, then the preset last
+selected.
 
 Layer A's settings are stored under the names they had before wavebyte
 had layers, so a preset saved then loads as layer A, leaving B-D and the
@@ -416,6 +453,5 @@ before the next.
    to SDRAM to make room in DTCM. With all four layers running and the
    settings pushed, CPU is 55% average and 60% peak, as before layers, with
    9 KB of stack never used. Scoped in [docs/layers.md](docs/layers.md).
-7. **Maybe:** CC learn, and importing wavetables from the web page. A
-   bank of tables made from the AKWF single cycles is looked at in
-   [docs/akwf.md](docs/akwf.md).
+7. **Maybe:** CC learn, and importing wavetables from the web page. The
+   [AKWF bank](#the-akwf-bank) is in already ([docs/akwf.md](docs/akwf.md)).

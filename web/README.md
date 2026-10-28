@@ -128,7 +128,10 @@ drop-down, and sends the middle of the chosen item's step, (i + 0.5) / n.
 `tabParam` names a choice parameter whose options are the tabs (wavebyte's
 Layer): the tab bar becomes its control, so picking a tab sets it and the
 Pod setting it picks the tab. `optionColour(name, i)` colours a choice's
-options (the tabs too). It can also give a `View`, a class with the
+options (the tabs too). `menu(name)` returning `true` for a choice shows it
+as a drop-down of its options, and `overrides(name)` naming another choice
+in the same card shows that one as not in use while this one isn't 0
+(wavebyte's AKWF tables and Table). It can also give a `View`, a class with the
 buffer view's methods (`setLayout`, `addOverview`, `setFrame`, `draw`, and
 optionally `status`, a line for the panel's head), to draw the buffer section
 its own way under its own `scopeTitle`, as driftnet does with

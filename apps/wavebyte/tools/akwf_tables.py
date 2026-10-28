@@ -1,48 +1,51 @@
 #!/usr/bin/env python3
-"""Wavebyte tables from AKWF single cycles: a prototype.
+"""Wavebyte's AKWF bank: 64 tables from the AKWF single cycles.
 
-Turns folders of AKWF-FREE waves (600-sample single cycles, CC0:
-https://github.com/KristofferKarlAxelEkstrand/AKWF-FREE) into wavebyte
-tables: 61 waves of 128 8-bit samples (wavetables.h), stored as
-wavetables.cpp's Store() does. Waves 61-63 (triangle, square, saw) are the
-firmware's, so they aren't written here.
+Turns waves from AKWF-FREE (600-sample single cycles, CC0:
+https://github.com/KristofferKarlAxelEkstrand/AKWF-FREE) into the recipes
+for wavebyte's second bank of tables (64-127). The firmware can't carry 64
+whole tables in its image (500 KB, more than the SRAM it runs from), so
+this writes only what it needs to rebuild them at boot, about 110 KB:
 
-Ways to make a table:
+  keys    - key waves, crossfaded across the table's 61 waves, as the
+            Microwave filled its tables between key waves. From a path
+            through one or more folders (every wave, ordered so each is
+            the closest left to the one before, starting from the darkest,
+            then a number of keys taken evenly along it, or all 61 for a
+            table that steps from wave to wave), or from named waves.
+  sync, fold, pwm, squeeze
+          - one source wave through a family: hard sync (the cycle
+            restarted 1 to 8 times a period), folding (gain into a
+            triangle folder), PWM (minus a copy of itself shifted by up to
+            half a cycle), or squeezing (the cycle in a narrowing window,
+            formant-like). Worked out at 512 points, then band-limited to
+            the 63 harmonics a 128-sample wave holds, so they come out clean.
 
-  path   - every wave in the folders, ordered so each is close to the one
-           before (by harmonic spectrum, starting from the darkest), so a
-           sweep moves smoothly instead of jumping. Longer paths are
-           sampled evenly; shorter ones are filled with crossfades between
-           neighbours, as the Microwave filled its tables between key waves.
-           Or a given number of key waves along the path, crossfaded.
-  keys   - named waves in the given order, crossfaded in between.
-  sync, fold, pwm, stretch
-         - one wave run through one of wavebyte's own families (hard sync,
-           wavefolding, a wave minus a shifted copy of itself, formant-style
-           stretching), so the table's start is the sampled sound.
-  raw    - a folder's first 61 waves in file order, unaligned, for
-           comparison (the AKWF Synthesis Technology tables are made so).
+Every wave is resampled to 128 samples by keeping harmonics 1-63 (an FFT,
+so nothing aliases), and each key is rotated to line up with the one before
+(the shift that correlates best), so crossfades don't cancel and 8-bit
+steps are small. Waves 61-63 of each table (triangle, square, saw) are the
+firmware's.
 
-Every wave is rotated to line up with the one before (the shift that
-correlates best), so Clean mode's crossfades don't cancel and 8-bit steps
-are small.
-
-Writes a C++ header of int8 tables and, with --wav, a sweep through each
-table played as wavebyte's 8-bit oscillator does (nearest sample, the wave
-stepped once per 16-sample block) for listening.
+Writes apps/wavebyte/akwf_bank.{h,cpp}, which wavetables.cpp builds the
+tables from (BuildKeys and BuildFamily here do what it does, so the
+previews are what the Pod plays), and with --wav, a sweep through each
+table played as the 8-bit oscillator plays it (nearest sample, the wave
+stepped once per 16-sample block), for listening.
 
 Needs numpy. From the repository's root, with AKWF-FREE cloned somewhere
-(about 2 GB; only its AKWF/ folder is read):
+(only its AKWF/ folder is read):
 
-  python3 apps/wavebyte/tools/akwf_tables.py path/to/AKWF-FREE out/ [--wav]
-
-Nothing in the firmware reads the header yet: see docs/akwf.md.
+  uv run python apps/wavebyte/tools/akwf_tables.py path/to/AKWF-FREE [--wav out/]
 """
 import os, sys, wave
 import numpy as np
 
 KLEN, KWAVES, H = 128, 61, 63
+OVER = 512  # the families' working resolution
 SR, BLOCK = 48000, 16
+NAME_LEN = 10  # the Pod's own table names are no longer
+NAME_BYTES = 640  # the web page gets every name in one message (720 bytes)
 
 
 def load(path):
@@ -52,8 +55,7 @@ def load(path):
 
 
 def band_limit(x, n=KLEN):
-    """Resample one cycle to n samples, keeping harmonics 1..n/2 - 1 (the
-    firmware's own waves stop there too)."""
+    """Resample one cycle to n samples, keeping harmonics 1..n/2 - 1."""
     X = np.fft.rfft(x)
     Y = np.zeros(n // 2 + 1, complex)
     k = min(n // 2 - 1, len(X) - 1)
@@ -65,6 +67,14 @@ def normal(y):
     y = y - y.mean()
     p = np.max(np.abs(y))
     return y / p if p > 1e-9 else y
+
+
+def store(y):
+    """wavetables.cpp's Store(): DC out, peak at 127, rounded."""
+    y = y - y.mean()
+    p = np.max(np.abs(y))
+    scale = 127.0 / p if p > 1e-6 else 0.0
+    return np.clip(np.round(y * scale), -127, 127).astype(np.int8)
 
 
 def spectrum(y):
@@ -83,26 +93,6 @@ def align(y, ref):
     return np.roll(y, int(np.argmax(c)))
 
 
-def fill(keys, n=KWAVES):
-    """n waves along a list of waves: sampled evenly if there are more,
-    crossfaded between neighbours if fewer."""
-    keys = [normal(k) for k in keys]
-    for i in range(1, len(keys)):
-        keys[i] = align(keys[i], keys[i - 1])
-    if len(keys) == 1:
-        return [keys[0]] * n
-    out = []
-    for w in range(n):
-        pos = w / (n - 1) * (len(keys) - 1)
-        a = min(int(pos), len(keys) - 2)
-        t = pos - a
-        if len(keys) >= n:  # more than we need: nearest, no blend
-            out.append(keys[int(round(pos))])
-        else:
-            out.append(normal((1 - t) * keys[a] + t * keys[a + 1]))
-    return out
-
-
 def path(waves):
     """Greedy nearest-neighbour order by spectrum, from the darkest."""
     specs = [spectrum(w) for w in waves]
@@ -117,68 +107,185 @@ def path(waves):
     return [waves[i] for i in order]
 
 
-def wave_at(x, phase):
-    """A 600-sample cycle at any phase (0..1), by linear interpolation."""
-    p = (phase % 1.0) * len(x)
-    i = np.floor(p).astype(int)
-    f = p - i
-    return (1 - f) * x[i % len(x)] + f * x[(i + 1) % len(x)]
+def keys_of(waves):
+    """Key waves for the firmware: aligned in turn, then stored."""
+    keys = [normal(w) for w in waves]
+    for i in range(1, len(keys)):
+        keys[i] = align(keys[i], keys[i - 1])
+    return [store(k) for k in keys]
 
 
-def family(x, kind, amount):
-    """One wave through one of wavebyte's families, at a 0..1 amount. Works
-    on the full 600-sample cycle, then band-limits, so the result is clean."""
-    t = np.arange(len(x)) / len(x)
-    if kind == "sync":  # the cycle restarted 1 to 8 times a period
-        ratio = 1 + amount * 7
-        y = wave_at(x, (t * ratio) % 1.0)
-    elif kind == "fold":  # gain into a triangle folder
-        g = 1 + amount * 6
-        v = g * normal(x)
-        y = 1 - 4 * np.abs(((v + 1) * 0.25) % 1.0 - 0.5)
-    elif kind == "pwm":  # minus a copy shifted by up to half a cycle
-        y = normal(x) - np.roll(normal(x), int(amount * 0.48 * len(x)))
-    elif kind == "stretch":  # the cycle squeezed into a shrinking window
-        w = 1 - 0.85 * amount
-        y = np.where(t < w, wave_at(x, t / w), 0.0) * np.sin(np.pi * np.minimum(t / w, 1)) ** 0.5
-    else:
-        raise ValueError(kind)
-    return band_limit(y)
+# ---------------------------------------------------------------- What the firmware does
+
+def build_keys(keys):
+    """wavetables.cpp's BuildKeys: the keys crossfaded across the table."""
+    k = [np.asarray(x, float) for x in keys]
+    out = []
+    for w in range(KWAVES):
+        if len(k) == 1:
+            out.append(store(k[0]))
+            continue
+        pos = w * (len(k) - 1) / (KWAVES - 1)
+        a = min(int(pos), len(k) - 2)
+        t = pos - a
+        out.append(store((1 - t) * k[a] + t * k[a + 1]))
+    return out
 
 
-def store(y):
-    """wavetables.cpp's Store(): DC out, peak at 127, rounded."""
-    y = normal(y)
-    return np.clip(np.round(y * 127), -127, 127).astype(np.int8)
+def source_at(src, x):
+    """The source wave (128 samples, -1..1) at phases x, by linear
+    interpolation, as the firmware reads it."""
+    p = (x % 1.0) * KLEN
+    i = np.floor(p).astype(int) % KLEN
+    f = p - np.floor(p)
+    return (1 - f) * src[i] + f * src[(i + 1) % KLEN]
 
 
-def render(table, seconds=8.0, note=48, clean=False, out=None):
-    """A sweep 0 -> 60 -> 0 through the table, as wavebyte plays it."""
+def build_family(kind, source):
+    """wavetables.cpp's BuildFamily: the source through a family, at
+    OVER points, band-limited back to 128."""
+    src = np.asarray(source, float) / 127.0
+    x = np.arange(OVER) / OVER
+    out = []
+    for w in range(KWAVES):
+        t = w / (KWAVES - 1)
+        if kind == "sync":
+            v = source_at(src, x * (1 + 7 * t))
+        elif kind == "fold":
+            g = (1 + 6 * t) * source_at(src, x)
+            v = 1 - 4 * np.abs(((g + 1) * 0.25) % 1.0 - 0.5)
+        elif kind == "pwm":
+            v = source_at(src, x) - source_at(src, x + 0.48 * t)
+        elif kind == "squeeze":
+            width = 1 - 0.85 * t
+            u = np.minimum(x / width, 1.0)
+            v = np.where(x < width, source_at(src, u) * np.sqrt(np.sin(np.pi * u)), 0.0)
+        else:
+            raise ValueError(kind)
+        out.append(store(band_limit(v)))
+    return out
+
+
+# ---------------------------------------------------------------- The bank
+
+FAMILIES = ["sync", "fold", "pwm", "squeeze"]  # akwf::Kind, after kKeys
+
+# Name (at most NAME_LEN characters), and how it's made: ("path", folders,
+# keys: a number taken along the path, or "all" for 61 waves stepped
+# through), ("keys", waves), or (family, source wave). Chosen by the
+# numbers, not by ear: prune and reorder after listening.
+BANK = [
+    # Voices and instruments
+    ("Voice", ("path", ["hvoice"], 12)),
+    ("Voice Step", ("path", ["hvoice"], "all")),
+    ("Orchestra", ("path", ["cello", "violin", "altosax", "oboe", "clarinett", "flute"], 16)),
+    ("Cello", ("path", ["cello"], 12)),
+    ("Violin", ("path", ["violin"], 12)),
+    ("Sax", ("path", ["altosax"], 12)),
+    ("Reeds", ("path", ["oboe", "clarinett"], 12)),
+    ("Flute", ("path", ["flute"], 12)),
+    ("Piano", ("path", ["piano"], 12)),
+    ("EPiano", ("path", ["epiano"], "all")),
+    ("E Organ", ("path", ["eorgan"], 16)),
+    ("Clavinet", ("path", ["clavinet"], 12)),
+    ("A Guitar", ("path", ["aguitar"], 12)),
+    ("E Guitar", ("path", ["eguitar"], 12)),
+    ("E Bass", ("path", ["ebass"], 12)),
+    ("D Bass", ("path", ["dbass"], 12)),
+    ("Theremin", ("path", ["theremin"], 12)),
+    ("Birds", ("path", ["birds"], 12)),
+    ("Stringbox", ("path", ["stringbox", "pluckalgo"], 12)),
+    ("Bass Brass", ("keys", ["dbass_0010", "ebass_0030", "clavinet_0010", "altosax_0005", "eguitar_0010"])),
+    # Synth shapes
+    ("FM", ("path", ["fmsynth"], 16)),
+    ("FM Steps", ("path", ["fmsynth"], "all")),
+    ("Chip", ("path", ["vgamebasic"], "all")),
+    ("Video Game", ("path", ["vgame"], 16)),
+    ("Osc Chip", ("path", ["oscchip"], 16)),
+    ("Bitreduce", ("path", ["bitreduced"], 16)),
+    ("Distorted", ("path", ["distorted"], 12)),
+    ("Granular", ("path", ["granular"], 12)),
+    ("Overtone", ("path", ["overtone"], 12)),
+    ("Sin Harm", ("path", ["sinharm"], 12)),
+    ("Linear", ("path", ["linear"], 16)),
+    ("Hand Drawn", ("path", ["hdrawn"], 16)),
+    ("Symmetric", ("path", ["symetric"], 12)),
+    ("Snippets", ("path", ["snippets"], 12)),
+    ("Raw", ("path", ["raw"], 12)),
+    ("Stereo", ("path", ["stereo"], 16)),
+    ("C604", ("path", ["c604"], 12)),
+    ("BW Blend", ("path", ["bw_blended"], 16)),
+    ("Saw Gap", ("path", ["bw_sawgap"], 16)),
+    ("Sqr Round", ("path", ["bw_squrounded"], 16)),
+    ("Saw Round", ("path", ["bw_sawrounded"], 16)),
+    ("BW Square", ("path", ["bw_squ"], 16)),
+    ("Misc A", ("path", ["0001", "0002", "0003", "0004", "0005"], 16)),
+    ("Misc B", ("path", ["0006", "0007", "0008", "0009", "0010"], 16)),
+    ("Misc C", ("path", ["0011", "0012", "0013", "0014", "0015"], 16)),
+    ("Misc D", ("path", ["0016", "0017", "0018", "0019", "0020"], 16)),
+    # A sampled wave through a family
+    ("Sync Cello", ("sync", "cello_0005")),
+    ("Sync Sax", ("sync", "altosax_0010")),
+    ("Sync Voice", ("sync", "hvoice_0030")),
+    ("Sync Organ", ("sync", "eorgan_0040")),
+    ("Sync Bass", ("sync", "dbass_0010")),
+    ("Fold Voice", ("fold", "hvoice_0030")),
+    ("Fold Flute", ("fold", "flute_0005")),
+    ("Fold Piano", ("fold", "piano_0010")),
+    ("Fold Bass", ("fold", "ebass_0030")),
+    ("Fold Sax", ("fold", "altosax_0005")),
+    ("PWM Organ", ("pwm", "eorgan_0040")),
+    ("PWM EPiano", ("pwm", "epiano_0010")),
+    ("PWM Guitar", ("pwm", "eguitar_0010")),
+    ("PWM Cello", ("pwm", "cello_0005")),
+    ("Sqz Sax", ("squeeze", "altosax_0010")),
+    ("Sqz Violin", ("squeeze", "violin_0005")),
+    ("Sqz Voice", ("squeeze", "hvoice_0030")),
+    ("Sqz Clav", ("squeeze", "clavinet_0010")),
+]
+
+
+def folder(root, name):
+    d = os.path.join(root, "AKWF", "AKWF_" + name)
+    return [load(os.path.join(d, f)) for f in sorted(os.listdir(d)) if f.endswith(".wav")]
+
+
+def one(root, name):
+    sub = name.rsplit("_", 1)[0]
+    return load(os.path.join(root, "AKWF", "AKWF_" + sub, "AKWF_" + name + ".wav"))
+
+
+def recipe(root, how):
+    """(kind index, the waves the firmware keeps for it)."""
+    kind = how[0]
+    if kind == "path":
+        _, folders, count = how
+        waves = path([band_limit(x) for f in folders for x in folder(root, f)])
+        n = KWAVES if count == "all" else count
+        if len(waves) > n:
+            waves = [waves[int(round(i))] for i in np.linspace(0, len(waves) - 1, n)]
+        return 0, keys_of(waves)
+    if kind == "keys":
+        return 0, keys_of([band_limit(one(root, w)) for w in how[1]])
+    return 1 + FAMILIES.index(kind), [store(band_limit(one(root, how[1])))]
+
+
+def build(kind, waves):
+    return build_keys(waves) if kind == 0 else build_family(FAMILIES[kind - 1], waves[0])
+
+
+def render(table, out, seconds=6.0, note=48):
+    """A sweep 0 -> 60 -> 0 through the table, as the 8-bit oscillator
+    plays it."""
     hz = 440 * 2 ** ((note - 69) / 12)
     n = int(seconds * SR)
     t = np.arange(n) / SR
-    tri = 1 - np.abs(2 * t / seconds - 1)  # 0 -> 1 -> 0
-    pos = tri * (KWAVES - 1)
-    pos = np.repeat(pos[::BLOCK], BLOCK)[:n]  # once per block
-    phase = (np.arange(n) * hz / SR) % 1.0
-    idx = phase * KLEN
-    i0 = idx.astype(int) % KLEN
-    tb = np.array(table, float)
-    if clean:
-        i1 = (i0 + 1) % KLEN
-        f = idx - np.floor(idx)
-        a = np.minimum(pos.astype(int), KWAVES - 1)
-        b = np.minimum(a + 1, KWAVES - 1)
-        m = pos - a
-        x0 = (1 - f) * tb[a, i0] + f * tb[a, i1]
-        x1 = (1 - f) * tb[b, i0] + f * tb[b, i1]
-        y = (1 - m) * x0 + m * x1
-    else:
-        w = np.minimum((pos + 0.5).astype(int), KWAVES - 1)
-        y = tb[w, i0]
-    y = y / 127 * 0.5
-    fade = np.minimum(1, np.minimum(t / 0.01, (seconds - t) / 0.05))
-    y *= fade
+    pos = (1 - np.abs(2 * t / seconds - 1)) * (KWAVES - 1)
+    pos = np.repeat(pos[::BLOCK], BLOCK)[:n]
+    i0 = ((np.arange(n) * hz / SR) % 1.0 * KLEN).astype(int) % KLEN
+    w = np.minimum((pos + 0.5).astype(int), KWAVES - 1)
+    y = np.array(table, float)[w, i0] / 127 * 0.5
+    y *= np.minimum(1, np.minimum(t / 0.01, (seconds - t) / 0.05))
     with wave.open(out, "wb") as f:
         f.setnchannels(1)
         f.setsampwidth(2)
@@ -186,83 +293,85 @@ def render(table, seconds=8.0, note=48, clean=False, out=None):
         f.writeframes((y * 32767).astype(np.int16).tobytes())
 
 
-def folder(root, name):
-    d = os.path.join(root, "AKWF", name)
-    return [load(os.path.join(d, f)) for f in sorted(os.listdir(d)) if f.endswith(".wav")]
+def write_bank(recipes, here):
+    names = [n for n, _ in BANK]
+    pool = [w for _, waves in recipes for w in waves]
+    head = "// Generated by tools/akwf_tables.py from AKWF-FREE (CC0). Don't edit: rerun it.\n"
+    with open(os.path.join(here, "akwf_bank.h"), "w") as f:
+        f.write(head + """//
+// Wavebyte's second bank of tables, from the AKWF single cycles: each a
+// recipe that wavetables.cpp builds at boot, from key waves crossfaded
+// across the table, or from one source wave through a family.
 
+#pragma once
 
-def one(root, name):
-    sub = name.rsplit("_", 1)[0]
-    return load(os.path.join(root, "AKWF", sub, name + ".wav"))
+#include <cstdint>
 
+namespace akwf
+{
+enum Kind : uint8_t
+{
+    kKeys,
+    kSync,
+    kFold,
+    kPwm,
+    kSqueeze,
+};
 
-# Name, and how it's made. A dozen to show the ideas; a real set would be
-# curated by ear.
-TABLES = [
-    # (folders, key waves): None keeps every wave along the path (it steps
-    # from one to the next); a number takes that many along it, crossfaded.
-    ("AKWF Voice", ("path", (["AKWF_hvoice"], 12))),
-    ("AKWF Voice Steps", ("path", (["AKWF_hvoice"], None))),
-    ("AKWF Orchestra", ("path", (["AKWF_cello", "AKWF_violin", "AKWF_altosax",
-                                  "AKWF_oboe", "AKWF_clarinett", "AKWF_flute"], 16))),
-    ("AKWF EPiano", ("path", (["AKWF_epiano"], None))),
-    ("AKWF FM", ("path", (["AKWF_fmsynth"], 16))),
-    ("AKWF Chip", ("path", (["AKWF_vgamebasic"], None))),
-    ("Sync Cello", ("sync", "AKWF_cello_0005")),
-    ("Fold Voice", ("fold", "AKWF_hvoice_0030")),
-    ("Self PWM Organ", ("pwm", "AKWF_eorgan_0040")),
-    ("Squeeze Sax", ("stretch", "AKWF_altosax_0010")),
-    ("Bass to Brass", ("keys", ["AKWF_dbass_0010", "AKWF_ebass_0030", "AKWF_clavinet_0010",
-                                "AKWF_altosax_0005", "AKWF_eguitar_0010"])),
-    # For comparison: a folder in file order, as the AKWF Synthesis
-    # Technology tables are, with no ordering.
-    ("Unordered 0001", ("raw", ["AKWF_0001"])),
-]
+struct Recipe
+{
+    Kind     kind;
+    uint8_t  count; // waves in the pool: the keys, or 1 (the source)
+    uint16_t first; // the first in the pool
+};
 
+constexpr int kTables = %d;
+constexpr int kPoolWaves = %d;
 
-def make(root, how):
-    kind, arg = how
-    if kind == "path":
-        folders, n_keys = arg
-        waves = path([band_limit(x) for f in folders for x in folder(root, f)])
-        if n_keys:  # key waves along the path, crossfaded
-            waves = [waves[int(round(i))] for i in np.linspace(0, len(waves) - 1, n_keys)]
-        return fill(waves)
-    if kind == "raw":
-        waves = [band_limit(x) for f in arg for x in folder(root, f)][:KWAVES]
-        return [normal(w) for w in waves]
-    if kind == "keys":
-        return fill([band_limit(one(root, k)) for k in arg])
-    x = one(root, arg)
-    return fill([family(x, kind, a) for a in np.linspace(0, 1, KWAVES)])
+extern const Recipe kRecipes[kTables];
+extern const int8_t kPool[kPoolWaves][128];
+// "Off" first, then the tables' names: the AKWF choice's options.
+extern const char *const kNames[kTables + 1];
+} // namespace akwf
+""" % (len(BANK), len(pool)))
+    with open(os.path.join(here, "akwf_bank.cpp"), "w") as f:
+        f.write(head + '\n#include "akwf_bank.h"\n\nnamespace akwf\n{\n')
+        f.write("const char *const kNames[kTables + 1] = {\n    \"Off\",\n")
+        for n in names:
+            f.write('    "%s",\n' % n)
+        f.write("};\n\nconst Recipe kRecipes[kTables] = {\n")
+        first = 0
+        kinds = ["kKeys", "kSync", "kFold", "kPwm", "kSqueeze"]
+        for (n, _), (kind, waves) in zip(BANK, recipes):
+            f.write("    {%s, %d, %d}, // %s\n" % (kinds[kind], len(waves), first, n))
+            first += len(waves)
+        f.write("};\n\nconst int8_t kPool[kPoolWaves][128] = {\n")
+        for w in pool:
+            f.write("    {" + ",".join(str(int(v)) for v in w) + "},\n")
+        f.write("};\n} // namespace akwf\n")
+    return len(pool)
 
 
 def main():
-    root, out = sys.argv[1], sys.argv[2]
-    wav = "--wav" in sys.argv
-    os.makedirs(out, exist_ok=True)
-    lines = ["// Generated by akwf_tables.py from AKWF-FREE (CC0). %d tables x %d waves x %d."
-             % (len(TABLES), KWAVES, KLEN), "#pragma once", "#include <cstdint>", ""]
-    lines.append("const char *const kAkwfNames[%d] = {%s};" %
-                 (len(TABLES), ", ".join('"%s"' % n for n, _ in TABLES)))
-    lines.append("const int8_t kAkwfWaves[%d][%d][%d] = {" % (len(TABLES), KWAVES, KLEN))
-    for name, how in TABLES:
-        table = [store(w) for w in make(root, how)]
-        smooth = np.mean([np.linalg.norm(spectrum(table[i + 1].astype(float)) - spectrum(table[i].astype(float)))
-                          for i in range(KWAVES - 1)])
-        print("%-16s neighbours %.3f" % (name, smooth))
-        lines.append("  { // %s" % name)
-        for w in table:
-            lines.append("    {" + ",".join(str(int(v)) for v in w) + "},")
-        lines.append("  },")
-        if wav:
-            slug = name.lower().replace(" ", "_")
-            render(table, out=os.path.join(out, slug + ".wav"))
-            if name in ("AKWF Voice", "Sync Cello"):
-                render(table, clean=True, out=os.path.join(out, slug + "_clean.wav"))
-    lines.append("};")
-    with open(os.path.join(out, "akwf_tables.h"), "w") as f:
-        f.write("\n".join(lines) + "\n")
+    root = sys.argv[1]
+    out = sys.argv[sys.argv.index("--wav") + 1] if "--wav" in sys.argv else None
+    here = os.path.join(os.path.dirname(os.path.abspath(__file__)), "..")
+    names = [n for n, _ in BANK]
+    assert len(BANK) <= 127 and all(len(n) <= NAME_LEN for n in names) and len(set(names)) == len(names)
+    assert sum(len(n) + 1 for n in names) + 4 <= NAME_BYTES, "the names won't fit the web page's message"
+
+    recipes = [recipe(root, how) for _, how in BANK]
+    n_pool = write_bank(recipes, here)
+    print("%d tables, %d pool waves (%d KB)" % (len(BANK), n_pool, n_pool * KLEN // 1024))
+    if out:
+        os.makedirs(out, exist_ok=True)
+    for i, ((name, _), (kind, waves)) in enumerate(zip(BANK, recipes)):
+        table = build(kind, waves)
+        smooth = np.mean([np.linalg.norm(spectrum(table[w + 1].astype(float)) - spectrum(table[w].astype(float)))
+                          for w in range(KWAVES - 1)])
+        print("%3d %-10s neighbours %.3f" % (64 + i, name, smooth))
+        if out:
+            render(table, os.path.join(out, "%03d_%s.wav" % (64 + i, name.lower().replace(" ", "_"))))
 
 
 if __name__ == "__main__":

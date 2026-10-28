@@ -2,8 +2,8 @@
 
 Could [AKWF-FREE](https://github.com/KristofferKarlAxelEkstrand/AKWF-FREE)'s
 single-cycle waveforms make interesting wavebyte tables? Findings from
-surveying the whole library, and a prototype converter,
-[`tools/akwf_tables.py`](../tools/akwf_tables.py).
+surveying the whole library, and the converter that makes wavebyte's AKWF
+bank from them, [`tools/akwf_tables.py`](../tools/akwf_tables.py).
 
 **Short answer:** yes, and they suit wavebyte's format well. Almost every
 AKWF wave survives the reduction to 128 samples and 8 bits. The licence
@@ -11,9 +11,9 @@ is CC0. The catch is that AKWF is a library of separate waves, not of
 sweeps: in file order, neighbouring waves are nearly as unlike each other
 as two picked at random, so a table made by stacking a folder's waves
 jumps from sound to sound. The work is in ordering and blending them,
-which the prototype does offline. Into the firmware, the cheapest route is
-a second bank of tables (64-127), built at boot from a few key waves each,
-as the generated tables are now.
+which the converter does offline. Wavebyte now has them as a second bank
+of 64 tables (64-127), built at boot from key waves or a source wave each,
+as its own tables are: see [The bank](#the-bank).
 
 ## What AKWF is
 
@@ -72,96 +72,68 @@ changes the timbre at random. That can be a sound (the PPG and Microwave
 had jumpy tables too), but it isn't what a wave envelope or LFO sweep
 wants.
 
-## Making tables
+## The bank
 
-`tools/akwf_tables.py` (numpy only) makes 61-wave tables, rotating each
-wave to line up with the one before (the shift that correlates best), so
-Clean mode's crossfades don't cancel and 8-bit steps are small, then
-storing them as `Store()` does: DC out, peak at full scale, rounded to 8
-bits. It has five ways to build a table:
+What came of this: wavebyte's second bank, tables 64-127, picked per
+oscillator with Shift and the encoder turn on an Osc page, or CC 12 and
+13 (see the [README](../README.md#the-akwf-bank)). The firmware's image
+runs from SRAM (480 KB), so it can't carry 64 whole tables (500 KB).
+`tools/akwf_tables.py` writes `akwf_bank.{h,cpp}` instead: a recipe per
+table and the waves it needs, 831 of them (103 KB), and
+`wavetables.cpp` builds the tables from them at power-up, into SDRAM
+beside its own. The tool does the same builds (`build_keys`,
+`build_family`) for its previews; on the host, the firmware's tables
+match them to within a rounding step.
 
-- **Path:** every wave in one or more folders, ordered greedily so each
-  is the closest remaining to the one before, starting from the darkest.
-  On its own, a long folder still steps noticeably (the voice folder:
-  0.45), as its waves are far apart. Taking 12-16 key waves along the
-  path and crossfading between them, as the Microwave filled its tables
-  between key waves, gives smooth sweeps (voice: 0.14; six orchestral
-  folders together: 0.16).
-- **Keys:** a hand-picked list of waves, crossfaded, for a designed sweep
-  (double bass, electric bass, clavinet, sax, guitar: 0.06).
-- **Families on a sampled wave:** one AKWF wave through one of the
-  firmware's own families: hard sync, folding, the wave minus a shifted
-  copy of itself (PWM for any shape), squeezing the cycle into a narrowing
-  window (formant-like). The table starts as the instrument and turns into
-  something synthetic. This is the most "wavebyte" of the ideas: the
-  existing recipes, with an AKWF wave in place of the sine, triangle,
-  square or saw they start from.
-- **Raw:** a folder in file order, for comparison.
+Two kinds of recipe:
 
-The demos are each an 8-second sweep from wave 0 to 60 and back at C3,
-played as the 8-bit oscillator plays (nearest sample, the wave stepping
-once per 16-sample block), with no filter, envelope or DAC model. Two are
-also played in Clean mode.
+- **Keys:** key waves crossfaded across the table's 61 waves, as the
+  Microwave filled its tables between key waves. The keys come from a
+  path through one or more folders (every wave, ordered greedily so each
+  is the closest remaining to the one before, starting from the darkest,
+  then 12 or 16 taken evenly along it), or are picked by hand. On its own,
+  a long folder steps noticeably from wave to wave (the voice folder:
+  0.45), as its waves are far apart; crossfading a dozen keys gives smooth
+  sweeps (voice: 0.14; six orchestral folders together: 0.16). Four
+  tables (Voice Step, EPiano, FM Steps, Chip) keep 61 waves along the path
+  and step through them.
+- **Families on a sampled wave:** one AKWF wave through hard sync (the
+  cycle restarted 1 to 8 times a period), folding (gain into a triangle
+  folder), PWM (the wave minus a copy of itself shifted by up to half a
+  cycle) or squeezing (the cycle in a window narrowing to 15%,
+  formant-like). The table starts as the instrument and turns into
+  something synthetic: the firmware's own recipes, with an AKWF wave in
+  place of the sine, triangle, square or saw they start from. Each wave is
+  worked out at 512 points and band-limited back to 63 harmonics (an FFT,
+  at boot), so unlike our own families they don't alias in the table.
 
-| Demo | Made by | Neighbours |
-|---|---|---|
-| AKWF Voice | `hvoice`, 12 keys along the path | 0.14 |
-| AKWF Voice Steps | `hvoice`, the whole path | 0.45 |
-| AKWF Orchestra | cello, violin, sax, oboe, clarinet, flute: 16 keys | 0.16 |
-| AKWF EPiano | `epiano`, the whole path | 0.13 |
-| AKWF FM | `fmsynth`, 16 keys | 0.23 |
-| AKWF Chip | `vgamebasic`, the whole path | 0.05 |
-| Sync Cello | one cello cycle, synced 1-8x | 0.46 |
-| Fold Voice | one voice cycle, folded | 0.04 |
-| Self PWM Organ | one organ cycle minus itself, shifted | 0.23 |
-| Squeeze Sax | one sax cycle, squeezed | 0.07 |
-| Bass to Brass | five hand-picked keys | 0.06 |
-| Unordered 0001 | `AKWF_0001`'s first 61 files, as they come | 0.63 |
+Every key is rotated to line up with the one before (the shift that
+correlates best), so crossfades don't cancel and 8-bit steps are small,
+and every wave is stored as `Store()` does: DC out, peak at full scale,
+rounded to 8 bits. The 64 were chosen by the numbers: 20 voices and
+instruments, 26 synth shapes and miscellaneous folders, 18 families. The
+names stay within 10 characters, since the web page gets all 65 options
+(Off first) in one 720-byte message; the tool checks.
 
-Run it to hear them (they aren't in the repository):
+To change the bank, edit `BANK` in the tool and run it, with AKWF-FREE
+cloned somewhere (only its `AKWF/` folder is read, about 36 MB with a
+sparse checkout):
 
 ```sh
-git clone --depth 1 https://github.com/KristofferKarlAxelEkstrand/AKWF-FREE ../AKWF-FREE
-python3 apps/wavebyte/tools/akwf_tables.py ../AKWF-FREE build/akwf --wav
+git clone --depth 1 --filter=blob:none --sparse https://github.com/KristofferKarlAxelEkstrand/AKWF-FREE ../AKWF-FREE
+git -C ../AKWF-FREE sparse-checkout set AKWF
+uv run python apps/wavebyte/tools/akwf_tables.py ../AKWF-FREE --wav build/akwf
 ```
 
-It also writes `akwf_tables.h`, the tables as `int8_t` arrays, which
-nothing reads yet.
+It rewrites `akwf_bank.{h,cpp}` and, with `--wav`, renders a 6-second
+sweep from wave 0 to 60 and back at C3 through each table, played as the
+8-bit oscillator plays it (nearest sample, the wave stepping once per
+16-sample block), with no filter, envelope or DAC model. It prints how
+smooth each table is (the neighbours measure above).
 
-## Into the firmware
-
-The oscillators don't care where a table came from: an AKWF table costs
-exactly the CPU a generated one does. The questions are where the data
-lives and how a table is picked.
-
-- **Where they go:** a second bank, tables 64-127, beside the generated
-  ones rather than replacing them. That's another 512 KB of SDRAM
-  (`wave_memory` doubles, out of 64 MB). The CC map's table CCs (3 and 9)
-  already send 0-127, presets store the table's number (0-63 keep their
-  meaning), and the web page's menus take the names. On the Pod, 128
-  steps of the encoder is a lot: Shift and the encoder turn could jump by
-  bank, or by 8.
-- **Option A, whole tables in the image:** 7.8 KB each, as `const`
-  data. The image runs from SRAM (480 KB, 172 KB used), so 16-24 tables
-  would fit without crowding stages 5 and 6, but not 64.
-- **Option B, key waves in the image, built at boot (recommended):** 12-16
-  key waves per table (1.5-2 KB) plus a crossfade at boot into SDRAM,
-  the way `kRandom` builds its tables from six keys now. 64 tables come
-  to 100-130 KB of SRAM. The ordering, alignment and choice of keys
-  happen offline in the tool, which would write a `.cpp` of key waves; the
-  firmware gains a recipe family "keys", and another for the families on
-  a sampled wave (sync, fold, PWM, squeeze), whose sources are 128-sample
-  waves at 128 bytes each.
-- **Option C, upload from the web page (stage 7):** the page reads WAV
-  files (AKWF's or anyone's), runs the same steps in JavaScript, and sends
-  the tables over SysEx (about 9 KB each). The firmware writes them to
-  its own region of the QSPI flash, clear of the bootloader's copy of the
-  app and the presets' last 1 MB, and copies them to SDRAM at boot. This
-  is the most flexible, and the most work: flash writes have to go through
-  the main loop as presets' do.
-
-B first, then C if it's wanted: B's tool and recipes are the pipeline C
-would run in the browser.
+Still to come, if it's wanted: uploading tables from the web page (stage
+7), with the same steps in JavaScript, written to the app's own region of
+the QSPI flash.
 
 ## Caveats
 
@@ -171,8 +143,7 @@ would run in the browser.
   ordering matters more than which waves are chosen.
 - Every wave is normalised to full scale, as the firmware's are, so a
   sweep holds its level even where the source waves were quiet.
-- The prototype's choices (greedy ordering, the number of keys, which
-  single waves to put through the families) were picked by the numbers,
-  not by ear. A good bank of 64 needs listening, ideally through the
-  Pod's filter and DAC model rather than the bare oscillator the demos
-  use.
+- The bank's choices (greedy ordering, the number of keys, which single
+  waves to put through the families) were picked by the numbers, not by
+  ear. It wants a listening pass on the Pod, through the filter and DAC
+  model rather than the bare oscillator the previews use, then pruning.

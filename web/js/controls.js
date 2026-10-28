@@ -11,6 +11,11 @@
 // leave out. If the app names a choice parameter as its tabParam, the bar
 // is that parameter's control: picking a tab sets it, and the app setting
 // it picks the tab.
+//
+// An app can show a long choice as a drop-down instead (menu(name)
+// returning true), and say a choice takes another's place while it isn't
+// 0 (overrides(name), giving the other's name): the other then shows as
+// not in use.
 
 import { createKnob } from "./knob.js";
 import { Kind, UNIT_MAX } from "./protocol.js";
@@ -135,6 +140,7 @@ export class Controls {
     this.tabs = [];
     this.tab = 0;
     this.tabBar = null;
+    this.overrides = []; // { el: the choice taken over, by: the index of the one taking it }
   }
 
   // Three zones, the same for every app: a group that is one big choice
@@ -144,6 +150,7 @@ export class Controls {
   build(hello, params, app) {
     this.root.replaceChildren();
     this.widgets = [];
+    this.overrides = [];
     this.tabs = [];
     for (const name of hello.groups) {
       const m = TABBED.exec(name);
@@ -203,6 +210,11 @@ export class Controls {
         const showLabel = !main && name !== groupName && name !== title;
         this.widgets[p.index] = this.widget(p, app, parts, { showLabel, wrap: main, meta, name });
       }
+      for (const p of members) {
+        const over = app.overrides?.(nameOf(p));
+        const target = over && members.find((m) => nameOf(m) === over);
+        if (target) this.overrides.push({ el: this.widgets[target.index]?.el, by: p.index });
+      }
       card.append(head, ...Object.values(parts).filter((part) => part.childElementCount));
       if (tab) {
         card.dataset.tab = tab;
@@ -254,6 +266,7 @@ export class Controls {
         return { set: (raw) => knob.set(raw / UNIT_MAX) };
       }
       case Kind.CHOICE: {
+        if (app.menu?.(name) === true) return this.choiceMenu(p, parts, send, name);
         const box = el("div", "choice");
         if (showLabel) {
           const label = el("div", "choice-label");
@@ -270,7 +283,7 @@ export class Controls {
         }, wrap);
         box.append(opts.el);
         parts.choices.append(box);
-        return { set: (raw) => pick(raw) };
+        return { set: (raw) => pick(raw), el: box };
       }
       case Kind.TOGGLE: {
         const b = switchButton("toggle", name);
@@ -323,7 +336,26 @@ export class Controls {
     return { set: (raw) => (select.value = String(Math.min(n - 1, Math.floor((raw / UNIT_MAX) * n)))) };
   }
 
+  // A choice as a drop-down of its own options.
+  choiceMenu(p, parts, send, name) {
+    const box = el("label", "menu");
+    const label = el("span", "choice-label");
+    label.textContent = name;
+    const select = el("select");
+    p.options.forEach((option, i) => {
+      const o = el("option");
+      o.value = String(i);
+      o.textContent = option;
+      select.append(o);
+    });
+    select.addEventListener("change", () => send(Number(select.value)));
+    box.append(label, select);
+    parts.menus.append(box);
+    return { set: (raw) => (select.value = String(raw)), el: box };
+  }
+
   state(values) {
     values.forEach((raw, i) => this.widgets[i]?.set(raw));
+    for (const o of this.overrides) o.el?.classList.toggle("overridden", (values[o.by] ?? 0) > 0);
   }
 }

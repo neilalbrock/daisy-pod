@@ -806,6 +806,16 @@ body:not(.is-live) .controls {
   color: var(--text-dim);
 }
 
+/* A choice another has taken the place of (wavebyte's Table, while an
+   AKWF table plays). */
+.overridden > :not(.choice-label) {
+  opacity: 0.35;
+}
+
+.overridden .choice-label::after {
+  content: " · not in use";
+}
+
 /* Grainfall's effects: the names across, the variations down. */
 .matrix-scroll {
   overflow-x: auto;

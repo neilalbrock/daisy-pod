@@ -123,13 +123,15 @@ constexpr Store kPreset = Store::kPreset;
         {P "LFO 2 Mode", kKnob, G + 8, nullptr, 0, 0, kPreset},                               \
         MOD_SLOT(P, G, "1"), MOD_SLOT(P, G, "2"), MOD_SLOT(P, G, "3"), MOD_SLOT(P, G, "4"),   \
         MOD_SLOT(P, G, "5"), MOD_SLOT(P, G, "6"), MOD_SLOT(P, G, "7"), MOD_SLOT(P, G, "8"),   \
-        {P "Table 1", Kind::kChoice, G + 0, Wavetables::kNames, Wavetables::kTables, 4, kPreset}, \
-        {P "Table 2", Kind::kChoice, G + 1, Wavetables::kNames, Wavetables::kTables, 4, kPreset}, \
+        {P "Table 1", Kind::kChoice, G + 0, Wavetables::kNames, Wavetables::kOwnTables, 4, kPreset}, \
+        {P "Table 2", Kind::kChoice, G + 1, Wavetables::kNames, Wavetables::kOwnTables, 4, kPreset}, \
         {P "Voice", Kind::kChoice, G + 2, kVoiceModes, Count(kVoiceModes), 3, kPreset},       \
         {P "Filter Type", Kind::kChoice, G + 3, kFilterTypes, Count(kFilterTypes), 5, kPreset}, \
         {P "Glide Mode", Kind::kChoice, G + 4, kGlideModes, Count(kGlideModes), 2, kPreset},  \
         {P "Pan Mode", Kind::kChoice, G + 6, kPanModes, Count(kPanModes), 6, kPreset},        \
         {P "Osc Mode", Kind::kChoice, G + 7, kOscModes, Count(kOscModes), 2, kPreset},        \
+        {P "AKWF 1", Kind::kChoice, G + 0, akwf::kNames, akwf::kTables + 1, 4, kPreset},       \
+        {P "AKWF 2", Kind::kChoice, G + 1, akwf::kNames, akwf::kTables + 1, 4, kPreset},       \
         {P "Dirt Type", Kind::kChoice, G + 3, kDirtTypes, Count(kDirtTypes), 4, kPreset},     \
         {P "FX Routing", Kind::kChoice, G + 10, kFxRoutings, Count(kFxRoutings), 3, kPreset}, \
         {P "Limit Waves 1", Kind::kToggle, G + 0, nullptr, 0, 0, kPreset},                    \

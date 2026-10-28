@@ -56,7 +56,7 @@ struct Recipe
     float  a, b;
 };
 
-const Recipe kRecipes[Wavetables::kTables] = {
+const Recipe kRecipes[Wavetables::kOwnTables] = {
     {kResonant, 2, 0},   {kResonant, 2, 1},   {kResonant, 6, 0},   {kResonant, 2, 2},
     {kAddRising, 1, 0},  {kAddRising, 2, 0},  {kPwm, 0, 0.02f},    {kPwm, 1, 0.02f},
     {kPwm, 0, 0.35f},    {kSync, kSaw, 4},    {kSync, kSaw, 10},   {kSync, kSquare, 4},
@@ -454,9 +454,152 @@ void Store(const float *in, int8_t *out)
     for(int i = 0; i < kLength; i++)
         out[i] = (int8_t)dsp::Clamp(roundf((in[i] - mean) * scale), -127.0f, 127.0f);
 }
+
+// ---------------------------------------------------------------- The AKWF bank
+//
+// tools/akwf_tables.py does the same (BuildKeys, BuildFamily) for its
+// previews: change both together.
+
+// Key waves crossfaded across the table: wave w sits at w / 60 of the way
+// through the keys.
+void BuildKeys(const akwf::Recipe &r, Wavetables::Wave *table)
+{
+    const int8_t(*keys)[kLength] = akwf::kPool + r.first;
+    float wave[kLength];
+    for(int w = 0; w < Wavetables::kTableWaves; w++)
+    {
+        int   a = 0;
+        float t = 0.0f;
+        if(r.count > 1)
+        {
+            float pos = (float)w * (float)(r.count - 1) / (float)(Wavetables::kTableWaves - 1);
+            a         = (int)pos < r.count - 2 ? (int)pos : r.count - 2;
+            t         = pos - (float)a;
+        }
+        const int8_t *ka = keys[a], *kb = keys[r.count > 1 ? a + 1 : a];
+        for(int i = 0; i < kLength; i++)
+            wave[i] = dsp::Lerp((float)ka[i], (float)kb[i], t);
+        Store(wave, table[w]);
+    }
+}
+
+constexpr int kOver = 512; // the families' working resolution
+
+// The source wave (-1..1) at phase x, by linear interpolation.
+float SourceAt(const float *src, float x)
+{
+    float p = Frac(x) * kLength;
+    int   i = (int)p;
+    return dsp::Lerp(src[i & (kLength - 1)], src[(i + 1) & (kLength - 1)], p - (float)i);
+}
+
+constexpr int kOverMask = kOver - 1, kQuarter = kOver / 4;
+
+// cos_table: cos(2 pi k / kOver); sin is a quarter turn behind.
+float Cos(const float *cos_table, int k)
+{
+    return cos_table[k & kOverMask];
+}
+float Sin(const float *cos_table, int k)
+{
+    return cos_table[(k - kQuarter) & kOverMask];
+}
+
+// In place, kOver points: re and im in, their spectrum out (radix 2).
+void Fft(float *re, float *im, const float *cos_table)
+{
+    for(int i = 1, j = 0; i < kOver; i++)
+    {
+        int bit = kOver >> 1;
+        for(; j & bit; bit >>= 1)
+            j ^= bit;
+        j ^= bit;
+        if(i < j)
+        {
+            float t = re[i];
+            re[i]   = re[j];
+            re[j]   = t;
+            t       = im[i];
+            im[i]   = im[j];
+            im[j]   = t;
+        }
+    }
+    for(int len = 2; len <= kOver; len <<= 1)
+    {
+        int half = len / 2, step = kOver / len;
+        for(int i = 0; i < kOver; i += len)
+            for(int k = 0; k < half; k++)
+            {
+                float wr = Cos(cos_table, k * step), wi = -Sin(cos_table, k * step);
+                float *ar = re + i + k, *ai = im + i + k, *br = ar + half, *bi = ai + half;
+                float xr = *br * wr - *bi * wi, xi = *br * wi + *bi * wr;
+                *br = *ar - xr;
+                *bi = *ai - xi;
+                *ar += xr;
+                *ai += xi;
+            }
+    }
+}
+
+// kOver points (in re; im is scratch) down to a 128-sample wave holding
+// harmonics 1-63.
+void BandLimit(float *re, float *im, const float *cos_table, float *out)
+{
+    for(int j = 0; j < kOver; j++)
+        im[j] = 0.0f;
+    Fft(re, im, cos_table);
+    constexpr int kStep = kOver / kLength;
+    for(int i = 0; i < kLength; i++)
+    {
+        float y = 0.0f;
+        for(int h = 1; h <= kHarmonics; h++)
+            y += re[h] * Cos(cos_table, h * i * kStep) - im[h] * Sin(cos_table, h * i * kStep);
+        out[i] = y;
+    }
+}
+
+// One source wave through a family, swept from wave 0 to 60. scratch: 2 x
+// kOver floats.
+void BuildFamily(const akwf::Recipe &r, const float *cos_table, float *scratch, Wavetables::Wave *table)
+{
+    float src[kLength];
+    for(int i = 0; i < kLength; i++)
+        src[i] = (float)akwf::kPool[r.first][i] / 127.0f;
+    float *v = scratch, *im = scratch + kOver, wave[kLength];
+    for(int w = 0; w < Wavetables::kTableWaves; w++)
+    {
+        float t = (float)w / (float)(Wavetables::kTableWaves - 1);
+        for(int j = 0; j < kOver; j++)
+        {
+            float x = (float)j / kOver;
+            switch(r.kind)
+            {
+                case akwf::kSync: v[j] = SourceAt(src, x * (1.0f + 7.0f * t)); break; // restarted 1-8 times
+                case akwf::kFold:
+                {
+                    float g = (1.0f + 6.0f * t) * SourceAt(src, x);
+                    v[j]    = 1.0f - 4.0f * fabsf(Frac((g + 1.0f) * 0.25f) - 0.5f);
+                    break;
+                }
+                case akwf::kPwm: v[j] = SourceAt(src, x) - SourceAt(src, x + 0.48f * t); break;
+                case akwf::kSqueeze:
+                default:
+                {
+                    // The cycle in a window narrowing to 15%, rounded off.
+                    float width = 1.0f - 0.85f * t;
+                    float u     = fminf(x / width, 1.0f);
+                    v[j] = x < width ? SourceAt(src, u) * sqrtf(sinf(dsp::kPi * u)) : 0.0f;
+                    break;
+                }
+            }
+        }
+        BandLimit(v, im, cos_table, wave);
+        Store(wave, table[w]);
+    }
+}
 } // namespace
 
-const char *const Wavetables::kNames[kTables] = {
+const char *const Wavetables::kNames[kOwnTables] = {
     "Reso Saw",   "Reso Sqr",   "Reso Wide",  "Reso Twin",  "Saw Sweep",  "Sqr Sweep",
     "Pulse PWM",  "Saw PWM",    "Micro PWM",  "Sync Saw",   "Sync Saw+",  "Sync Sqr",
     "Sync Sqr+",  "Sync Sine",  "Sync Tri",   "Vowels",     "Vowels R",   "Vowels Hi",
@@ -470,19 +613,35 @@ const char *const Wavetables::kNames[kTables] = {
     "Brass",      "Strings",    "Digital",    "Digital 2",
 };
 
-void Wavetables::Init(Wave *memory)
+static_assert(Wavetables::kScratchFloats >= 3 * kOver, "the AKWF families need more scratch");
+
+void Wavetables::Init(Wave *memory, float *scratch)
 {
     waves_ = memory;
     for(int i = 0; i < kLength; i++)
         sine_table[i] = sinf(kTwoPi * (float)i / kLength);
 
+    float *cos_table = scratch; // for the AKWF families' band-limiting
+    for(int k = 0; k < kOver; k++)
+        cos_table[k] = cosf(kTwoPi * (float)k / kOver);
+
     float wave[kLength];
     for(int table = 0; table < kTables; table++)
     {
-        for(int w = 0; w < kTableWaves; w++)
+        Wave *first = waves_ + table * kWaves;
+        if(table < kOwnTables)
+            for(int w = 0; w < kTableWaves; w++)
+            {
+                Generate(table, (float)w / (kTableWaves - 1), wave);
+                Store(wave, first[w]);
+            }
+        else
         {
-            Generate(table, (float)w / (kTableWaves - 1), wave);
-            Store(wave, waves_[table * kWaves + w]);
+            const akwf::Recipe &r = akwf::kRecipes[table - kOwnTables];
+            if(r.kind == akwf::kKeys)
+                BuildKeys(r, first);
+            else
+                BuildFamily(r, cos_table, scratch + kOver, first);
         }
         // The last three, in every table.
         const int shapes[3] = {kTri, kSquare, kSaw};

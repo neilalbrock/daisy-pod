@@ -224,7 +224,13 @@ export default {
   // edits) picks it.
   tabParam: "Layer",
   optionColour: (name, i) => (name === "Layer" ? hue(LAYER_HUES[i]) : undefined),
-  menu: (name) => MENUS[name],
+  // The AKWF bank's 65 tables as a drop-down, above the Table they take the
+  // place of while picked.
+  menu: (name) => MENUS[name] ?? (/^AKWF \d$/.test(name) || undefined),
+  overrides: (name) => {
+    const m = /^AKWF (\d)$/.exec(name);
+    return m ? `Table ${m[1]}` : undefined;
+  },
   tracesTitle: "Last voice",
   groupColour: (name) =>
     GROUPS.includes(name)

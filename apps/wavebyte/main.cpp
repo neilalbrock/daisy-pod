@@ -16,16 +16,19 @@
 // second job under Shift (button 2): hold Shift while turning, or tap it to
 // keep it on (LED 1 glows blue) and tap again to let go. After a change of
 // page, Shift or layer a knob does nothing until it is moved, so values
-// don't jump. Turning the encoder sets the page's choice (on the Filter
-// page, with Shift, the Dirt type; on the FX page, the routing). On the FX
+// don't jump. Turning the encoder sets the page's choice (with Shift: on
+// the Osc pages, a table from the AKWF bank instead, Off to go back to the
+// Table; on the Filter page, the Dirt type; on the FX page, the routing). On the FX
 // page, as on the Protein, knob 1 picks the slot's effect and knob 2 sets
 // its Amount; with Shift, knob 1 picks one of its parameters and knob 2
 // sets its Value. The pages edit the layer chosen on the Layer page, but
 // for Master, Flavour, DAC and the effects, which the layers share.
 //
 //   Page (LED 2)            Knob 1 / Shift      Knob 2 / Shift      Encoder turn
-//   1 Osc 1 (red)           Wave / Level        Env Amnt / Vel      Table
-//   2 Osc 2 (orange)        Wave / Level        Env Amnt / Vel      Table
+//   1 Osc 1 (red)           Wave / Level        Env Amnt / Vel      Table. With Shift: AKWF
+//                                                                   table, or Off
+//   2 Osc 2 (orange)        Wave / Level        Env Amnt / Vel      Table. With Shift: AKWF
+//                                                                   table, or Off
 //   3 Pitch (yellow)        Semitone 2 / 1      Detune 2 / 1        Voice: Poly, Mono, Legato
 //   4 Filter (lime)         Cutoff / Keytrack   Resonance / Dirt    LP 24, LP 12, HP, Drive, Off
 //                                                                   With Shift: Dirt type: Static,
@@ -119,6 +122,7 @@ using namespace daisy;
 using namespace web_view;
 
 Wavetables::Wave DSY_SDRAM_BSS wave_memory[Wavetables::kTables * Wavetables::kWaves];
+float DSY_SDRAM_BSS            table_scratch[Wavetables::kScratchFloats]; // building them, at boot
 float DSY_SDRAM_BSS            fx_slow[FxChain::kSlowFloats]; // the delay's lines
 // The reverb, chorus, flanger and look-ahead lines are read many times a
 // sample, so they go in RAM_D2, through the linker script's .heap section
@@ -487,6 +491,7 @@ constexpr float kLayerHues[kLayers] = {0.0f, 0.15f, 0.33f, 0.83f};
 void FlashChoice(int index, int value, uint32_t now_ms)
 {
     bool shown = index == ChoiceParam(page)
+                 || (page <= 1 && index == LayerParam(edit_layer, kParamAkwf1 + page))
                  || (page == kFilterPage && index == LayerParam(edit_layer, kParamDirtType))
                  || (page == kFxPage && index == LayerParam(edit_layer, kParamFxRouting))
                  || (page == kLayerPage && index == kParamLayerMode);
@@ -713,8 +718,9 @@ constexpr CcParam kCcMap[] = {
     {113, kParamAmpRelease},   {114, kParamLfo1Speed},   {115, kParamLfo1Shape},
     {116, kParamLfo2Speed},    {117, kParamLfo2Shape},
 };
-// And choices: CC 3 and 9 pick table 1 and 2 by number (0-63), CC 118 the
-// filter type and CC 119 the Dirt type, split evenly across 0-127.
+// And choices: CC 3 and 9 pick table 1 and 2 by number (0-63), CC 12 and
+// 13 their AKWF table (0 off, then 1-64), CC 118 the filter type and CC 119
+// the Dirt type, split evenly across 0-127.
 
 // 0-127 to 0..1, with 64 exactly in the middle (no amount for a centred
 // bipolar knob).
@@ -744,6 +750,8 @@ void HandleCc(int channel, int cc, int value, uint32_t now_ms)
     {
         case 3: SetParam(LayerParam(layer, kParamTable1), value, now_ms); return;
         case 9: SetParam(LayerParam(layer, kParamTable2), value, now_ms); return;
+        case 12: SetParam(LayerParam(layer, kParamAkwf1), value, now_ms); return;
+        case 13: SetParam(LayerParam(layer, kParamAkwf2), value, now_ms); return;
         case 118:
             SetParam(LayerParam(layer, kParamFilterType), value * VoiceFilter::kNumTypes / 128, now_ms);
             return;
@@ -834,7 +842,9 @@ SynthEngine::Patch MakePatch(int layer)
     for(int o = 0; o < 2; o++)
     {
         SynthEngine::Patch::Osc &po = p.osc[o];
-        po.table    = s(kParamTable1 + o);
+        // An AKWF table, if one is picked, else the Table.
+        int akwf    = s(kParamAkwf1 + o);
+        po.table    = akwf > 0 ? Wavetables::kOwnTables + akwf - 1 : s(kParamTable1 + o);
         po.wave     = k(wave[o]);
         po.env      = k(env[o]);
         po.velocity = k(vel[o]);
@@ -1060,14 +1070,16 @@ void AudioCallback(AudioHandle::InputBuffer  in,
     }
 
     // Turning: the play note while button 1 is held, else the page's choice
-    // (with Shift: on the Filter page, the Dirt type; on the FX page, the
-    // routing; on the Layer page, the mode).
+    // (with Shift: on the Osc pages, the AKWF table; on the Filter page, the
+    // Dirt type; on the FX page, the routing; on the Layer page, the mode).
     int inc   = hw.encoder.Increment();
     int shown = -1; // the choice it turns
     if(inc != 0 && hw.button1.Pressed())
         SetPlayNote(play_note + inc * (Shift() ? 12 : 1));
     else if(inc != 0 && page == kPresetPage)
         presets.Step(inc);
+    else if(inc != 0 && page <= 1 && Shift())
+        shown = LayerParam(edit_layer, kParamAkwf1 + page);
     else if(inc != 0 && page == kFilterPage && Shift())
         shown = LayerParam(edit_layer, kParamDirtType);
     else if(inc != 0 && page == kFxPage && Shift())
@@ -1160,7 +1172,7 @@ int main(void)
     hw.SetAudioBlockSize(16);
     hw.SetAudioSampleRate(SaiHandle::Config::SampleRate::SAI_48KHZ);
 
-    tables.Init(wave_memory);
+    tables.Init(wave_memory, table_scratch);
     engine.Init(&tables, hw.AudioSampleRate(), hw.AudioBlockSize());
     effects.Init(fx_fast, fx_slow, hw.AudioSampleRate(), hw.AudioBlockSize());
     for(int i = 0; i < kNumFxParams; i++)
