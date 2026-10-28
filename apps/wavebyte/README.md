@@ -350,5 +350,8 @@ before the next.
 6. **Layers:** four, sharing the 8 voices. In Single mode one plays; Multi
    offers Layered, Round Robin, Random Robin and MIDI Split. About 450
    parameters in all, which the web link's 14-bit indices and
-   `PresetsFor` already allow.
-7. **Maybe:** CC learn, and importing wavetables from the web page.
+   `PresetsFor` already allow. Scoped, with its CPU and memory cost, in
+   [docs/layers.md](docs/layers.md).
+7. **Maybe:** CC learn, and importing wavetables from the web page. A
+   bank of tables made from the AKWF single cycles is looked at in
+   [docs/akwf.md](docs/akwf.md).
