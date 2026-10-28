@@ -1,6 +1,7 @@
 #include "presets.h"
 
 #include <atomic>
+#include <cstring>
 
 #include "colour.h"
 
@@ -14,6 +15,12 @@ constexpr uint16_t kSlotKey = PresetStore::Key(kPresetSlotName);
 void Presets::Init(Flash *flash, int region, const weblink::Param *params, int num_params,
                    GetFn get, SetFn set, bool factory_reset)
 {
+    // Cleared here rather than by a constructor, as PresetsIn's may be in
+    // SDRAM.
+    memset(keys_, 0, sizeof(uint16_t) * capacity_);
+    memset(pending_, 0, sizeof(int16_t) * kArrays * capacity_);
+    memset(record_, 0, PresetStore::RecordSize(capacity_ + 1));
+
     store_.Init(flash, region);
     params_     = params;
     num_params_ = num_params < capacity_ ? num_params : capacity_;

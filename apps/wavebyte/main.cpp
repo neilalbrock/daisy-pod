@@ -91,6 +91,7 @@
 #include "press_hold.h"
 #include "qspi_flash.h"
 #include "sdram_timing.h"
+#include "stack_meter.h"
 #include "synth_engine.h"
 #include "tempo.h"
 #include "util/CpuLoadMeter.h"
@@ -120,7 +121,10 @@ Limiter        limiter; // eight voices can pass full scale
 CpuLoadMeter   cpu_meter;
 QspiFlash      flash(hw.seed.qspi);
 
-PresetsFor<kNumParams> presets;
+// The presets' arrays are in SDRAM: DTCM is nearly full, and they're only
+// touched by the main loop and by Apply when a preset is waiting.
+PresetsMemory<kNumParams> DSY_SDRAM_BSS preset_memory;
+PresetsIn<kNumParams>                   presets(&preset_memory);
 
 constexpr int kNumKnobPages = 11;
 constexpr int kPresetPage   = kNumKnobPages; // after the knob pages; its knobs do nothing
@@ -324,7 +328,9 @@ void SetPlayNote(int note)
 
 weblink::Session web;
 weblink::Writer  web_out;
-int              web_state[kNumParams]; // values in the last state sent
+// The main loop's alone, so in SDRAM, out of DTCM.
+int DSY_SDRAM_BSS web_state[kNumParams]; // values in the last state sent
+int DSY_SDRAM_BSS web_raw[kNumParams];   // ... and the values now
 
 // The audio callback appends to this ring; the main loop reads what's new
 // for each frame. A power of two, longer than a frame takes.
@@ -336,6 +342,7 @@ int                 trace_samples = 0, trace_period = 96;
 
 volatile float peak        = 0.0f; // out
 volatile bool  reset_peaks = false;
+volatile float stack_free  = 0.0f; // KB the stack has never used, from the main loop
 
 Telemetry DSY_SDRAM_BSS telemetry; // the main loop's copy
 
@@ -459,6 +466,7 @@ void Collect(size_t size)
         point[kTraceLfo1]   = 100.0f * p.lfo[0];
         point[kTraceLfo2]   = 100.0f * p.lfo[1];
         point[kTraceVoices] = (float)p.voices;
+        point[kTraceStack]  = stack_free;
         trace_written       = trace_written + 1; // after the point is in place
         trace_samples       = 0;
     }
@@ -489,7 +497,7 @@ void ReadTelemetry()
 // From the main loop: sends the page the next message it needs, if any.
 void SendWeb(uint32_t now_ms)
 {
-    int  raw[kNumParams];
+    int *raw     = web_raw;
     bool changed = false;
     for(int i = 0; i < kNumParams; i++)
     {
@@ -939,8 +947,11 @@ void AudioCallback(AudioHandle::InputBuffer  in,
 
 int main(void)
 {
+    stack_meter::Paint();
     hw.Init(true); // 480 MHz
     TuneSdramTimings();
+    for(int i = 0; i < kNumParams; i++)
+        web_state[i] = web_raw[i] = 0;
     // Each voice's control maths (matrix, LFOs, envelopes, pitch, filter
     // coefficients) runs once per block, and at 8 voices it outweighs the
     // samples at block size 4. 16 runs it at 3 kHz, with 0.33 ms timing,
@@ -1021,6 +1032,7 @@ int main(void)
         hw.UpdateLeds();
 
         presets.Poll(now);
+        stack_free = (float)stack_meter::Free() / 1024.0f;
         SendWeb(now);
         System::Delay(10);
     }

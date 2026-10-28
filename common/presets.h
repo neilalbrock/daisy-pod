@@ -19,7 +19,9 @@
 // held: see factory_reset.h), and Reset() while running.
 //
 // Its arrays are sized by the app: declare a PresetsFor<kNumParams>, and
-// check the list's names with UniqueKeys where it's defined.
+// check the list's names with UniqueKeys where it's defined. They take 18
+// bytes a parameter, in DTCM with the app's other globals; an app short of
+// DTCM can keep them in SDRAM instead with a PresetsIn (below).
 //
 // Threads: the audio callback asks (Select, Step, Save) and applies what
 // the main loop has read (Apply), so it stays the only writer of the app's
@@ -60,6 +62,7 @@ class Presets
     static constexpr int kSlots = PresetStore::kSlots;
     // Stored parameters, plus the slot saved with the globals.
     static constexpr int kMaxParams = PresetStore::kMaxEntries - 1;
+    static constexpr int kArrays    = 6; // of values, each num_params long: see below
 
     using GetFn = int (*)(int index);
     using SetFn = void (*)(int index, int raw);
@@ -98,8 +101,6 @@ class Presets
     void LedColour(uint32_t now_ms, float *r, float *g, float *b) const;
 
   protected:
-    static constexpr int kArrays = 6; // of values, each num_params long: see below
-
     // PresetsFor's arrays: keys, kArrays x capacity values, and a record's
     // buffer for capacity + 1 entries.
     Presets(int capacity, uint16_t *keys, int16_t *values, uint8_t *record)
@@ -169,4 +170,29 @@ class PresetsFor : public Presets
     uint16_t keys_[num_params]               = {};
     int16_t  values_[kArrays * num_params]   = {};
     alignas(4) uint8_t record_[PresetStore::RecordSize(num_params + 1)] = {};
+};
+
+// The same arrays, for an app to place itself, such as in SDRAM:
+//
+//   PresetsMemory<kNumParams> DSY_SDRAM_BSS preset_memory;
+//   PresetsIn<kNumParams>                   presets(&preset_memory);
+//
+// SDRAM only runs once hw.Init has set it up, so nothing may write it from
+// a static constructor: PresetsIn's only keeps the pointers, and Init
+// clears the arrays.
+template <int num_params>
+struct PresetsMemory
+{
+    uint16_t keys[num_params];
+    int16_t  values[Presets::kArrays * num_params];
+    alignas(4) uint8_t record[PresetStore::RecordSize(num_params + 1)];
+};
+
+template <int num_params>
+class PresetsIn : public Presets
+{
+    static_assert(num_params <= kMaxParams, "too many parameters for a preset");
+
+  public:
+    explicit PresetsIn(PresetsMemory<num_params> *m) : Presets(num_params, m->keys, m->values, m->record) {}
 };

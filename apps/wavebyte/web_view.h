@@ -3,8 +3,8 @@
 // The parameter list in the page's order, and the hello and telemetry
 // frame messages (common/web_link.h). Frames carry the output level, CPU,
 // and traces of the last voice played: both oscillators' wave positions,
-// its cutoff, amp envelope, Flavour's pitch drift and both LFOs, and how
-// many voices are sounding. main.cpp
+// its cutoff, amp envelope, Flavour's pitch drift and both LFOs, how
+// many voices are sounding, and how much stack is to spare. main.cpp
 // reads and sets the values, collects the Telemetry in the audio callback
 // and sends the messages. libDaisy-free.
 
@@ -122,6 +122,7 @@ enum TraceId
     kTraceLfo1,
     kTraceLfo2,
     kTraceVoices,
+    kTraceStack, // KB of stack never used: the margin above the globals
     kNumTraces,
 };
 

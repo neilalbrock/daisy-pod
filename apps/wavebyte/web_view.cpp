@@ -41,6 +41,7 @@ const weblink::Trace kTraces[kNumTraces] = {
     {"LFO 1", "%", -100, 100},
     {"LFO 2", "%", -100, 100},
     {"Voices", "voices", 0, 8},
+    {"Stack free", "KB", 0, 16},
 };
 
 template <typename T, size_t N>
