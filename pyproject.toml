@@ -1,0 +1,12 @@
+[project]
+name = "daisy-pod"
+version = "0.1.0"
+description = "Daisy Pod Experiments"
+readme = "README.md"
+authors = [
+    { name = "Neil Albrock", email = "neil.albrock@gmail.com" }
+]
+requires-python = ">=3.15"
+dependencies = [
+    "numpy>=2.5.4",
+]
