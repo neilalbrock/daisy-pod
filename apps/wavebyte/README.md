@@ -61,10 +61,11 @@ shapes, and byte patterns.
 
 ### The AKWF bank
 
-A second bank of 64 tables comes from
-[AKWF-FREE](https://github.com/KristofferKarlAxelEkstrand/AKWF-FREE), Adventure
-Kid's library of single-cycle waveforms (CC0, public domain: thanks to
-Kristoffer Ekstrand). Pick one with **Shift** and the encoder turn on an Osc
+A second bank of 64 tables is made from
+[AKWF-FREE](https://github.com/KristofferKarlAxelEkstrand/AKWF-FREE), the
+Adventure Kid Waveforms by Kristoffer Ekstrand: a library of single-cycle
+waveforms released into the public domain (CC0). See
+[Credits](#credits). Pick one with **Shift** and the encoder turn on an Osc
 page (LED 2 flashes it); **Off**, the first, goes back to the Table. Each
 oscillator, in each layer, has its own.
 
@@ -455,3 +456,18 @@ before the next.
    9 KB of stack never used. Scoped in [docs/layers.md](docs/layers.md).
 7. **Maybe:** CC learn, and importing wavetables from the web page. The
    [AKWF bank](#the-akwf-bank) is in already ([docs/akwf.md](docs/akwf.md)).
+
+## Credits
+
+The [AKWF bank](#the-akwf-bank) (tables 64-127) is made from
+[AKWF-FREE](https://github.com/KristofferKarlAxelEkstrand/AKWF-FREE), the
+Adventure Kid Waveforms by Kristoffer Ekstrand (Adventure Kid), released
+under [CC0 1.0](https://creativecommons.org/publicdomain/zero/1.0/). CC0
+asks for no attribution, but the bank wouldn't exist without his work, so
+thank you.
+
+The waves in `akwf_bank.cpp` are derived from AKWF's: resampled from 600
+to 128 samples, rounded to 8 bits, ordered, aligned and crossfaded, or put
+through sync, folding, PWM and squeezing, by `tools/akwf_tables.py` (see
+[docs/akwf.md](docs/akwf.md)). The tables' names are ours, after the AKWF
+folders and waves they come from.
