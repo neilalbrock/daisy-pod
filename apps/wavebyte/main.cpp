@@ -5,33 +5,40 @@
 // (or a Clean mode), Dirt's noises, a filter after the Protein's model of
 // the CEM chip (or a Drive in its place), three envelopes, two LFOs, an
 // 8-slot mod matrix, Flavour and a model of each voice's DAC, and eight
-// voices. Play it over MIDI (MPE too), or with button 1.
+// voices, then two effect slots. Play it over MIDI (MPE too), or with
+// button 1.
 //
-// The two knobs are shared across ten pages; press the encoder to change
+// The two knobs are shared across eleven pages; press the encoder to change
 // page (LED 2 shows which). Like the Protein's panel, each knob has a
 // second job under Shift (button 2): hold Shift while turning, or tap it to
 // keep it on (LED 1 glows blue) and tap again to let go. After a change of
 // page or Shift a knob does nothing until it is moved, so values don't
 // jump. Turning the encoder sets the page's choice (on the Filter page,
-// with Shift, the Dirt type).
+// with Shift, the Dirt type; on the FX page, the routing). On the FX page,
+// as on the Protein, knob 1 picks the slot's effect and knob 2 sets its
+// Amount; with Shift, knob 1 picks one of its parameters and knob 2 sets
+// its Value.
 //
-//   Page (LED 2)          Knob 1 / Shift      Knob 2 / Shift      Encoder turn
-//   1 Osc 1 (red)         Wave / Level        Env Amnt / Vel      Table
-//   2 Osc 2 (orange)      Wave / Level        Env Amnt / Vel      Table
-//   3 Pitch (lime)        Semitone 2 / 1      Detune 2 / 1        Voice: Poly, Mono, Legato
-//   4 Filter (green)      Cutoff / Keytrack   Resonance / Dirt    LP 24, LP 12, HP, Drive, Off
-//                                                                 With Shift: Dirt type: Static,
-//                                                                 Crackle, Geiger, Click, Burst 1-3,
-//                                                                 Ring Mod
-//   5 Env & Glide (sea green) Filter Env / Vel    Glide / Bend Range  Glide: Onset, Legato
-//   6 Envelopes (cyan)    Attack / Sustain    Decay / Release     Envelope: Wave, Filter, Amp
-//   7 Amp (azure)         Volume / Vel Amnt   Pan / Master        Pan: Fix, Rand 1-5
-//   8 Character (blue)    Flavour             DAC                 Osc: 8-bit, Clean
-//                         (Shift does nothing here)
-//   9 LFOs (violet)       Speed / Ratio       Shape / Mode        LFO: 1, 2
-//   10 Mod Matrix (pink)  Source / Target     Amount / Amount     Slot: 1-8
+//   Page (LED 2)            Knob 1 / Shift      Knob 2 / Shift      Encoder turn
+//   1 Osc 1 (red)           Wave / Level        Env Amnt / Vel      Table
+//   2 Osc 2 (orange)        Wave / Level        Env Amnt / Vel      Table
+//   3 Pitch (yellow)        Semitone 2 / 1      Detune 2 / 1        Voice: Poly, Mono, Legato
+//   4 Filter (lime)         Cutoff / Keytrack   Resonance / Dirt    LP 24, LP 12, HP, Drive, Off
+//                                                                   With Shift: Dirt type: Static,
+//                                                                   Crackle, Geiger, Click, Burst 1-3,
+//                                                                   Ring Mod
+//   5 Env & Glide (green)   Filter Env / Vel    Glide / Bend Range  Glide: Onset, Legato
+//   6 Envelopes (aqua)      Attack / Sustain    Decay / Release     Envelope: Wave, Filter, Amp
+//   7 Amp (azure)           Volume / Vel Amnt   Pan / Master        Pan: Fix, Rand 1-5
+//   8 Character (blue)      Flavour             DAC                 Osc: 8-bit, Clean
+//                           (Shift does nothing here)
+//   9 LFOs (violet)         Speed / Ratio       Shape / Mode        LFO: 1, 2
+//   10 Mod Matrix (purple)  Source / Target     Amount / Amount     Slot: 1-8
+//   11 FX (pink)            Type / Param        Amount / Value      Slot: FX 1, FX 2
+//                                                                   With Shift: routing: Dry,
+//                                                                   FX 1 > FX 2, FX 2 only
 //
-//   Page 11 (LED 2: the slot) Presets. Encoder turn - select a slot, loading
+//   Page 12 (LED 2: the slot) Presets. Encoder turn - select a slot, loading
 //                            its preset; an empty one keeps the sound.
 //                            Encoder long press - save to the slot. LED 2
 //                            shows the slot's colour: dim if empty,
@@ -47,6 +54,9 @@
 //
 // With Drive as the filter type, Cutoff sets the amount and Resonance the
 // curve: PNP, Tube, PickUp, Diode, Crunch.
+//
+// On the FX page LED 2 flashes what knob 1 picks: the effect, or with
+// Shift, the parameter (see the README for each effect's list).
 //
 // LED 1 shows the last voice's amp envelope, blue with Shift on. Turning
 // the encoder flashes LED 2 with the choice.
@@ -74,6 +84,7 @@
 #include "daisy_pod.h"
 #include "colour.h"
 #include "factory_reset.h"
+#include "fx.h"
 #include "limiter.h"
 #include "paged_knobs.h"
 #include "presets.h"
@@ -91,12 +102,19 @@ using namespace daisy;
 using namespace web_view;
 
 Wavetables::Wave DSY_SDRAM_BSS wave_memory[Wavetables::kTables * Wavetables::kWaves];
+float DSY_SDRAM_BSS            fx_slow[FxChain::kSlowFloats]; // the delay's lines
+// The reverb, chorus, flanger and look-ahead lines are read many times a
+// sample, so they go in RAM_D2, through the linker script's .heap section
+// (libDaisy gives nothing else there). Leave room: malloc's heap starts
+// where .heap ends and has no limit check.
+float __attribute__((section(".heap"))) fx_fast[FxChain::kFastFloats];
 uint8_t DSY_SDRAM_BSS          web_buffer[weblink::kMaxMessage];
 
 DaisyPod       hw;
 MidiUsbHandler usb_midi;
 Wavetables     tables;
 SynthEngine    engine;
+FxChain        effects;
 Tempo          tempo; // for Clocked LFOs: the Tempo setting, or MIDI clock
 Limiter        limiter; // eight voices can pass full scale
 CpuLoadMeter   cpu_meter;
@@ -104,7 +122,7 @@ QspiFlash      flash(hw.seed.qspi);
 
 PresetsFor<kNumParams> presets;
 
-constexpr int kNumKnobPages = 10;
+constexpr int kNumKnobPages = 11;
 constexpr int kPresetPage   = kNumKnobPages; // after the knob pages; its knobs do nothing
 constexpr int kNumPages     = kNumKnobPages + 1;
 constexpr int kNumKnobs     = 2;
@@ -113,15 +131,18 @@ constexpr int kEnvPage      = 5;
 constexpr int kCharPage     = 7; // one layer: Shift does nothing
 constexpr int kLfoPage      = 8;
 constexpr int kModPage      = 9;
+constexpr int kFxPage       = 10;
 
 // Layers of the knobs: each page's, and its Shift layer; the envelope and
 // LFO pages have a pair per envelope or LFO, the mod page a pair per slot,
-// and the Character page has no Shift layer. Up to the mod page, a layer's
-// knobs are parameters 2 x layer and 2 x layer + 1 (web_view.h).
+// the FX page a pair per slot, and the Character page has no Shift layer.
+// Up to the mod page, a layer's knobs are parameters 2 x layer and
+// 2 x layer + 1 (web_view.h).
 constexpr int kCharLayer   = 2 * (kCharPage + 2);
 constexpr int kLfoLayer    = kCharLayer + 1;
 constexpr int kModLayer    = kLfoLayer + 4;
-constexpr int kPresetLayer = kModLayer + 2 * mod::kSlots;
+constexpr int kFxLayer     = kModLayer + 2 * mod::kSlots;
+constexpr int kPresetLayer = kFxLayer + 4;
 constexpr int kNumLayers   = kPresetLayer + 1;
 static_assert(2 * kModLayer == kParamMod1Source, "the knob layers and parameters are out of step");
 
@@ -135,14 +156,23 @@ int Layer(int page, bool shift, int sub)
         case kCharPage: return kCharLayer;
         case kLfoPage: return kLfoLayer + 2 * sub + shift;
         case kModPage: return kModLayer + 2 * sub + shift;
+        case kFxPage: return kFxLayer + 2 * sub + shift;
         default: return 2 * (page < kEnvPage ? page : page + 2) + shift;
     }
 }
 
 // Where a knob parameter lives. A mod slot's are Source and Amount, then
-// Target under Shift, whose knob 2 is a copy of Amount (see MirrorAmount).
+// Target under Shift, whose knob 2 is a copy of Amount; an FX slot's is
+// only its Type (knob 1), as its other knobs show the effects' values (see
+// Mirror).
 void KnobOf(int param, int *layer, int *knob)
 {
+    if(param >= kParamFx1Type)
+    {
+        *layer = kFxLayer + 2 * (param - kParamFx1Type);
+        *knob  = 0;
+        return;
+    }
     if(param < kParamMod1Source)
     {
         *layer = param / 2;
@@ -188,6 +218,10 @@ PagedKnobs<kNumLayers, kNumKnobs> knobs({
     {0.0f, 0.5f}, {0.0f, 0.5f},
     {0.0f, 0.5f}, {0.0f, 0.5f},
     {0.0f, 0.5f}, {0.0f, 0.5f},
+    {0.05f, 0.0f},  // fx 1: off; Amount (shown)
+    {0.0f, 0.0f},   // the parameter picked; its Value (shown)
+    {0.95f, 0.0f},  // fx 2: Reverb
+    {0.0f, 0.0f},
     {0.0f, 0.0f},   // presets: unused
 });
 
@@ -198,16 +232,18 @@ PagedKnobs<kNumLayers, kNumKnobs> knobs({
 
 // Each knob page's encoder choice: tables, voice mode, filter type, glide
 // mode, the envelope shown, pan mode, oscillator mode, the LFO shown, the
-// mod slot shown.
+// mod slot shown, the FX slot shown.
 constexpr int kChoiceCounts[kNumKnobPages] = {Wavetables::kTables, Wavetables::kTables,
                                               SynthEngine::kNumVoiceModes, VoiceFilter::kNumTypes,
                                               SynthEngine::kNumGlideModes, Voice::kNumEnvs,
                                               SynthEngine::kNumPanModes, SynthEngine::kNumOscModes,
-                                              2, mod::kSlots};
+                                              2, mod::kSlots, 2};
 int  choices[kNumKnobPages] = {0, 0, SynthEngine::kPoly, VoiceFilter::kLp24,
                                SynthEngine::kGlideOnset, Voice::kAmpEnv, 0, SynthEngine::kOsc8Bit,
-                               0, 0};
+                               0, 0, 0};
 int  dirt_type = Dirt::kStatic; // the Filter page's choice with Shift
+int  fx_routing = kFxSerial;    // the FX page's choice with Shift
+float fx_values[kNumFxParams];  // the effects' values, by type (fx_params.h)
 bool limit[2]  = {};
 bool fixed[2]  = {};
 bool mpe       = false;
@@ -320,6 +356,16 @@ void SetChoice(int p, int value, uint32_t now_ms)
     }
 }
 
+void SetFxRouting(int value, uint32_t now_ms)
+{
+    fx_routing = Clamp(value, kNumFxRoutings);
+    if(page == kFxPage)
+    {
+        choice_flash_hue   = (float)fx_routing / kNumFxRoutings;
+        choice_flash_until = now_ms + 1000;
+    }
+}
+
 void SetDirtType(int value, uint32_t now_ms)
 {
     dirt_type = Clamp(value, Dirt::kNumTypes);
@@ -347,6 +393,7 @@ void SetParam(int index, int raw, uint32_t now_ms)
             PlayGate(web_play);
             break;
         case kParamDirtType: SetDirtType(raw, now_ms); break;
+        case kParamFxRouting: SetFxRouting(raw, now_ms); break;
         case kParamMpe: mpe = raw != 0; break;
         case kParamTempo:
             tempo_raw = raw / 16383.0f;
@@ -355,6 +402,8 @@ void SetParam(int index, int raw, uint32_t now_ms)
         default:
             if(index < kNumKnobParams)
                 SetKnob(index, raw / 16383.0f);
+            else if(index >= kParamFxFirst && index <= kParamFxLast)
+                fx_values[index - kParamFxFirst] = raw / 16383.0f;
             else if(index >= kFirstChoice && index < kFirstChoice + kNumKnobPages)
                 SetChoice(index - kFirstChoice, raw, now_ms);
             break;
@@ -379,12 +428,17 @@ int ParamRaw(int index)
         case kParamPlayNote: return (int)(PlayNoteRaw() * 16383.0f + 0.5f);
         case kParamPlay: return play_sounding >= 0;
         case kParamDirtType: return dirt_type;
+        case kParamFxRouting: return fx_routing;
         case kParamMpe: return mpe;
         case kParamTempo: return (int)(tempo_raw * 16383.0f + 0.5f);
         default:
             if(index < kNumKnobParams)
                 return (int)(KnobValue(index) * 16383.0f + 0.5f);
-            return choices[index - kFirstChoice];
+            if(index >= kParamFxFirst && index <= kParamFxLast)
+                return (int)(fx_values[index - kParamFxFirst] * 16383.0f + 0.5f);
+            if(index >= kFirstChoice && index < kFirstChoice + kNumKnobPages)
+                return choices[index - kFirstChoice];
+            return 0;
     }
 }
 
@@ -665,22 +719,90 @@ SynthEngine::Patch MakePatch()
     return p;
 }
 
-// On a mod slot's Shift layer, knob 2 is Amount again: the layer keeps a
-// copy, kept in step both ways (the knob moving it, or the page, MIDI or a
-// preset setting the real one).
-float mirrored_amount = -1.0f;
-
-void MirrorAmount(int layer, bool entered)
+FxType FxSlotType(int slot)
 {
-    if(page != kModPage || !Shift())
+    return (FxType)SynthEngine::Pick(KnobValue(kParamFx1Type + slot), kNumFxTypes);
+}
+
+// A knob that shows a value kept elsewhere (*real): the layer keeps a copy,
+// kept in step both ways, the knob moving it, or the page, MIDI or a preset
+// setting the real one. A new layer or target (`which`) takes the real
+// value and lets go of the knob until it moves. real: nullptr for none.
+float mirror_shown = -1.0f;
+int   mirror_which = -1;
+
+void Mirror(int layer, int knob, float *real, int which, bool entered)
+{
+    if(!real)
+    {
+        mirror_which = -1;
         return;
-    int   main  = layer - 1;
-    float shown = knobs.Value(layer, 1), real = knobs.Value(main, 1);
-    if(entered || (shown == mirrored_amount && real != shown))
-        knobs.Set(layer, 1, real); // lets go of the knob until it moves
-    else if(shown != mirrored_amount)
-        knobs.Set(main, 1, shown);
-    mirrored_amount = knobs.Value(layer, 1);
+    }
+    float shown = knobs.Value(layer, knob);
+    if(entered || which != mirror_which || (shown == mirror_shown && *real != shown))
+        knobs.Set(layer, knob, *real);
+    else if(shown != mirror_shown)
+        *real = shown;
+    mirror_shown = knobs.Value(layer, knob);
+    mirror_which = which;
+}
+
+// Knob 2 on a mod slot's Shift layer is Amount again; on the FX page it's
+// the slot's effect's Amount (its first value), or with Shift, the Value
+// of the parameter knob 1 picks.
+void MirrorKnobs(int layer, bool entered)
+{
+    if(page == kModPage && Shift())
+    {
+        int   main = layer - 1;
+        float real = knobs.Value(main, 1);
+        Mirror(layer, 1, &real, main, entered);
+        if(real != knobs.Value(main, 1))
+            knobs.Set(main, 1, real); // not showing, so it stays as it is
+    }
+    else if(page == kFxPage)
+    {
+        FxType type  = FxSlotType(choices[kFxPage]);
+        int    count = kFxCount[type];
+        int    which = count == 0 ? -1 : kFxFirst[type] + (Shift() ? SynthEngine::Pick(knobs.Value(layer, 0), count) : 0);
+        Mirror(layer, 1, which < 0 ? nullptr : &fx_values[which], 1024 * layer + which, entered);
+    }
+    else
+        Mirror(layer, 1, nullptr, -1, entered);
+}
+
+// With no display, LED 2 flashes what knob 1 picks on the FX page: the
+// effect (Hue(type / 10)), or with Shift the parameter, along its list.
+int fx_pick_layer = -1, fx_pick = -1;
+
+void FlashFxPick(int layer, uint32_t now_ms)
+{
+    if(page != kFxPage)
+    {
+        fx_pick_layer = -1;
+        return;
+    }
+    FxType type  = FxSlotType(choices[kFxPage]);
+    int    count = kFxCount[type];
+    int    pick  = Shift() ? (count ? SynthEngine::Pick(knobs.Value(layer, 0), count) : 0) : type;
+    if(layer == fx_pick_layer && pick != fx_pick)
+    {
+        choice_flash_hue   = Shift() ? (float)pick / (float)count : (float)type / kNumFxTypes;
+        choice_flash_until = now_ms + 1000;
+    }
+    fx_pick_layer = layer;
+    fx_pick       = pick;
+}
+
+FxChain::Settings MakeFxSettings()
+{
+    FxChain::Settings s;
+    s.type[0]          = FxSlotType(0);
+    s.type[1]          = FxSlotType(1);
+    s.routing          = (FxRouting)fx_routing;
+    s.values           = fx_values;
+    s.samples_per_beat = tempo.SamplesPerBeat();
+    return s;
 }
 
 void AudioCallback(AudioHandle::InputBuffer  in,
@@ -761,21 +883,25 @@ void AudioCallback(AudioHandle::InputBuffer  in,
         presets.Step(inc);
     else if(inc != 0 && page == kFilterPage && Shift())
         SetDirtType(dirt_type + inc, now_ms);
+    else if(inc != 0 && page == kFxPage && Shift())
+        SetFxRouting(fx_routing + inc, now_ms);
     else if(inc != 0)
         SetChoice(page, choices[page] + inc, now_ms);
     presets.Apply();
 
     // The knobs work on this page's layer, with Shift's and the envelope's,
     // LFO's or slot's.
-    int  sub     = page == kEnvPage ? choices[kEnvPage] : (page == kLfoPage ? choices[kLfoPage] : choices[kModPage]);
+    int  sub     = page == kEnvPage || page == kLfoPage || page == kModPage || page == kFxPage ? choices[page] : 0;
     int  layer   = Layer(page, Shift(), sub);
     bool entered = layer != knobs.Page();
     if(entered)
         knobs.SetPage(layer, knob);
     knobs.Update(knob);
-    MirrorAmount(layer, entered);
+    MirrorKnobs(layer, entered);
+    FlashFxPick(layer, now_ms);
 
     engine.SetPatch(MakePatch());
+    effects.Set(MakeFxSettings(), size);
 
     if(reset_peaks)
     {
@@ -792,6 +918,7 @@ void AudioCallback(AudioHandle::InputBuffer  in,
     {
         size_t n = size - done < 16 ? size - done : 16;
         engine.Process(l, r, n);
+        effects.Process(l, r, n);
         for(size_t i = 0; i < n; i++)
         {
             float ol = l[i] * master, or_ = r[i] * master;
@@ -823,6 +950,9 @@ int main(void)
 
     tables.Init(wave_memory);
     engine.Init(&tables, hw.AudioSampleRate(), hw.AudioBlockSize());
+    effects.Init(fx_fast, fx_slow, hw.AudioSampleRate(), hw.AudioBlockSize());
+    for(int i = 0; i < kNumFxParams; i++)
+        fx_values[i] = kFxParams[i].initial;
     tempo.Init(hw.AudioSampleRate());
     limiter.Init(hw.AudioSampleRate());
     cpu_meter.Init(hw.AudioSampleRate(), hw.AudioBlockSize());

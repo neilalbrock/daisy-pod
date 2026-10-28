@@ -114,6 +114,8 @@ class Biquad
         kLowPass,
         kHighPass,
         kPeak,
+        kLowShelf, // q: the shelf's slope, 0.707 for the cookbook's S = 1
+        kHighShelf,
     };
 
     void Reset() { z1_ = z2_ = 0.0f; }
@@ -148,6 +150,20 @@ class Biquad
                 a1 = -2.0f * cw;
                 a2 = 1.0f - alpha;
                 break;
+            case Type::kLowShelf:
+            case Type::kHighShelf:
+            {
+                float A  = powf(10.0f, gain_db / 40.0f);
+                float sa = 2.0f * sqrtf(A) * alpha;
+                float s  = type == Type::kLowShelf ? 1.0f : -1.0f; // the high shelf mirrors the low
+                b0       = A * ((A + 1.0f) - s * (A - 1.0f) * cw + sa);
+                b1       = s * 2.0f * A * ((A - 1.0f) - s * (A + 1.0f) * cw);
+                b2       = A * ((A + 1.0f) - s * (A - 1.0f) * cw - sa);
+                a0       = (A + 1.0f) + s * (A - 1.0f) * cw + sa;
+                a1       = -s * 2.0f * ((A - 1.0f) + s * (A + 1.0f) * cw);
+                a2       = (A + 1.0f) + s * (A - 1.0f) * cw - sa;
+                break;
+            }
             case Type::kPeak:
             default:
             {

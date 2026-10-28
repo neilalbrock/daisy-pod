@@ -64,6 +64,24 @@ class VoiceFilter
 
     static float CutoffHz(float octaves) { return 20.0f * exp2f(octaves); }
 
+    // The Drive curves, for the filter's Drive and the Drive effect.
+    static float DriveShape(DriveCurve curve, float v)
+    {
+        switch(curve)
+        {
+            case kPnp: return v >= 0.0f ? v / (1.0f + v) : 0.5f * v / (1.0f - 0.5f * v);
+            case kTube: return dsp::SoftClip(v + 0.3f) - dsp::SoftClip(0.3f);
+            case kPickUp: return v / (1.0f + 0.25f * v * v);
+            case kDiode: return dsp::Clamp(v, -1.0f, 1.0f);
+            case kCrunch:
+            default:
+            {
+                float phase = v * 0.25f; // a quarter of a sine per unit
+                return dsp::FastSin(phase - floorf(phase));
+            }
+        }
+    }
+
     // Once, before any voice runs: the cutoff table for this sample rate.
     static void Init(float sample_rate)
     {
@@ -160,7 +178,7 @@ class VoiceFilter
                 ic2_     = 2.0f * v2 - ic2_;
                 return type_ == kLp12 ? v2 : x - k_ * v1 - v2;
             }
-            case kDrive: return 0.8f * Shape(x * gain_);
+            case kDrive: return 0.8f * DriveShape(curve_, x * gain_);
             default: return x;
         }
     }
@@ -199,23 +217,6 @@ class VoiceFilter
     {
         x = dsp::Clamp(x, -1.5f, 1.5f);
         return x - (4.0f / 27.0f) * x * x * x;
-    }
-
-    float Shape(float v) const
-    {
-        switch(curve_)
-        {
-            case kPnp: return v >= 0.0f ? v / (1.0f + v) : 0.5f * v / (1.0f - 0.5f * v);
-            case kTube: return dsp::SoftClip(v + 0.3f) - dsp::SoftClip(0.3f);
-            case kPickUp: return v / (1.0f + 0.25f * v * v);
-            case kDiode: return dsp::Clamp(v, -1.0f, 1.0f);
-            case kCrunch:
-            default:
-            {
-                float phase = v * 0.25f; // a quarter of a sine per unit
-                return dsp::FastSin(phase - floorf(phase));
-            }
-        }
     }
 
     static inline float g_table_[kTableSize + 1] = {};

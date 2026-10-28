@@ -627,10 +627,50 @@ main {
   gap: 12px 8px;
 }
 
+.group-knobs + .group-menus,
 .group-knobs + .group-choices,
 .group-knobs + .group-switches,
+.group-menus + .group-choices,
+.group-menus + .group-switches,
 .group-choices + .group-switches {
   margin-top: 16px;
+}
+
+/* Menus: a continuous value that picks from a list, two or more across. */
+.group-menus {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));
+  gap: 10px 8px;
+}
+
+.menu {
+  display: block;
+  min-width: 0;
+}
+
+.menu .choice-label {
+  display: block;
+}
+
+.menu select {
+  width: 100%;
+  min-height: var(--control-h);
+  padding: 0 10px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-control);
+  background: var(--panel-raised);
+  color: var(--text);
+  font: inherit;
+  font-size: 14px;
+}
+
+.menu select:hover {
+  border-color: var(--line-strong);
+}
+
+.menu select:focus-visible {
+  outline: 2px solid var(--accent-ui);
+  outline-offset: 2px;
 }
 
 .group-knobs {

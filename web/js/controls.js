@@ -1,6 +1,8 @@
 // The control surface, built from the parameter list the app sends: a card
-// per group, holding knobs, choices, toggles and triggers, laid out the same
-// way for every app. Changes go out through onSet(index, raw); the app's
+// per group, holding knobs, menus, choices, toggles and triggers, laid out
+// the same way for every app. A menu is a continuous parameter that picks
+// from a list (the app's menu(name) gives the list), as a knob stepping
+// through it does on the Pod. Changes go out through onSet(index, raw); the app's
 // state messages come back in through state().
 
 import { createKnob } from "./knob.js";
@@ -126,7 +128,7 @@ export class Controls {
   // Three zones, the same for every app: a group that is one big choice
   // (grainfall's effects, tapeworn's tape models) across the top, the knob
   // pages in a row, and everything else in columns. Inside a card, always
-  // knobs, then choices, then switches.
+  // knobs, then menus, then choices, then switches.
   build(hello, params, app) {
     this.root.replaceChildren();
     this.widgets = [];
@@ -160,7 +162,12 @@ export class Controls {
       if (meta) head.append(meta);
       card.setAttribute("aria-label", page ? `${groupName}: ${title}` : title);
 
-      const parts = { knobs: el("div", "group-knobs"), choices: el("div", "group-choices"), switches: el("div", "group-switches") };
+      const parts = {
+        knobs: el("div", "group-knobs"),
+        menus: el("div", "group-menus"),
+        choices: el("div", "group-choices"),
+        switches: el("div", "group-switches"),
+      };
       for (const p of members) {
         const showLabel = !main && p.name !== groupName && p.name !== title;
         this.widgets[p.index] = this.widget(p, app, parts, { showLabel, wrap: main, meta });
@@ -175,6 +182,8 @@ export class Controls {
     const send = (raw) => this.onSet(p.index, raw);
     switch (p.kind) {
       case Kind.CONTINUOUS: {
+        const list = app.menu?.(p.name);
+        if (list) return this.menu(p, list, parts, send);
         const out = throttled(send);
         const knob = createKnob({
           label: p.name,
@@ -232,6 +241,26 @@ export class Controls {
         return { set: () => {} };
       }
     }
+  }
+
+  // A list over a continuous value: the item i is the middle of its step,
+  // (i + 0.5) / n, so the Pod's knob reading lands on the same item.
+  menu(p, list, parts, send) {
+    const box = el("label", "menu");
+    const label = el("span", "choice-label");
+    label.textContent = p.name;
+    const select = el("select");
+    list.forEach((name, i) => {
+      const o = el("option");
+      o.value = String(i);
+      o.textContent = name;
+      select.append(o);
+    });
+    select.addEventListener("change", () => send(Math.round(((Number(select.value) + 0.5) / list.length) * UNIT_MAX)));
+    box.append(label, select);
+    parts.menus.append(box);
+    const n = list.length;
+    return { set: (raw) => (select.value = String(Math.min(n - 1, Math.floor((raw / UNIT_MAX) * n)))) };
   }
 
   state(values) {

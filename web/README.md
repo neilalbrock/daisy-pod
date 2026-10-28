@@ -98,7 +98,7 @@ works over USB: the Pod's TRS MIDI is far too slow for the telemetry.
 | `js/views/loop.js` | The loop view, which an app can use instead (driftnet) |
 | `js/views/readouts.js` | Tempo, levels and CPU |
 | `js/views/traces.js` | Traces over time, and the X-Y plot |
-| `js/apps/<app>.js` | Optional extras per app: colours, units, group titles, its own buffer view |
+| `js/apps/<app>.js` | Optional extras per app: colours, units, menus, group titles, its own buffer view |
 
 ## Adding an app
 
@@ -118,7 +118,10 @@ On the firmware side (see `web_view.{h,cpp}` and the web link section of
    the hello and send their values, and the page plots them.
 
 On the page, add `js/apps/<app>.js` for colours and units if you like; the
-plain controls work without it. It can also give a `View`, a class with the
+plain controls work without it. Its `menu(name)` can return a list of names
+for a continuous parameter that picks from a list (a knob stepping through
+it on the Pod, as wavebyte's mod matrix sources do): the page shows a
+drop-down, and sends the middle of the chosen item's step, (i + 0.5) / n. It can also give a `View`, a class with the
 buffer view's methods (`setLayout`, `addOverview`, `setFrame`, `draw`, and
 optionally `status`, a line for the panel's head), to draw the buffer section
 its own way under its own `scopeTitle`, as driftnet does with

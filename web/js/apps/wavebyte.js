@@ -1,8 +1,11 @@
 // Wavebyte's touches on the generic page: the Pod's page colours (LED 2,
-// Hue(page / 10)) and readable units. Matches apps/wavebyte/main.cpp and
-// synth_engine.h, adsr.h, voice_filter.h, lfo.h and mod_matrix.h.
+// Hue(page / 11)) and readable units. Matches apps/wavebyte/main.cpp and
+// synth_engine.h, adsr.h, voice_filter.h, lfo.h, mod_matrix.h and
+// fx_params.h / fx_effects.h.
 
-const GROUPS = ["Osc 1", "Osc 2", "Pitch", "Filter", "Env & Glide", "Envelopes", "Amp", "Character", "LFOs", "Mod Matrix"];
+const GROUPS = ["Osc 1", "Osc 2", "Pitch", "Filter", "Env & Glide", "Envelopes", "Amp", "Character", "LFOs", "Mod Matrix", "FX"];
+// Each effect's card, in the FX page's colour.
+const EFFECTS = ["Chorus", "Flanger", "Phaser", "Tremolo", "Drive", "Compressor", "EQ", "Delay", "Reverb"];
 
 // The knobs that pick from a list: SynthEngine::Pick.
 const pick = (list) => (v) => list[Math.min(list.length - 1, Math.max(0, Math.floor(v * list.length)))];
@@ -94,6 +97,67 @@ const FORMATS = {
   DAC: (v) => (v <= 0 ? "ideal" : `${(12 - 6 * v).toFixed(1)} bit`),
   Tempo: (v) => `${Math.round(40 + 200 * v)} BPM`,
 };
+
+// The effects (fx_effects.h).
+const hzOf = (lo, octaves) => (v) => hz(lo * Math.pow(2, octaves * v));
+const msOf = (lo, octaves) => (v) => seconds(lo * Math.pow(2, octaves * v));
+const db = (range) => (v) => {
+  const d = (2 * v - 1) * range;
+  return `${d > 0 ? "+" : ""}${d.toFixed(1)} dB`;
+};
+const signedPct = (v) => {
+  const p = Math.round((2 * v - 1) * 100);
+  return p > 0 ? `+${p}%` : `${p}%`;
+};
+const degrees = (v) => `${Math.round(180 * v)}°`;
+const q = (v) => (0.3 * Math.pow(2, 5 * v)).toFixed(2);
+Object.assign(FORMATS, {
+  "Chorus Depth": (v) => `${(6 * v).toFixed(1)} ms`,
+  "Chorus Speed": hzOf(0.05, 8),
+  "Chorus Feedback": signedPct,
+  "Chorus Center": degrees,
+  "Chorus High-Cut": hzOf(20000, -6.06),
+  "Chorus Low-Cut": hzOf(20, 6.64),
+  "Flanger Speed": hzOf(0.02, 9),
+  "Flanger Feedback": signedPct,
+  "Flanger Center": (v) => `${(0.3 + 9.7 * v).toFixed(1)} ms`,
+  "Flanger Phase Diff": degrees,
+  "Phaser Speed": hzOf(0.02, 9),
+  "Phaser Feedback": signedPct,
+  "Phaser Center": hzOf(100, 6.32),
+  "Phaser Depth": (v) => `±${(3 * v).toFixed(1)} oct`,
+  "Phaser Phase Diff": degrees,
+  "Tremolo Speed": hzOf(0.1, 7),
+  "Tremolo Phase Diff": degrees,
+  "Tremolo Smooth": (v) => `${Math.round(40 * v)} ms`,
+  "Drive Gain": db(12),
+  "Compr Ratio": (v) => `${(1 + 19 * v * v).toFixed(1)}:1`,
+  "Compr Threshold": (v) => `${(-40 * (1 - v)).toFixed(1)} dB`,
+  "Compr InGain": db(12),
+  "Compr OutGain": db(12),
+  "Compr Attack": msOf(0.0001, 9.966),
+  "Compr Release": msOf(0.01, 6.644),
+  "Compr Look Ahead": (v) => `${(10 * v).toFixed(1)} ms`,
+  "EQ Gain": db(12),
+  "EQ Low Freq": hzOf(20, 5.64),
+  "EQ Low Gain": db(18),
+  "EQ Mid Freq": hzOf(100, 6.32),
+  "EQ Mid Gain": db(18),
+  "EQ Mid Q": q,
+  "EQ Mid 2 Freq": hzOf(200, 5.91),
+  "EQ Mid 2 Gain": db(18),
+  "EQ Mid 2 Q": q,
+  "EQ High Freq": hzOf(1000, 4),
+  "EQ High Gain": db(18),
+  "Delay Left": msOf(0.001, 10.97),
+  "Delay Right": msOf(0.001, 10.97),
+  "Delay HighCut": hzOf(20000, -5.32),
+  "Delay LowCut": hzOf(20, 6.64),
+  "Reverb Time": msOf(0.3, 6),
+  "Reverb Color": (v) => (Math.abs(v - 0.5) < 0.01 ? "neutral" : v < 0.5 ? `dark ${pct(1 - 2 * v)}` : `thin ${pct(2 * v - 1)}`),
+  "Reverb Mod Rate": hzOf(0.1, 6),
+  "Reverb Pre-Delay": (v) => `${Math.round(60 * v)} ms`,
+});
 for (const n of [1, 2]) {
   FORMATS[`LFO ${n} Speed`] = (v) => {
     const f = 0.02 * Math.pow(2, 11 * v);
@@ -114,8 +178,49 @@ for (const env of ["Wave", "Filter", "Amp"]) {
   FORMATS[`${env} Release`] = fall;
 }
 
+// fx_params.h
+const FX_TYPES = ["Off", ...EFFECTS];
+const DELAY_RATIOS = ["1/1", "1/2.", "1/1T", "1/2", "1/4.", "1/2T", "1/4", "1/8.", "1/4T", "1/8",
+  "1/16.", "1/8T", "1/16", "1/32.", "1/16T", "1/32", "1/32T", "1/64"];
+const SINE_TRI = ["Sine", "Triangle"];
+const OFF_ON = ["Off", "On"];
+
+// The knobs that pick from a list show as menus on the page.
+const MENUS = {
+  "FX 1 Type": FX_TYPES,
+  "FX 2 Type": FX_TYPES,
+  "Chorus Shape": SINE_TRI,
+  "Chorus Stages": ["2", "4", "6", "8"],
+  "Flanger Shape": SINE_TRI,
+  "Phaser Shape": SINE_TRI,
+  "Phaser Stages": ["2", "4", "8", "12", "16"],
+  "Phaser Model": ["Nave", "PPG"],
+  "Tremolo Shape": ["Sine", "Triangle", "Square"],
+  "Drive Type": ["PNP", "Tube", "PickUp", "Diode", "Crunch"],
+  "Compr Auto Gain": OFF_ON,
+  "Delay Link": OFF_ON,
+  "Delay Sync": OFF_ON,
+  "Delay Ratio Left": DELAY_RATIOS,
+  "Delay Ratio Right": DELAY_RATIOS,
+};
+for (const n of [1, 2]) {
+  MENUS[`LFO ${n} Shape`] = LFO_SHAPES;
+  MENUS[`LFO ${n} Ratio`] = RATIOS;
+  MENUS[`LFO ${n} Mode`] = LFO_MODES;
+}
+for (let n = 1; n <= 8; n++) {
+  MENUS[`Mod ${n} Source`] = SOURCES;
+  MENUS[`Mod ${n} Target`] = TARGETS;
+}
+
 export default {
+  menu: (name) => MENUS[name],
   tracesTitle: "Last voice",
-  groupColour: (name) => (GROUPS.includes(name) ? hue(GROUPS.indexOf(name) / GROUPS.length) : undefined),
+  groupColour: (name) =>
+    GROUPS.includes(name)
+      ? hue(GROUPS.indexOf(name) / GROUPS.length)
+      : EFFECTS.includes(name)
+        ? hue(GROUPS.indexOf("FX") / GROUPS.length)
+        : undefined,
   format: (name) => FORMATS[name] || pct,
 };

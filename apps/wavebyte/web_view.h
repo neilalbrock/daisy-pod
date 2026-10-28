@@ -13,6 +13,7 @@
 #include <cstddef>
 #include <cstdint>
 
+#include "fx_params.h"
 #include "web_link.h"
 
 namespace web_view
@@ -22,7 +23,9 @@ namespace web_view
 // i % 2. Each page has a layer, a second under Shift, the envelope and LFO
 // pages a pair per envelope or LFO, and the Character page one. The mod
 // matrix has three per slot: Source and Amount, then Target under Shift
-// (where knob 2 is Amount again).
+// (where knob 2 is Amount again). The FX page's only knob parameters are
+// the slots' types: its other knobs show the effects' values (kParamFxFirst
+// on), which have no knob of their own.
 enum ParamId
 {
     kParamWave1,
@@ -73,6 +76,8 @@ enum ParamId
     kParamLfo2Mode,
     kParamMod1Source, // then Amount and Target, for each of the 8 slots
     kParamLastMod = kParamMod1Source + 3 * 8 - 1,
+    kParamFx1Type,
+    kParamFx2Type,
     // The pages' encoder choices.
     kParamTable1,
     kParamTable2,
@@ -84,8 +89,13 @@ enum ParamId
     kParamOscMode,
     kParamLfoSelect,
     kParamModSlot,
-    // The Filter page's encoder turn with Shift.
+    kParamFxSlot,
+    // The Filter and FX pages' encoder turns with Shift.
     kParamDirtType,
+    kParamFxRouting,
+    // The effects' values, by type (fx_params.h).
+    kParamFxFirst,
+    kParamFxLast = kParamFxFirst + kNumFxParams - 1,
     // The web page's alone.
     kParamLimit1,
     kParamLimit2,
@@ -97,7 +107,7 @@ enum ParamId
     kParamTempo,
     kNumParams,
 };
-constexpr int kNumKnobParams = kParamLastMod + 1;
+constexpr int kNumKnobParams = kParamFx2Type + 1;
 constexpr int kFirstChoice   = kParamTable1;
 
 extern const weblink::Param kParams[kNumParams];
