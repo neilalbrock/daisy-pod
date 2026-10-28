@@ -1,6 +1,8 @@
-// Driftnet's touches on the generic page: the loop view, the Pod's page
-// colours, the toggles' position colours and readable units. Matches
-// apps/driftnet/main.cpp, drift_engine.cpp and ramp.cpp.
+// Driftnet's touches on the faceplate: the loop view, the Pod's page
+// colours, the toggles' position colours, readable units, and the drawer
+// for MOOD's hidden options and modes. With no feature, its three pages sit
+// beside the display. Matches apps/driftnet/main.cpp, drift_engine.cpp and
+// ramp.cpp.
 
 import { LoopView } from "../views/loop.js";
 
@@ -30,9 +32,12 @@ const FORMATS = {
 export default {
   View: LoopView,
   scopeTitle: "Loop",
-  legend: ["speed"], // the grains are coloured by speed; no taps or notes
-  tempo: true, // keep the Tempo panel while unsynced, so the page doesn't jump
-  tracesTitle: "Clock, Env and ramp",
+  tagline: "always-listening micro-looper",
+  tempo: true, // keep the tempo line while unsynced, so the display doesn't jump
+  // The deep settings, a tab at a time.
+  drawer: ["Hidden options", "DIP switches", "Ramping", "Tempo", "Synth Mode"],
+  // The channels light green, as the Pod's LEDs do.
+  ledColour: (name) => (name === "Wet on" || name === "Looper" ? "#46c46f" : undefined),
   groupColour: (name) => PAGE_COLOURS[name],
   optionColour: (param, index) => (TOGGLES.includes(param) ? POSITION_COLOURS[index] : undefined),
   format: (name) => FORMATS[name] || pct,

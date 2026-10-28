@@ -7,8 +7,9 @@ const MARGIN_TOP = 16;
 const MARGIN_BOTTOM = 18;
 const MAX_EXTRAPOLATE_MS = 120; // keep scrolling between frames, but not far
 
-function css(name) {
-  return getComputedStyle(document.documentElement).getPropertyValue(name).trim();
+// Colours come from the canvas, so the page can theme the panel it sits in.
+function css(el, name) {
+  return getComputedStyle(el).getPropertyValue(name).trim();
 }
 
 // Hue for a playback speed: teal at normal, orange to red going up, blue to
@@ -39,13 +40,13 @@ export class BufferView {
     this.canvas.height = Math.max(1, Math.round(height * dpr));
     this.dpr = dpr;
     this.colours = {
-      wave: css("--wave"),
-      grid: css("--grid"),
-      gridStrong: css("--grid-strong"),
-      text: css("--text-dim"),
-      onset: css("--onset"),
-      tap: css("--tap"),
-      now: css("--accent-ui"),
+      wave: css(this.canvas, "--wave"),
+      grid: css(this.canvas, "--grid"),
+      gridStrong: css(this.canvas, "--grid-strong"),
+      text: css(this.canvas, "--text-dim"),
+      onset: css(this.canvas, "--onset"),
+      tap: css(this.canvas, "--tap"),
+      now: css(this.canvas, "--accent-ui"),
     };
   }
 
@@ -82,7 +83,7 @@ export class BufferView {
     const L = this.layout;
     if (!L || !this.frame) {
       ctx.fillStyle = this.colours.text;
-      ctx.font = "13px system-ui, sans-serif";
+      ctx.font = "12px ui-monospace, monospace";
       ctx.textAlign = "center";
       ctx.fillText(L ? "Waiting for the Pod…" : "Not connected", w / 2, h / 2);
       return;
@@ -239,7 +240,7 @@ export class BufferView {
     const secs = span / sr;
     const every = [0.25, 0.5, 1, 2, 4, 8].find((e) => (e / secs) * w >= 56) || 8;
     ctx.fillStyle = this.colours.text;
-    ctx.font = "11px system-ui, sans-serif";
+    ctx.font = "10px ui-monospace, monospace";
     ctx.textAlign = "center";
     for (let s = every; s < secs; s += every) {
       const x = w - (s / secs) * w;

@@ -1,30 +1,48 @@
+/* The faceplate: a light hardware panel with one dark display, sized so an
+   app fits a 1440 x 900 window. Tokens first; web/CLAUDE.md has the rules. */
+
 :root {
-  color-scheme: dark;
-  --bg: #0d0f12;
-  --panel: #15191e;
-  --panel-raised: #1b2027;
-  --panel-sunk: #101317;
-  --line: #262d36;
-  --line-strong: #2f3742;
-  --text: #e7ebf0;
-  --text-soft: #c3cad3;
-  --text-dim: #8b95a3;
-  --text-off: #5b6573;
-  --accent-ui: #3fd8ad;
-  --accent: var(--accent-ui);
-  --wave: #3b4653;
-  --grid: rgb(255 255 255 / 0.07);
-  --grid-strong: rgb(255 255 255 / 0.18);
-  --onset: #f2b630;
-  --tap: #e15cf0;
-  --warn: #ff5a5a;
-  --radius: 10px;
+  color-scheme: light;
+
+  /* The plate */
+  --plate: #d3d6d8; /* page */
+  --panel: #e6e8e9; /* modules */
+  --raised: #eef0f1; /* buttons */
+  --raised-hi: #f4f6f7; /* a switch that's on, menus */
+  --sunk: #d0d3d5; /* behind a segmented control */
+  --line: #bcc0c3;
+  --line-strong: #8f969c;
+  --ink: #15181a;
+  --ink-soft: #2a2e32;
+  --ink-dim: #4d535a;
+  --ink-off: #5b6168;
+  --select: #1b1e21; /* what's picked */
+  --on-select: #ffffff;
+  --track: #c2c6c9; /* a knob's track */
+  --cap: #24282c; /* a knob's cap */
+  --cap-edge: #0e1012;
+  --led: #ff5a4e; /* a switch's light, unless the app says otherwise */
+  --ok: #1fb67f;
+  --wait: #d99a00;
+  --warn: #e5484d;
+  --accent: var(--ink); /* a module's colour (the Pod's page colour) */
+
+  /* The display */
+  --scr: #101413;
+  --scr-raised: #151c1a;
+  --scr-ink: #cfe6dd;
+  --scr-bright: #f2fffa;
+  --scr-dim: #8fa9a2;
+  --scr-line: #23302d;
+  --scr-off: #1c2422;
+
+  --radius: 12px;
   --radius-control: 8px;
-  --control-h: 44px; /* buttons and switches: big enough to hit */
-  --segment-h: 40px; /* a segment inside a segmented control (44 with its frame) */
-  --gap: 16px;
-  --font: system-ui, -apple-system, "Segoe UI", sans-serif;
-  --mono: ui-monospace, "SF Mono", Menlo, monospace;
+  --control-h: 44px; /* buttons and switches */
+  --segment-h: 40px; /* a segment, 44 with its frame */
+  --gap: 12px;
+  --font: Archivo, system-ui, -apple-system, "Segoe UI", sans-serif;
+  --mono: "JetBrains Mono", ui-monospace, "SF Mono", Menlo, monospace;
 }
 
 * {
@@ -33,13 +51,14 @@
 
 body {
   margin: 0;
-  background: var(--bg);
-  color: var(--text);
-  font: 14px/1.4 var(--font);
+  background: var(--plate);
+  color: var(--ink);
+  font: 14px/1.35 var(--font);
 }
 
 button,
-select {
+select,
+input {
   font: inherit;
   color: inherit;
 }
@@ -50,7 +69,7 @@ summary {
 }
 
 :focus-visible {
-  outline: 2px solid var(--accent-ui);
+  outline: 2px solid #2f62f5;
   outline-offset: 2px;
 }
 
@@ -58,85 +77,183 @@ summary {
   display: none !important;
 }
 
-/* One heading style for every panel, readout and control card. */
-h2 {
-  margin: 0;
-  font-size: 12px;
-  font-weight: 600;
-  letter-spacing: 0.08em;
+/* Small caps labels: module titles, control names. */
+.label,
+h2,
+h3,
+.choice-label,
+.knob-label,
+.meter-name {
+  font-weight: 700;
+  font-stretch: 75%;
+  letter-spacing: 0.1em;
   text-transform: uppercase;
-  color: var(--text-dim);
+}
+
+h2,
+h3 {
+  margin: 0;
+  font-size: 13px;
+}
+
+.label,
+.choice-label,
+.knob-label {
+  font-size: 11px;
+  color: var(--ink-dim);
 }
 
 .button {
   display: inline-flex;
   align-items: center;
+  justify-content: center;
   min-height: var(--control-h);
   padding: 0 14px;
   border: 1px solid var(--line);
   border-radius: var(--radius-control);
-  background: var(--panel-raised);
+  background: var(--raised);
+  font-weight: 600;
+  font-size: 13px;
 }
 
 .button:hover {
-  border-color: var(--accent-ui);
+  border-color: var(--line-strong);
+}
+
+.button-quiet {
+  background: transparent;
+  color: var(--ink-dim);
 }
 
 /* ------------------------------------------------------------ Header */
 
 .bar {
-  position: sticky;
-  top: 0;
-  z-index: 2;
   display: flex;
   flex-wrap: wrap;
   align-items: center;
-  justify-content: space-between;
-  gap: 12px 24px;
-  padding: 12px 24px;
-  background: color-mix(in srgb, var(--bg) 88%, transparent);
-  backdrop-filter: blur(8px);
+  gap: 10px 16px;
+  max-width: 1440px;
+  margin: 0 auto;
+  padding: 14px 24px;
   border-bottom: 1px solid var(--line);
 }
 
 .brand {
   display: flex;
-  align-items: center;
-  gap: 12px;
+  align-items: baseline;
+  gap: 14px;
+  margin-right: auto;
 }
 
-.brand-mark {
-  width: 14px;
-  height: 14px;
-  border-radius: 50%;
-  background: radial-gradient(circle at 35% 35%, #fff 0 12%, var(--accent-ui) 13% 100%);
-  box-shadow: 0 0 12px color-mix(in srgb, var(--accent-ui) 60%, transparent);
-}
-
-.brand-name {
-  font-weight: 600;
-  color: var(--text-dim);
-}
-
-.brand-divider {
-  width: 1px;
-  height: 20px;
-  background: var(--line);
-}
-
-.brand-divider:has(+ .app-name:empty) {
-  display: none;
+.brand-pod {
+  font-size: 11px;
+  font-weight: 700;
+  font-stretch: 75%;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--ink-dim);
 }
 
 .app-name {
-  font-family: var(--mono);
-  font-size: 18px;
-  font-weight: 600;
+  margin: 0;
+  font-size: 34px;
+  line-height: 1;
+  font-weight: 800;
+  font-stretch: 70%;
+  letter-spacing: -0.01em;
+}
+
+.app-tagline {
+  font-size: 13px;
+  color: var(--ink-dim);
+}
+
+.header-extra {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.header-extra:empty {
+  display: none;
+}
+
+.header-tabs {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+/* With a tab switch in the header (wavebyte), the tagline makes room. */
+.bar:has(.header-tabs) .app-tagline {
+  display: none;
+}
+
+.presets {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+}
+
+.presets .label {
+  margin-right: 4px;
+}
+
+.preset-slots {
+  display: flex;
+  gap: 6px;
+}
+
+.preset-slots > button {
+  position: relative;
+  width: 44px;
+  height: 44px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-control);
+  background: var(--raised);
+  font: 600 13px var(--mono);
+  overflow: hidden;
+}
+
+/* The slot's LED colour, as a stripe. */
+.preset-slots > button::after {
+  content: "";
+  position: absolute;
+  left: 6px;
+  right: 6px;
+  bottom: 5px;
+  height: 3px;
+  border-radius: 2px;
+  background: var(--slot);
+}
+
+.preset-slots > button.empty {
+  opacity: 0.5;
+}
+
+.preset-slots > button[aria-pressed="true"] {
+  border-color: var(--select);
+  background: var(--select);
+  color: var(--on-select);
+  opacity: 1;
+}
+
+.preset-slots > button.modified::before {
+  content: "•";
+  position: absolute;
+  top: 2px;
+  right: 5px;
+}
+
+.preset-meta {
+  min-width: 9em;
+  font: 12px var(--mono);
+  color: var(--ink-dim);
 }
 
 .connection {
   display: flex;
-  flex-wrap: wrap;
   align-items: center;
   gap: 8px;
 }
@@ -150,7 +267,7 @@ h2 {
   border: 1px solid var(--line);
   border-radius: 999px;
   background: var(--panel);
-  color: var(--text-dim);
+  font-size: 13px;
 }
 
 .status::before {
@@ -158,25 +275,16 @@ h2 {
   width: 8px;
   height: 8px;
   border-radius: 50%;
-  background: var(--text-dim);
-}
-
-.status-port {
-  color: var(--text-dim);
-}
-
-.status[data-state="live"],
-.status[data-state="waiting"] {
-  color: var(--text);
+  background: var(--ink-off);
 }
 
 .status[data-state="live"]::before {
-  background: var(--accent-ui);
-  box-shadow: 0 0 8px var(--accent-ui);
+  background: var(--ok);
+  box-shadow: 0 0 6px var(--ok);
 }
 
 .status[data-state="waiting"]::before {
-  background: var(--onset);
+  background: var(--wait);
   animation: pulse 1s ease-in-out infinite alternate;
 }
 
@@ -186,39 +294,40 @@ h2 {
   }
 }
 
-/* The MIDI ports, out of the way until they're needed. */
-.ports {
+/* The MIDI ports, connect and the factory reset, out of the way. */
+.setup {
   position: relative;
 }
 
-.ports summary {
+.setup summary {
   list-style: none;
 }
 
-.ports summary::-webkit-details-marker {
+.setup summary::-webkit-details-marker {
   display: none;
 }
 
-.ports[open] summary {
-  border-color: var(--accent-ui);
+.setup[open] summary {
+  border-color: var(--select);
 }
 
-.ports-panel {
+.setup-panel {
   position: absolute;
+  z-index: 3;
   right: 0;
   top: calc(100% + 6px);
   display: grid;
   gap: 10px;
-  min-width: 260px;
+  min-width: 280px;
   padding: 12px;
   border: 1px solid var(--line);
   border-radius: var(--radius);
   background: var(--panel);
-  box-shadow: 0 12px 32px rgb(0 0 0 / 0.45);
-  color: var(--text-dim);
+  box-shadow: 0 12px 32px rgb(0 0 0 / 0.2);
+  color: var(--ink-dim);
 }
 
-.ports-panel label {
+.setup-panel label {
   display: grid;
   grid-template-columns: 2.5em 1fr;
   align-items: center;
@@ -226,398 +335,393 @@ h2 {
 }
 
 select {
-  min-height: 40px;
-  padding: 0 8px;
+  min-height: var(--control-h);
+  padding: 0 10px;
   border: 1px solid var(--line);
-  border-radius: 6px;
-  background: var(--panel-sunk);
-  color: var(--text);
+  border-radius: var(--radius-control);
+  background: var(--raised-hi);
+  color: var(--ink);
+  font-weight: 600;
 }
 
-/* ------------------------------------------------------------ Layout */
+select:hover {
+  border-color: var(--line-strong);
+}
 
-main {
+/* ------------------------------------------------------------ Surface */
+
+/* The display and the app's main selector side by side, then the rest
+   across the full width. With a rail (wavebyte), the display and rail run
+   down the left and the sections fill the right. */
+.surface {
   display: grid;
-  grid-template-columns: minmax(0, 1fr);
+  grid-template-columns: minmax(300px, 380px) minmax(0, 1fr);
+  grid-template-areas:
+    "notice notice"
+    "side feature"
+    "below below";
+  align-items: start;
   gap: var(--gap);
   max-width: 1440px;
   margin: 0 auto;
-  padding: 24px 24px 48px;
+  padding: 16px 24px 24px;
+}
+
+.surface.with-rail {
+  grid-template-columns: minmax(260px, 300px) minmax(0, 1fr);
+  grid-template-areas:
+    "notice notice"
+    "side feature";
 }
 
 .notice {
+  grid-area: notice;
   margin: 0;
   padding: 12px 16px;
-  border: 1px solid color-mix(in srgb, var(--warn) 50%, var(--line));
+  border: 1px solid var(--warn);
   border-radius: var(--radius);
   background: color-mix(in srgb, var(--warn) 10%, var(--panel));
 }
 
-/* Every panel, readout and control card is the same box. */
-.scope,
-.readout,
-.group {
-  border: 1px solid var(--line);
-  border-radius: var(--radius);
-  background: var(--panel);
-  padding: 14px 16px 16px;
-}
-
-.scope {
-  padding-bottom: 12px;
-}
-
-/* ... with the same head: title on the left, then a legend, details or actions. */
-.panel-head,
-.group-head {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  gap: 8px 16px;
-  min-height: 32px;
-  margin-bottom: 10px;
-}
-
-/* The title takes the free space, unless a legend follows it to take it instead. */
-.panel-head > h2,
-.group-head > h2 {
-  flex: 1 1 auto;
-}
-
-.panel-head > h2:has(+ .legend:not([hidden])) {
-  flex: 0 0 auto;
-}
-
-.panel-meta {
-  font-size: 12px;
-  color: var(--text-dim);
-}
-
-#scope-meta {
-  display: inline-flex;
-  align-items: center;
-  min-height: 32px;
-  padding: 0 12px;
-  border: 1px solid var(--line);
-  border-radius: 999px;
-  background: var(--panel-sunk);
-  font-family: var(--mono);
-  color: var(--text);
-}
-
-#scope-meta:empty {
-  display: none;
-}
-
-/* ------------------------------------------------------------ Buffer and trace views */
-
-.legend {
-  display: flex;
-  flex: 1 1 auto;
-  flex-wrap: wrap;
-  gap: 4px 14px;
-  color: var(--text-dim);
-  font-size: 12px;
-}
-
-.legend span {
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-}
-
-.sw {
-  display: inline-block;
-  width: 10px;
-  height: 10px;
-  border-radius: 3px;
-}
-
-.sw-slow {
-  background: hsl(220 85% 60%);
-}
-.sw-unity {
-  background: hsl(165 85% 60%);
-}
-.sw-fast {
-  background: hsl(35 85% 60%);
-}
-.sw-tap {
-  width: 3px;
-  background: var(--tap);
-}
-.sw-onset {
-  width: 0;
-  height: 0;
-  border-radius: 0;
-  border: 5px solid transparent;
-  border-top: 7px solid var(--onset);
-  border-bottom: 0;
-}
-
-.buffer,
-.traces {
-  display: block;
-  width: 100%;
-  min-width: 0;
-  height: 300px;
-}
-
-/* ------------------------------------------------------------ Segmented control */
-
-/* One control for every choice: the time spans, and every option list. */
-.segmented {
+.side {
+  grid-area: side;
   display: grid;
-  grid-template-columns: repeat(var(--columns, 3), minmax(0, 1fr));
-  gap: 2px;
-  padding: 2px;
-  border: 1px solid var(--line);
-  border-radius: var(--radius-control);
-  background: var(--panel-sunk);
-}
-
-.segmented.span {
-  grid-template-columns: repeat(3, minmax(52px, 1fr));
-}
-
-.segmented.options-wrap {
-  grid-template-columns: repeat(auto-fill, minmax(140px, 1fr));
-}
-
-.segmented > button {
-  --option: var(--accent);
-  min-height: var(--segment-h);
-  padding: 0 6px;
-  border: 0;
-  border-radius: 6px;
-  background: transparent;
-  color: var(--text-soft);
-  font-size: 12px;
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-}
-
-.segmented.span > button {
-  --option: var(--accent-ui);
-}
-
-.segmented > button:hover {
-  background: var(--panel-raised);
-}
-
-.segmented > button[aria-pressed="true"] {
-  background: color-mix(in srgb, var(--option) 26%, var(--panel-raised));
-  box-shadow: inset 0 0 0 1px var(--option);
-  color: #fff;
-}
-
-/* ------------------------------------------------------------ Readouts */
-
-.readouts {
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
   gap: var(--gap);
 }
 
-.xy-plot {
+.feature {
+  grid-area: feature;
+  min-width: 0;
+  display: grid;
+  gap: var(--gap);
+}
+
+.below {
+  grid-area: below;
+  min-width: 0;
+  display: grid;
+  gap: var(--gap);
+}
+
+.feature:empty,
+.below:empty {
+  display: none;
+}
+
+/* Until the Pod is live, the controls can't do anything. */
+body:not(.is-live) .feature,
+body:not(.is-live) .below,
+body:not(.is-live) .presets,
+body:not(.is-live) .header-extra {
+  opacity: 0.45;
+  pointer-events: none;
+}
+
+/* ------------------------------------------------------------ Display */
+
+.display {
+  display: grid;
+  gap: 10px;
+  padding: 12px 14px;
+  border-radius: var(--radius);
+  background: var(--scr);
+  box-shadow: inset 0 0 0 1px #000;
+  color: var(--scr-ink);
+  /* For the views, which read their colours from their canvas. */
+  --wave: #2c3b37;
+  --grid: rgb(143 169 162 / 0.16);
+  --grid-strong: rgb(143 169 162 / 0.34);
+  --text-dim: var(--scr-dim);
+  --accent-ui: #46e0b0;
+  --onset: #e8a90c;
+  --tap: #f27cd0;
+  --series-1: #46e0b0;
+  --series-2: #f27cd0;
+  --series-3: #f2b25c;
+  --series-4: #9eb7ff;
+}
+
+.display-head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 4px 10px;
+}
+
+.display h2 {
+  font-size: 11px;
+  letter-spacing: 0.12em;
+  color: var(--scr-dim);
+}
+
+.display-meta {
+  font: 11px var(--mono);
+  color: var(--scr-bright);
+}
+
+.scope {
   display: block;
   width: 100%;
-  height: 160px;
+  height: 112px;
 }
 
-.tempo-bpm {
-  font-family: var(--mono);
-  font-size: 32px;
-  font-variant-numeric: tabular-nums;
-  line-height: 1.1;
+.trace-strip {
+  display: block;
+  width: 100%;
+  height: 80px;
 }
 
-.unit {
-  font-size: 13px;
-  color: var(--text-dim);
+.display-row {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  padding-top: 10px;
+  border-top: 1px solid var(--scr-line);
 }
 
-.tempo-source.clock {
-  color: var(--accent-ui);
-}
-
-.readout.idle .tempo-value {
-  color: var(--text-off);
-}
-
-.tempo-beats,
-.tempo-steps {
-  display: grid;
-  grid-template-columns: repeat(4, minmax(0, 1fr));
-  gap: 6px;
-}
-
-.tempo-beats {
-  margin-top: 18px;
-}
-
-.tempo-steps {
-  grid-template-columns: repeat(8, minmax(0, 1fr));
-  margin-top: 6px;
-}
-
-.tempo-beats span {
-  height: 12px;
-  border-radius: 3px;
-  background: var(--panel-raised);
-  border: 1px solid var(--line);
-}
-
-.tempo-steps span {
-  height: 5px;
-  border-radius: 2px;
-  background: var(--line);
-}
-
-.tempo-beats span:first-child {
-  border-color: var(--grid-strong);
-}
-
-.tempo-beats span.on {
-  background: var(--accent-ui);
-  border-color: var(--accent-ui);
-}
-
-.tempo-steps span.on {
-  background: var(--text-soft);
+.xy {
+  flex: none;
+  width: 108px;
+  height: 108px;
 }
 
 .meters {
-  display: flex;
-  gap: 20px;
-  height: 120px;
+  flex: 1;
+  display: grid;
+  gap: 6px;
 }
 
 .meter {
   display: grid;
-  grid-template-rows: 1fr auto auto;
-  justify-items: center;
-  width: 44px;
+  grid-template-columns: 38px minmax(0, 1fr) 46px;
+  align-items: center;
+  gap: 8px;
 }
 
-/* The whole scale, coloured by level; the cover hides what's above the level. */
+.meter-name {
+  font-size: 11px;
+  color: var(--scr-dim);
+}
+
+/* The whole scale, coloured by level; the cover hides what's above it. */
 .meter-track {
   position: relative;
-  width: 14px;
-  height: 100%;
-  border-radius: 3px;
-  background: linear-gradient(to top, var(--accent-ui) 0 70%, var(--onset) 85%, var(--warn) 98%);
+  height: 8px;
+  border-radius: 2px;
+  background: linear-gradient(to right, #46e0b0 0 70%, #e8c14a 85%, #ff5a4e 98%);
   overflow: hidden;
 }
 
 .meter-cover {
   position: absolute;
   inset: 0;
-  transform-origin: top;
-  background: var(--panel-raised);
+  transform-origin: right;
+  background: var(--scr-off);
 }
 
 .meter-hold {
   position: absolute;
-  left: 0;
-  right: 0;
-  height: 2px;
-  background: var(--text);
+  top: 0;
+  bottom: 0;
+  width: 2px;
+  background: var(--scr-bright);
 }
 
 .meter-hold.over {
-  background: var(--warn);
-}
-
-.meter-name {
-  margin-top: 6px;
-  font-size: 12px;
+  background: #ff5a4e;
 }
 
 .meter-db {
-  font-family: var(--mono);
-  font-size: 11px;
-  color: var(--text-dim);
+  font: 11px var(--mono);
+  text-align: right;
 }
 
-.cpu-numbers {
-  font-family: var(--mono);
-  color: var(--text-dim);
-}
-
-.cpu-avg,
-.cpu-max {
-  color: var(--text);
-  font-size: 20px;
-}
-
-.cpu-max.warn {
-  color: var(--warn);
-}
-
-.cpu-graph {
-  display: block;
-  width: 100%;
-  height: 88px;
-  margin-top: 10px;
-}
-
-/* ------------------------------------------------------------ Controls */
-
-/* Three zones: the app's main choice across the top, the knob pages in a
-   row, and everything else in columns. */
-.controls {
-  display: grid;
-  gap: var(--gap);
-}
-
-.controls-pages {
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
-  gap: var(--gap);
-}
-
-.controls-more {
-  column-width: 320px;
-  column-gap: var(--gap);
-}
-
-.controls-more .group {
-  break-inside: avoid;
-  margin-bottom: var(--gap);
-}
-
-/* Tabs over groups of cards (wavebyte's layers): the bar, then the tab's
-   cards, in columns as above. */
-.controls-tabbed {
-  display: grid;
-  gap: var(--gap);
-}
-
-.controls-tabs {
+.tempo {
   display: flex;
   flex-wrap: wrap;
   align-items: center;
   gap: 8px 12px;
+  padding-top: 10px;
+  border-top: 1px solid var(--scr-line);
 }
 
-.controls-tabs > .segmented {
-  flex: 0 1 320px;
+.tempo-value {
+  font: 600 20px var(--mono);
+  color: var(--scr-bright);
 }
 
-.group {
-  box-shadow: inset 0 3px 0 var(--accent);
+.tempo-source {
+  font-size: 11px;
+  color: var(--scr-dim);
 }
 
-.group-head {
-  margin-bottom: 14px;
+.tempo-source.clock {
+  color: var(--accent-ui);
 }
 
-.group-value {
-  font-family: var(--mono);
+.tempo.idle .tempo-value {
+  color: var(--scr-dim);
+}
+
+.tempo-beats {
+  display: inline-flex;
+  gap: 4px;
+  margin-left: auto;
+}
+
+.tempo-beats span {
+  width: 10px;
+  height: 10px;
+  border-radius: 2px;
+  border: 1px solid #3a4a46;
+}
+
+.tempo-beats span.on {
+  border-color: var(--accent-ui);
+  background: var(--accent-ui);
+}
+
+.display-foot {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: space-between;
+  gap: 4px 12px;
+  font: 11px var(--mono);
+  color: var(--scr-dim);
+}
+
+.readouts {
+  display: inline-flex;
+  flex-wrap: wrap;
+  gap: 2px 12px;
+}
+
+.readouts b {
+  font-weight: 400;
+  color: var(--scr-ink);
+}
+
+.cpu .warn {
+  color: #ff5a4e;
+}
+
+/* ------------------------------------------------------------ Rail (wavebyte) */
+
+.rail {
+  display: grid;
+  gap: 4px;
+  padding: 6px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  background: var(--panel);
+}
+
+.rail button {
+  display: grid;
+  grid-template-columns: 52px minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 10px;
+  min-height: var(--control-h);
+  padding: 0 10px;
+  border: 0;
+  border-radius: var(--radius-control);
+  background: transparent;
+  text-align: left;
+  font-weight: 600;
+}
+
+.rail button:hover {
+  background: var(--raised);
+}
+
+.rail button[aria-current="true"] {
+  background: var(--select);
+  color: var(--on-select);
+}
+
+.rail-chips {
+  display: flex;
+  gap: 3px;
+}
+
+.rail-chips span {
+  width: 14px;
+  height: 14px;
+  border-radius: 3px;
+}
+
+.rail-scope {
+  font: 11px var(--mono);
+  color: var(--ink-off);
+}
+
+.rail button[aria-current="true"] .rail-scope {
+  color: #c7cdd2;
+}
+
+.section-head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.section-head h2 {
+  font-size: 24px;
+  line-height: 1.1;
+  font-weight: 800;
+  letter-spacing: 0;
+  text-transform: none;
+}
+
+.section-note {
   font-size: 13px;
-  color: var(--text);
+  color: var(--ink-dim);
+}
+
+.section-cards {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+  align-items: stretch;
+  gap: var(--gap);
+}
+
+/* ------------------------------------------------------------ Modules */
+
+.module {
+  display: grid;
+  align-content: start;
+  gap: 12px;
+  padding: 12px 14px 14px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  background: var(--panel);
+  box-shadow: inset 0 3px 0 color-mix(in srgb, var(--accent) 88%, black);
+}
+
+.module-head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 22px;
+}
+
+.module-head h2,
+.module-head h3 {
+  flex: 1;
+}
+
+.module-value {
+  font: 600 18px var(--mono);
+  text-transform: none;
+  letter-spacing: 0;
+}
+
+.module-scope {
+  font: 11px var(--mono);
+  color: var(--ink-dim);
 }
 
 .chip {
@@ -626,114 +730,63 @@ main {
   justify-content: center;
   min-width: 22px;
   height: 20px;
-  padding: 0 6px;
+  padding: 0 5px;
   border-radius: 5px;
   background: var(--accent);
-  color: var(--bg);
+  color: var(--chip-ink, var(--ink));
   font: 600 11px var(--mono);
 }
 
-.group-head .chip + h2 {
-  margin-left: -8px;
-}
-
-/* Inside a card, always: knobs, then choices, then switches. */
-.group-knobs,
-.group-choices,
-.group-switches {
+.pages {
   display: grid;
-  gap: 12px 8px;
+  grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+  align-items: stretch;
+  gap: var(--gap);
 }
 
-.group-knobs + .group-menus,
-.group-knobs + .group-choices,
-.group-knobs + .group-switches,
-.group-menus + .group-choices,
-.group-menus + .group-switches,
-.group-choices + .group-switches {
-  margin-top: 16px;
+.feature > .pages {
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
 }
 
-/* Menus: a continuous value that picks from a list, two or more across. */
-.group-menus {
+/* Inside a module, always: knobs, then menus, then choices, then switches. */
+.part-knobs {
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));
-  gap: 10px 8px;
-}
-
-.menu {
-  display: block;
-  min-width: 0;
-}
-
-.menu .choice-label {
-  display: block;
-}
-
-.menu select {
-  width: 100%;
-  min-height: var(--control-h);
-  padding: 0 10px;
-  border: 1px solid var(--line);
-  border-radius: var(--radius-control);
-  background: var(--panel-raised);
-  color: var(--text);
-  font: inherit;
-  font-size: 14px;
-}
-
-.menu select:hover {
-  border-color: var(--line-strong);
-}
-
-.menu select:focus-visible {
-  outline: 2px solid var(--accent-ui);
-  outline-offset: 2px;
-}
-
-.group-knobs {
   grid-template-columns: repeat(auto-fill, minmax(80px, 1fr));
   justify-items: center;
+  gap: 8px 4px;
 }
 
-.group-choices {
-  gap: 14px;
+.pages .part-knobs {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
 }
 
-.group-switches {
+.part-menus {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(140px, 1fr));
+  gap: 8px;
+}
+
+.part-choices {
+  display: grid;
+  gap: 10px;
+}
+
+.part-switches {
+  display: grid;
   grid-template-columns: repeat(auto-fill, minmax(136px, 1fr));
   gap: 8px;
 }
 
-/* Presets: a slot per LED colour, dim while empty, a dot while modified. */
-.presets {
-  --accent: var(--text-soft);
+.pages .part-switches {
+  grid-template-columns: minmax(0, 1fr);
 }
 
-.preset-slots > button {
-  font-family: var(--mono);
-}
-
-.preset-slots > button.empty {
-  opacity: 0.45;
-}
-
-.preset-slots > button.modified::after {
-  content: " •";
-}
-
-body:not(.is-live) .presets,
-body:not(.is-live) .controls {
-  opacity: 0.45;
-  pointer-events: none;
-}
-
-/* Knob */
+/* ------------------------------------------------------------ Knob */
 
 .knob {
   display: grid;
   justify-items: center;
-  width: 80px;
+  gap: 2px;
   user-select: none;
 }
 
@@ -743,6 +796,17 @@ body:not(.is-live) .controls {
   border-radius: 50%;
   touch-action: none;
   cursor: ns-resize;
+}
+
+.feature .knob-dial {
+  width: 72px;
+  height: 72px;
+}
+
+.section-cards .knob-dial,
+.drawer .knob-dial {
+  width: 56px;
+  height: 56px;
 }
 
 .knob-dial svg {
@@ -759,55 +823,106 @@ body:not(.is-live) .controls {
 }
 
 .knob-track {
-  stroke: var(--line);
+  stroke: var(--track);
 }
 
 .knob-fill {
-  stroke: var(--accent);
+  stroke: color-mix(in srgb, var(--accent) 88%, black);
 }
 
 .knob-cap {
-  fill: var(--panel-raised);
-  stroke: var(--line-strong);
+  fill: var(--cap);
+  stroke: var(--cap-edge);
 }
 
 .knob-pointer {
-  stroke: var(--text);
+  stroke: #f4f6f7;
   stroke-width: 3;
   stroke-linecap: round;
 }
 
 .knob.active .knob-cap {
-  stroke: var(--accent);
+  stroke: #2f62f5;
 }
 
 .knob-label {
-  margin-top: 4px;
-  font-size: 12px;
   text-align: center;
 }
 
 .knob-value {
-  font-family: var(--mono);
-  font-size: 11px;
-  color: var(--text-dim);
+  font: 12px var(--mono);
   font-variant-numeric: tabular-nums;
 }
 
-/* Choices */
+/* ------------------------------------------------------------ Choices */
 
 .choice {
   min-width: 0;
 }
 
 .choice-label {
+  display: block;
   margin-bottom: 6px;
-  font-size: 12px;
-  color: var(--text-dim);
 }
 
-/* A choice another has taken the place of (wavebyte's Table, while an
-   AKWF table plays). */
+/* One control for every choice. */
+.segmented {
+  display: grid;
+  grid-template-columns: repeat(var(--columns, 3), minmax(0, 1fr));
+  gap: 2px;
+  padding: 2px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-control);
+  background: var(--sunk);
+}
+
+.segmented > button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 5px;
+  min-width: 0;
+  min-height: var(--segment-h);
+  padding: 0 3px;
+  border: 0;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--ink-soft);
+  font-weight: 600;
+  font-size: 12px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.seg-text {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.segmented > button:hover {
+  background: var(--raised);
+}
+
+.segmented > button[aria-pressed="true"] {
+  background: var(--select);
+  color: var(--on-select);
+}
+
+/* An option with its own colour (the Pod's LED for it) shows it as a dot. */
+.segmented > button.dot::before,
+.tile.dot .tile-name::before {
+  content: "";
+  flex: none;
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--option);
+}
+
+/* A choice another has taken the place of (wavebyte's Table while an AKWF
+   table plays). */
 .overridden > :not(.choice-label) {
   opacity: 0.35;
 }
@@ -816,77 +931,132 @@ body:not(.is-live) .controls {
   content: " · not in use";
 }
 
-/* Grainfall's effects: the names across, the variations down. */
-.matrix-scroll {
-  overflow-x: auto;
-}
-
-.matrix {
+/* Menus: a long list as a drop-down. */
+.menu {
   display: grid;
-  grid-template-columns: 32px repeat(var(--names), minmax(80px, 1fr));
-  align-items: center;
   gap: 4px;
-  min-width: calc(32px + var(--names) * 84px);
+  min-width: 0;
 }
 
-.matrix-name {
-  padding-bottom: 2px;
-  font-size: 12px;
-  color: var(--text-dim);
-  text-align: center;
+.menu .choice-label {
+  margin: 0;
 }
 
-.matrix-variation {
+.menu select {
+  width: 100%;
+}
+
+/* ------------------------------------------------------------ Feature selectors */
+
+.tiles {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(var(--tile-min, 150px), 1fr));
+  gap: 6px;
+}
+
+.tile {
+  display: grid;
+  align-content: start;
+  justify-items: start;
+  gap: 4px;
+  min-height: 44px;
+  padding: 8px 10px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-control);
+  background: var(--raised);
+  text-align: left;
+}
+
+.tile:hover {
+  border-color: var(--line-strong);
+}
+
+.tile-name {
   display: inline-flex;
   align-items: center;
-  justify-content: center;
-  width: 22px;
-  height: 20px;
-  border-radius: 5px;
-  background: var(--option, var(--accent));
-  color: var(--bg);
-  font: 600 11px var(--mono);
+  gap: 8px;
+  font-weight: 600;
+  font-size: 14px;
 }
 
-.matrix .option {
-  --option: var(--accent);
-  min-height: var(--segment-h);
-  border: 1px solid var(--line);
-  border-radius: 6px;
-  background: var(--panel-raised);
-  color: var(--text-dim);
-  font-size: 12px;
+.tile-hint {
+  font: 11px var(--mono);
+  color: var(--ink-off);
 }
 
-.matrix .option:hover {
-  border-color: color-mix(in srgb, var(--option) 60%, var(--line));
+.tile[aria-pressed="true"] {
+  border-color: var(--select);
+  background: var(--select);
+  color: var(--on-select);
 }
 
-.matrix .option[aria-pressed="true"] {
-  border-color: var(--option);
-  background: color-mix(in srgb, var(--option) 28%, var(--panel-raised));
-  box-shadow: 0 0 10px color-mix(in srgb, var(--option) 45%, transparent);
-  color: #fff;
+.tile[aria-pressed="true"] .tile-hint {
+  color: #b9c0c6;
 }
 
-/* Switches: a toggle has a light that shows its state; a trigger has a ring. */
+/* Big tiles: a few modes with a line each (slowdrift). */
+.tiles.big {
+  --tile-min: 150px;
+}
+
+.tiles.big .tile {
+  min-height: 112px;
+  padding: 12px;
+  border-radius: 10px;
+}
+
+.tiles.big .tile-name {
+  font-size: 18px;
+  font-weight: 700;
+  font-stretch: 85%;
+}
+
+.tiles.big .tile-name::before {
+  width: 12px;
+  height: 12px;
+}
+
+.tiles.big .tile[aria-pressed="true"] .tile-name::before {
+  box-shadow: 0 0 10px var(--option);
+}
+
+.tiles.big .tile-hint {
+  font: 12px/1.35 var(--font);
+  color: var(--ink-dim);
+}
+
+.tiles.big .tile[aria-pressed="true"] .tile-hint {
+  color: #c7cdd2;
+}
+
+/* Grainfall's effects: the names as tiles, then the variation. */
+.variation {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  align-items: center;
+  gap: 14px;
+}
+
+/* ------------------------------------------------------------ Switches */
+
 .toggle,
 .trigger {
-  display: flex;
+  display: inline-flex;
   align-items: center;
   gap: 10px;
   min-height: var(--control-h);
-  padding: 0 12px;
+  padding: 0 14px;
   border: 1px solid var(--line);
   border-radius: var(--radius-control);
-  background: var(--panel-raised);
+  background: var(--raised);
+  font-weight: 600;
   font-size: 13px;
   text-align: left;
 }
 
 .toggle:hover,
 .trigger:hover {
-  border-color: color-mix(in srgb, var(--accent) 55%, var(--line));
+  border-color: var(--line-strong);
 }
 
 .led {
@@ -894,22 +1064,22 @@ body:not(.is-live) .controls {
   width: 10px;
   height: 10px;
   border-radius: 50%;
-  border: 1.5px solid var(--text-off);
+  border: 1.5px solid var(--line-strong);
 }
 
 .trigger .led {
-  border-color: var(--accent);
+  border: 2px solid var(--ink);
 }
 
 .toggle[aria-pressed="true"] {
-  border-color: color-mix(in srgb, var(--accent) 55%, var(--line));
-  background: color-mix(in srgb, var(--accent) 14%, var(--panel-raised));
+  border-color: var(--line-strong);
+  background: var(--raised-hi);
 }
 
 .toggle[aria-pressed="true"] .led {
-  border-color: var(--accent);
-  background: var(--accent);
-  box-shadow: 0 0 8px var(--accent);
+  border-color: var(--led);
+  background: var(--led);
+  box-shadow: 0 0 8px var(--led);
 }
 
 .trigger:active,
@@ -919,27 +1089,309 @@ body:not(.is-live) .controls {
 
 @keyframes fire {
   from {
-    background: color-mix(in srgb, var(--accent) 45%, var(--panel-raised));
+    background: var(--track);
   }
+}
+
+/* ------------------------------------------------------------ Strip and drawer */
+
+/* Small groups (tempo, switches, channels) in one row. */
+.strip {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 12px 28px;
+  padding: 10px 16px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  background: var(--panel);
+}
+
+.strip-group {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px 14px;
+}
+
+.strip-group + .strip-group {
+  padding-left: 28px;
+  border-left: 1px solid var(--line);
+}
+
+.strip-group > div {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+}
+
+.strip .knob {
+  grid-template-columns: auto auto;
+  grid-template-areas: "dial label" "dial value";
+  align-items: center;
+  justify-items: start;
+  column-gap: 8px;
+}
+
+.strip .knob-dial {
+  grid-area: dial;
+  width: 48px;
+  height: 48px;
+}
+
+.strip .knob-label {
+  grid-area: label;
+  align-self: end;
+}
+
+.strip .knob-value {
+  grid-area: value;
+  align-self: start;
+}
+
+/* The rest, a tab at a time (driftnet's hidden options and modes). */
+.drawer {
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  background: var(--panel);
+  overflow: hidden;
+}
+
+.drawer-tabs {
+  display: flex;
+  flex-wrap: wrap;
+  background: var(--sunk);
+  border-bottom: 1px solid var(--line);
+}
+
+.drawer-tabs button {
+  min-height: var(--control-h);
+  padding: 0 18px;
+  border: 0;
+  border-right: 1px solid var(--line);
+  background: transparent;
+  color: var(--ink-dim);
+  font-size: 12px;
+  font-weight: 700;
+  font-stretch: 75%;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+}
+
+.drawer-tabs button[aria-selected="true"] {
+  background: var(--panel);
+  color: var(--ink);
+  box-shadow: inset 0 3px 0 var(--ink);
+}
+
+.drawer-panel {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-start;
+  gap: 16px 28px;
+  padding: 14px 16px 16px;
+}
+
+.drawer-panel .part-knobs {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px 14px;
+}
+
+.drawer-panel .part-knobs .knob {
+  width: 84px;
+}
+
+.drawer-panel .part-menus,
+.drawer-panel .part-choices,
+.drawer-panel .part-switches {
+  flex: 1 1 320px;
+}
+
+.drawer-panel .choice {
+  display: grid;
+  grid-template-columns: 130px minmax(0, 1fr);
+  align-items: center;
+  gap: 12px;
+}
+
+.drawer-panel .choice-label {
+  margin: 0;
+}
+
+.drawer-panel .part-switches {
+  grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));
+}
+
+/* ------------------------------------------------------------ Envelopes and slots */
+
+.envelopes {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+  gap: 16px;
+}
+
+.envelope {
+  display: grid;
+  gap: 8px;
+}
+
+.envelope > svg {
+  display: block;
+  width: 100%;
+  height: 80px;
+  border-radius: var(--radius-control);
+  background: var(--scr);
+}
+
+.envelope path.shape {
+  fill: rgb(70 224 176 / 0.16);
+  stroke: #46e0b0;
+  stroke-width: 2;
+  stroke-linejoin: round;
+  vector-effect: non-scaling-stroke;
+}
+
+.envelope .part-knobs {
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+}
+
+/* Slots (wavebyte's mod matrix) as a table. */
+.slots-scroll {
+  overflow-x: auto;
+}
+
+.slots {
+  width: 100%;
+  min-width: 620px;
+  border-collapse: collapse;
+}
+
+.slots th {
+  padding: 8px 4px;
+  text-align: left;
+  font-size: 11px;
+  font-weight: 700;
+  font-stretch: 75%;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--ink-dim);
+}
+
+.slots tbody th {
+  font: 600 14px var(--mono);
+  letter-spacing: 0;
+  color: var(--ink);
+}
+
+.slots tbody tr {
+  border-top: 1px solid #cdd0d3;
+}
+
+.slots tbody tr.off {
+  opacity: 0.6;
+}
+
+.slots td {
+  padding: 4px;
+}
+
+.slots select {
+  width: 100%;
+}
+
+.amount {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 64px;
+  align-items: center;
+  gap: 10px;
+  padding: 0 8px;
+}
+
+.amount output {
+  font: 12px var(--mono);
+  text-align: right;
+}
+
+/* A bipolar slider: the bar grows from the middle. */
+.amount input[type="range"] {
+  width: 100%;
+  height: var(--control-h);
+  margin: 0;
+  background: transparent;
+  -webkit-appearance: none;
+  appearance: none;
+  --fill-from: 50%;
+  --fill-to: 50%;
+}
+
+.amount input[type="range"]::-webkit-slider-runnable-track {
+  height: 10px;
+  border-radius: 5px;
+  background: linear-gradient(
+      to right,
+      transparent var(--fill-from),
+      color-mix(in srgb, var(--accent) 88%, black) var(--fill-from) var(--fill-to),
+      transparent var(--fill-to)
+    ),
+    linear-gradient(to right, transparent calc(50% - 1px), var(--line-strong) calc(50% - 1px) calc(50% + 1px), transparent calc(50% + 1px)),
+    #c9cdd0;
+}
+
+.amount input[type="range"]::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  width: 18px;
+  height: 18px;
+  margin-top: -4px;
+  border-radius: 50%;
+  border: 2px solid var(--cap-edge);
+  background: var(--cap);
+}
+
+.amount input[type="range"]::-moz-range-track {
+  height: 10px;
+  border-radius: 5px;
+  background: #c9cdd0;
+}
+
+.amount input[type="range"]::-moz-range-thumb {
+  width: 18px;
+  height: 18px;
+  border-radius: 50%;
+  border: 2px solid var(--cap-edge);
+  background: var(--cap);
 }
 
 /* ------------------------------------------------------------ Narrow */
 
+@media (max-width: 900px) {
+  .surface,
+  .surface.with-rail {
+    grid-template-columns: minmax(0, 1fr);
+    grid-template-areas: "notice" "side" "feature" "below";
+  }
+}
+
 @media (max-width: 600px) {
   .bar,
-  main {
+  .surface {
     padding-left: 16px;
     padding-right: 16px;
   }
-  .buffer {
-    height: 220px;
-  }
-  .connection {
+  .brand {
+    flex-wrap: wrap;
     width: 100%;
   }
-  .ports-panel {
-    left: 0;
-    right: auto;
+  .preset-slots {
+    flex-wrap: wrap;
+  }
+  .drawer-panel .choice {
+    grid-template-columns: minmax(0, 1fr);
+  }
+  .strip-group + .strip-group {
+    padding-left: 0;
+    border-left: 0;
   }
 }
 

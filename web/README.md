@@ -12,7 +12,7 @@ make web    # serves this folder on http://localhost:8000
 Open http://localhost:8000 in **Chrome, Edge or Opera** (Safari and Firefox
 have no Web MIDI), with the Pod plugged in by USB and running the app. Allow
 MIDI and SysEx when the browser asks. The page picks the Daisy's MIDI ports by
-itself; if not, choose them at the top and press Connect.
+itself; if not, choose them under **Setup** at the top and press Connect.
 
 Web MIDI only works on `localhost` or https, which is why the page is served
 (by `serve.py`, which also stops the browser caching it, so a reload picks up
@@ -21,53 +21,64 @@ modules, with no build step.
 
 ## What it shows
 
-- **Buffer** (grainfall): the last 2 s, 8 s or all 22 s of the sample
-  buffer, scrolling right to left. Each voice is a bar over the slice it
-  plays, placed by its stereo position (left at the top) and coloured by
-  speed: teal at normal, orange to red faster, blue to violet slower. Its
-  play head points the way it's reading. Delay taps are vertical lines; their dots are coloured when a
-  tap is pitch-shifted. Detected notes are marked along the top, and the beat
-  grid (bars brighter) runs underneath.
-- **Loop** (driftnet): while the looper listens, the ring it records into,
-  scrolling right to left. While it plays, the loop laid out oldest to
-  newest, with what's playing it on top: Tape's window, the Env slice being
-  held, or Stretch's two grains (fading in and out), each with its play head.
-  The panel's head gives the loop's length at the current CLOCK.
-- **Clock, Env and ramp** (driftnet): the clock rate, the input level against
-  Env's threshold (a slice is held while it's above), and where a ramp or
-  bounce is.
-- **Tape transport** (tapeworn): each channel's tape speed in cents, so you
-  can see wow wander, flutter shimmer, snags jolt and the AUX stop wind down,
-  and its level, showing dropouts and the stop's fade. Left is teal, right
-  magenta; turn up Spread to see them part.
-- **Saturation** (tapeworn): the saturator's input against its output over
-  the last 8 ms, the latest few frames fading out. A straight diagonal would
-  be clean; the S-curve is the squash and the loop's width is the hysteresis.
-  Each axis is scaled to fill the plot, so it shows the shape at any level.
-- **LFO, swell and decay** (slowdrift): the modulation LFO, the reverb's
-  input gain (Rise's swells, and the gate closing while off or frozen) and
-  the decay time, which Sustain, Freeze and Stretch lengthen.
-- **Tempo** (grainfall, and driftnet while synced): BPM, whether it comes
-  from tap tempo or MIDI clock, and where you are in the bar and the beat.
-  Driftnet keeps the panel, marked "Not synced", while it runs free.
-- **Presets** (every app but the starter): a button per slot in its LED
-  colour, dimmed while empty, with Save and Factory reset (which asks
-  first). Clicking a slot loads its preset (an
-  empty one is only selected, ready to save into); clicking the selected
-  slot again reloads it. The head says whether the sound has changed since.
-- **Levels**: input, wet and output peaks (and the loop, for driftnet).
-- **CPU**: the audio callback's average and peak load over the last 30 s.
-- **Controls**: built from the parameter list the app sends, grouped as on the
-  Pod, in three zones the same for every app: a group that is one big choice
-  (grainfall's effects, tapeworn's tape models) across the top, the knob pages
-  in a row (in their LED colours, numbered, titled by their knobs), and the
-  rest in columns. Every card lays out knobs, then choices (segmented
-  controls), then switches (toggles with a light, triggers with a ring). Drag
-  a knob up and down (Shift for fine), scroll it, or use the arrow keys.
-  Moving a control on the Pod or over MIDI moves it here too. Groups named
-  `<tab>/<card>` (wavebyte's layers, `B/Filter`) go in tabs over the rest,
-  one tab's cards at a time, their parameters' labels without the tab in
-  front (`B: Cutoff` shows as Cutoff); `*/<card>` shows with every tab.
+The page is a **faceplate**: a light panel with one dark display, laid out so
+each app fits a 1440 × 900 window without scrolling (it stacks on narrower
+screens). `CLAUDE.md` here has the design system and the layout rules.
+
+- **Header**: the app's name, its presets (a button per slot with a stripe
+  in its LED colour, dimmed while empty, a dot while the sound has changed
+  since; clicking a slot loads it, clicking the selected slot again reloads
+  it, and Save writes to it), the connection, and **Setup** (the MIDI ports,
+  Connect, and Factory reset, which asks first). Wavebyte's Layer switch
+  (A-D, in the layers' LED colours) sits here too.
+- **The display** (dark, top left): a small view of what the app is doing,
+  level meters, tempo, CPU, and the latest values of its other traces.
+  - **Buffer** (grainfall): the last 8 s of the sample buffer, scrolling right
+    to left. Each voice is a bar over the slice it plays, placed by its
+    stereo position (left at the top) and coloured by speed: teal at normal,
+    orange to red faster, blue to violet slower. Its play head points the way
+    it's reading. Delay taps are vertical lines, detected notes are marked
+    along the top, and the beat grid runs underneath.
+  - **Loop** (driftnet): while the looper listens, the ring it records into;
+    while it plays, the loop oldest to newest with what's playing it on top
+    (Tape's window, the Env slice, or Stretch's two grains). The head gives
+    the loop's length at the current CLOCK; the clock, Env and ramp show as
+    numbers.
+  - **Tape speed** (tapeworn): each channel's speed in cents (left teal, right
+    magenta), beside the **Saturation** plot: the saturator's input against
+    its output over the last 8 ms. A straight diagonal would be clean; the
+    S-curve is the squash and the loop's width the hysteresis.
+  - **LFO & swell** (slowdrift): the modulation LFO and the reverb's input
+    gain (Rise's swells, the gate closing while off or frozen); the decay time
+    shows as a number.
+  - **Last voice** (wavebyte): its wave position, cutoff and amp envelope;
+    the voices playing and the stack's margin show as numbers.
+  - **Tempo** (grainfall, and driftnet, marked not synced while it runs free),
+    **levels** (input, wet and output peaks, and the loop for driftnet) and
+    **CPU** (the audio callback's average and its peak over the last second).
+- **The feature** (beside the display): the app's main choice as big buttons.
+  Grainfall's 44 effect slots are the eleven effects plus a Variation switch
+  (A-D); tapeworn's tape models show each one's top end; slowdrift's modes
+  say what X does in each. Driftnet has none, so its three MOOD columns and
+  its channel switches sit there instead.
+- **Pages**: the Pod's knob pages as a row of modules, numbered and coloured
+  as on the Pod, titled by their knobs, with the page's encoder choice under
+  them.
+- **Strip**: small groups (tempo and Tap, the switches, driftnet's channels)
+  in one row.
+- **Drawer** (driftnet): the deep settings, a tab at a time: Hidden options,
+  DIP switches, Ramping, Tempo and Synth Mode.
+- **Sections** (wavebyte): a rail under the display picks one section at a
+  time (Oscillators, Filter & character, Envelopes, Amp & LFOs, Mod matrix,
+  Effects, Layers & play), each showing which Pod pages it covers and
+  whether it edits the layer picked in the header or is shared. Envelopes
+  draw their shape; the mod matrix is a table of source, amount and target;
+  an effect's card shows only while FX 1 or FX 2 runs it.
+
+Every module lays out knobs, then drop-downs, then choices (segmented
+controls), then switches (toggles with a light, triggers with a ring). Drag a
+knob up and down (Shift for fine), scroll it, or use the arrow keys. Moving a
+control on the Pod or over MIDI moves it here too.
 
 ## How it talks to the Pod
 
@@ -90,18 +101,19 @@ works over USB: the Pod's TRS MIDI is far too slow for the telemetry.
 
 | File | |
 |---|---|
-| `index.html`, `css/style.css` | The page |
+| `index.html`, `css/style.css` | The page and the faceplate's styles |
+| `CLAUDE.md` | The design system and layout rules, for changing the page |
 | `serve.py` | The local server `make web` runs |
-| `js/main.js` | Wires it together, and redraws every animation frame |
+| `js/main.js` | Wires it together, sets up the display, and redraws every animation frame |
 | `js/link.js` | The Web MIDI connection: request, keep-alives, decoding |
 | `js/protocol.js` | The protocol, matching `common/web_link.h` |
-| `js/controls.js`, `js/knob.js` | The control surface |
-| `js/presets.js` | The presets card |
+| `js/controls.js`, `js/knob.js` | The faceplate's controls and their layout |
+| `js/presets.js` | The presets, in the header |
 | `js/views/buffer.js` | The buffer view |
 | `js/views/loop.js` | The loop view, which an app can use instead (driftnet) |
-| `js/views/readouts.js` | Tempo, levels and CPU |
-| `js/views/traces.js` | Traces over time, and the X-Y plot |
-| `js/apps/<app>.js` | Optional extras per app: colours, units, menus, group titles, its own buffer view |
+| `js/views/readouts.js` | Tempo, levels, CPU and trace values |
+| `js/views/traces.js` | The trace strip and the X-Y plot |
+| `js/apps/<app>.js` | Optional extras per app: colours, units, menus, layout hints, its own buffer view |
 
 ## Adding an app
 
@@ -120,21 +132,27 @@ On the firmware side (see `web_view.{h,cpp}` and the web link section of
    gets. Traces are the easiest way to show something new: describe them in
    the hello and send their values, and the page plots them.
 
-On the page, add `js/apps/<app>.js` for colours and units if you like; the
-plain controls work without it. Its `menu(name)` can return a list of names
-for a continuous parameter that picks from a list (a knob stepping through
-it on the Pod, as wavebyte's mod matrix sources do): the page shows a
-drop-down, and sends the middle of the chosen item's step, (i + 0.5) / n.
-`tabParam` names a choice parameter whose options are the tabs (wavebyte's
-Layer): the tab bar becomes its control, so picking a tab sets it and the
-Pod setting it picks the tab. `optionColour(name, i)` colours a choice's
-options (the tabs too). `menu(name)` returning `true` for a choice shows it
-as a drop-down of its options, and `overrides(name)` naming another choice
-in the same card shows that one as not in use while this one isn't 0
-(wavebyte's AKWF tables and Table). It can also give a `View`, a class with the
-buffer view's methods (`setLayout`, `addOverview`, `setFrame`, `draw`, and
-optionally `status`, a line for the panel's head), to draw the buffer section
-its own way under its own `scopeTitle`, as driftnet does with
-`js/views/loop.js`. `legend` picks the buffer legend's entries (`speed`,
-`tap`, `onset`), and `tempo: true` keeps the Tempo panel for an app that only
-sends a tempo some of the time.
+Name the groups as the Pod's pages (`Page 1`, `Page 2` ...) and the page lays
+them out as modules; a group that is one choice of more than 8 options
+becomes the feature, and small groups (no choices, at most one knob) go in the
+strip. That's enough for a plain faceplate.
+
+On the page, add `js/apps/<app>.js` for the rest; every entry is optional
+(`CLAUDE.md` has the details):
+
+| Entry | |
+|---|---|
+| `tagline` | A few words under the name |
+| `groupColour(name)`, `optionColour(param, i)`, `ledColour(name)` | The Pod's page, option and LED colours |
+| `format(name)` | A function from 0..1 to the knob's reading |
+| `groupTitle(name, params)` | A card's title, instead of the default |
+| `feature`, `optionHint(param, i)` | The main choice, and a line under each of its options |
+| `displayTraces`, `readouts`, `tracesTitle` | The traces the display plots, those it shows as numbers, and its title |
+| `View`, `scopeTitle` | A class drawing the buffer its own way (`setLayout`, `addOverview`, `setFrame`, `draw`, optionally `status`), as driftnet's `js/views/loop.js` |
+| `tempo: true` | Keep the tempo line for an app that only sends a tempo some of the time |
+| `drawer` | Group names for the tabbed drawer |
+| `sections`, `groupVisible(name, value)` | A rail of sections (`{ label, groups, note }`), and when a card shows |
+| `menu(name)` | A list for a knob that picks from one (a drop-down that sends the middle of the item's step, (i + 0.5) / n), or `true` to show a choice as a drop-down |
+| `overrides(name)` | Another choice in the card that's not in use while this one isn't 0 |
+| `bipolar(name)` | A slot slider that fills from the middle |
+| `tabParam` | A choice whose options are the tabs of `<tab>/<card>` groups (wavebyte's Layer), shown as the switch in the header |

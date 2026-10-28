@@ -1,10 +1,13 @@
-// Trace and X-Y views, for apps that send them (tapeworn: tape speed and
-// level, and the saturator's loop).
+// The display's trace strip and X-Y plot, for apps that send them. The
+// strip overlays the traces the app picks (extras.displayTraces), each
+// scaled to its own range, over the last few seconds; the rest show as
+// numbers (readouts.js).
 
-const LANE_GAP = 10;
+const SPAN_MS = 8000;
 
-function css(name) {
-  return getComputedStyle(document.documentElement).getPropertyValue(name).trim();
+// Colours come from the canvas, so the page can theme the panel it sits in.
+function css(el, name) {
+  return getComputedStyle(el).getPropertyValue(name).trim();
 }
 
 function setupCanvas(canvas, onResize) {
@@ -19,54 +22,48 @@ function setupCanvas(canvas, onResize) {
   fit();
 }
 
-// Values over time, scrolling right to left. Traces with the same unit and
-// range share a lane (left and right channels together).
-export class TraceView {
-  constructor(canvas) {
+export class TraceStrip {
+  constructor(canvas, legend) {
     this.canvas = canvas;
+    this.legend = legend; // where the plotted traces' names and latest values go
     this.ctx = canvas.getContext("2d");
-    this.spanSeconds = 8;
-    this.lanes = [];
+    this.traces = [];
+    this.shown = []; // indices of the traces plotted
     this.points = []; // {t, v: [raw 0..1 per trace]}
+    this.period = 1;
     setupCanvas(canvas, (dpr) => {
       this.dpr = dpr;
       this.colours = {
-        text: css("--text-dim"),
-        grid: css("--grid"),
-        gridStrong: css("--grid-strong"),
-        series: [css("--accent-ui"), css("--tap"), css("--onset"), css("--text")],
+        grid: css(canvas, "--grid-strong"),
+        series: [1, 2, 3, 4].map((i) => css(canvas, `--series-${i}`)),
       };
     });
   }
 
-  setLayout(hello) {
+  setLayout(hello, names) {
     this.traces = hello.traces;
     this.period = hello.tracePeriodMs || 1;
     this.points = [];
-    const lanes = new Map();
-    hello.traces.forEach((t, i) => {
-      const key = `${t.unit}|${t.min}|${t.max}`;
-      if (!lanes.has(key)) lanes.set(key, { unit: t.unit, min: t.min, max: t.max, members: [] });
-      lanes.get(key).members.push(i);
-    });
-    this.lanes = [...lanes.values()].map((lane) => {
-      // "Speed L" and "Speed R" make a lane called "Speed".
-      const names = lane.members.map((i) => hello.traces[i].name);
-      const words = names[0].split(" ");
-      const common = words.filter((w, j) => names.every((n) => n.split(" ")[j] === w)).join(" ");
-      return { ...lane, title: common || names.join(", ") };
+    this.shown = hello.traces.map((t, i) => (names.includes(t.name) ? i : -1)).filter((i) => i >= 0);
+    this.legend.replaceChildren();
+    this.legendValues = this.shown.map((ti, k) => {
+      const span = document.createElement("span");
+      span.style.color = this.colours?.series[k % 4] ?? "";
+      span.textContent = `${this.traces[ti].name} –`;
+      this.legend.append(span, " ");
+      return { el: span, ti, text: "" };
     });
   }
 
   add(points, at) {
     const n = points.length;
     points.forEach((v, i) => this.points.push({ t: at - (n - 1 - i) * this.period, v }));
-    const keep = at - 30000;
+    const keep = at - SPAN_MS - 1000;
     while (this.points.length && this.points[0].t < keep) this.points.shift();
   }
 
-  value(i, raw) {
-    const t = this.traces[i];
+  value(ti, raw) {
+    const t = this.traces[ti];
     return t.min + raw * (t.max - t.min);
   }
 
@@ -76,95 +73,65 @@ export class TraceView {
     const h = this.canvas.height / dpr;
     ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
     ctx.clearRect(0, 0, w, h);
-    if (!this.lanes.length) return;
-
-    const span = this.spanSeconds * 1000;
-    const laneH = (h - LANE_GAP * (this.lanes.length - 1) - 14) / this.lanes.length;
+    if (!this.shown.length) return;
     const last = this.points[this.points.length - 1];
-    // Scroll on smoothly between frames, but not past the newest point by much.
     const end = last ? Math.min(now, last.t + 80) : now;
-    const xOf = (t) => ((t - (end - span)) / span) * w;
+    const xOf = (t) => ((t - (end - SPAN_MS)) / SPAN_MS) * w;
+    const pad = 3;
 
-    this.lanes.forEach((lane, li) => {
-      const top = li * (laneH + LANE_GAP);
-      // Room for the labels above the plot.
-      const plotTop = top + 18;
-      const plotH = laneH - 22;
-      const yOf = (v) => plotTop + plotH - ((v - lane.min) / (lane.max - lane.min)) * plotH;
-
-      ctx.fillStyle = "rgb(255 255 255 / 0.02)";
-      ctx.fillRect(0, top, w, laneH);
+    // A centre line when a plotted trace runs either side of zero.
+    if (this.shown.some((ti) => this.traces[ti].min < 0 && this.traces[ti].max > 0)) {
       ctx.strokeStyle = this.colours.grid;
       ctx.lineWidth = 1;
-      if (lane.min < 0 && lane.max > 0) {
-        ctx.strokeStyle = this.colours.gridStrong;
-        ctx.beginPath();
-        ctx.moveTo(0, Math.round(yOf(0)) + 0.5);
-        ctx.lineTo(w, Math.round(yOf(0)) + 0.5);
-        ctx.stroke();
-      }
+      ctx.beginPath();
+      ctx.moveTo(0, Math.round(h / 2) + 0.5);
+      ctx.lineTo(w, Math.round(h / 2) + 0.5);
+      ctx.stroke();
+    }
 
-      // Each trace as a min-max envelope per pixel, so spikes survive.
-      lane.members.forEach((ti, mi) => {
-        ctx.fillStyle = this.colours.series[mi % this.colours.series.length];
-        let px = -1;
-        let lo = 0;
-        let hi = 0;
-        let prev = null;
-        const flush = () => {
-          if (px < 0) return;
-          const y0 = yOf(Math.min(hi, lane.max));
-          const y1 = yOf(Math.max(lo, lane.min));
-          ctx.fillRect(px, y0 - 0.75, 1, Math.max(1.5, y1 - y0 + 1.5));
-        };
-        for (const p of this.points) {
-          if (p.t < end - span - 50) continue;
-          const v = this.value(ti, p.v[ti]);
-          const x = Math.floor(xOf(p.t));
-          if (x !== px) {
-            flush();
-            px = x;
-            lo = hi = v;
-            if (prev !== null) {
-              lo = Math.min(lo, prev);
-              hi = Math.max(hi, prev);
-            }
-          } else {
-            lo = Math.min(lo, v);
-            hi = Math.max(hi, v);
+    // Each trace as a min-max envelope per pixel, so spikes survive.
+    this.shown.forEach((ti, k) => {
+      const yOf = (raw) => pad + (1 - raw) * (h - 2 * pad);
+      ctx.fillStyle = this.colours.series[k % 4];
+      let px = -1;
+      let lo = 0;
+      let hi = 0;
+      let prev = null;
+      const flush = () => {
+        if (px < 0) return;
+        const y0 = yOf(hi);
+        const y1 = yOf(lo);
+        ctx.fillRect(px, y0 - 0.75, 1, Math.max(1.5, y1 - y0 + 1.5));
+      };
+      for (const p of this.points) {
+        if (p.t < end - SPAN_MS - 50) continue;
+        const v = p.v[ti];
+        const x = Math.floor(xOf(p.t));
+        if (x !== px) {
+          flush();
+          px = x;
+          lo = hi = v;
+          if (prev !== null) {
+            lo = Math.min(lo, prev);
+            hi = Math.max(hi, prev);
           }
-          prev = v;
+        } else {
+          lo = Math.min(lo, v);
+          hi = Math.max(hi, v);
         }
-        flush();
-      });
-
-      // Labels: the lane's name and range, and each trace's latest value.
-      ctx.font = "11px system-ui, sans-serif";
-      ctx.textAlign = "left";
-      ctx.fillStyle = this.colours.text;
-      ctx.fillText(`${lane.title} (${lane.unit})`, 6, top + 13);
-      ctx.fillText(`${lane.max}`, 6, plotTop + 11);
-      ctx.fillText(`${lane.min}`, 6, plotTop + plotH - 3);
-      if (last) {
-        ctx.textAlign = "right";
-        let x = w - 8;
-        for (let mi = lane.members.length - 1; mi >= 0; mi--) {
-          const ti = lane.members[mi];
-          const v = this.value(ti, last.v[ti]);
-          const text = `${this.traces[ti].name.split(" ").slice(-1)[0]} ${v.toFixed(lane.max - lane.min > 50 ? 0 : 1)}`;
-          ctx.fillStyle = this.colours.series[mi % this.colours.series.length];
-          ctx.fillText(text, x, top + 13);
-          x -= ctx.measureText(text).width + 12;
-        }
+        prev = v;
       }
+      flush();
     });
 
-    // Seconds ago
-    ctx.fillStyle = this.colours.text;
-    ctx.textAlign = "center";
-    const secs = this.spanSeconds;
-    const every = [0.25, 0.5, 1, 2, 4].find((e) => (e / secs) * w >= 56) || 4;
-    for (let s = every; s < secs; s += every) ctx.fillText(`−${s} s`, w - (s / secs) * w, h - 2);
+    // The latest values, in the display's head.
+    if (last)
+      for (const item of this.legendValues) {
+        const t = this.traces[item.ti];
+        const v = this.value(item.ti, last.v[item.ti]);
+        const text = `${t.name} ${v.toFixed(t.max - t.min > 50 ? 0 : 1).replace("-", "−")}`;
+        if (text !== item.text) item.el.textContent = item.text = text;
+      }
   }
 }
 
@@ -176,7 +143,12 @@ export class XYView {
     this.frames = [];
     setupCanvas(canvas, (dpr) => {
       this.dpr = dpr;
-      this.colours = { line: css("--accent-ui"), grid: css("--grid"), gridStrong: css("--grid-strong"), text: css("--text-dim") };
+      this.colours = {
+        line: css(canvas, "--accent-ui"),
+        grid: css(canvas, "--grid"),
+        gridStrong: css(canvas, "--grid-strong"),
+        text: css(canvas, "--text-dim"),
+      };
       this.dirty = true;
     });
   }
@@ -200,7 +172,7 @@ export class XYView {
     const h = this.canvas.height / dpr;
     ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
     ctx.clearRect(0, 0, w, h);
-    const size = Math.min(w, h) - 8;
+    const size = Math.min(w, h) - 4;
     const cx = w / 2;
     const cy = h / 2;
     const x = (v) => cx + (v * size) / 2;
@@ -236,10 +208,10 @@ export class XYView {
     ctx.globalAlpha = 1;
 
     ctx.fillStyle = this.colours.text;
-    ctx.font = "11px system-ui, sans-serif";
+    ctx.font = "9px ui-monospace, monospace";
     ctx.textAlign = "right";
-    ctx.fillText("in →", cx + size / 2 - 4, cy + size / 2 - 5);
+    ctx.fillText("in →", cx + size / 2 - 3, cy + size / 2 - 4);
     ctx.textAlign = "left";
-    ctx.fillText("out ↑", cx - size / 2 + 5, cy - size / 2 + 13);
+    ctx.fillText("out ↑", cx - size / 2 + 4, cy - size / 2 + 11);
   }
 }

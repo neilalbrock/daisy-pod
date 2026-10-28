@@ -11,8 +11,9 @@ const MARGIN_TOP = 16;
 const MARGIN_BOTTOM = 18;
 const MAX_EXTRAPOLATE_MS = 120; // keep moving between frames, but not far
 
-function css(name) {
-  return getComputedStyle(document.documentElement).getPropertyValue(name).trim();
+// Colours come from the canvas, so the page can theme the panel it sits in.
+function css(el, name) {
+  return getComputedStyle(el).getPropertyValue(name).trim();
 }
 
 const mod = (x, n) => ((x % n) + n) % n;
@@ -37,10 +38,10 @@ export class LoopView {
     this.canvas.height = Math.max(1, Math.round(height * dpr));
     this.dpr = dpr;
     this.colours = {
-      wave: css("--wave"),
-      text: css("--text-dim"),
-      tap: css("--tap"),
-      now: css("--accent-ui"),
+      wave: css(this.canvas, "--wave"),
+      text: css(this.canvas, "--text-dim"),
+      tap: css(this.canvas, "--tap"),
+      now: css(this.canvas, "--accent-ui"),
     };
   }
 
@@ -76,7 +77,7 @@ export class LoopView {
     const L = this.layout;
     if (!L || !this.frame) {
       ctx.fillStyle = this.colours.text;
-      ctx.font = "13px system-ui, sans-serif";
+      ctx.font = "12px ui-monospace, monospace";
       ctx.textAlign = "center";
       ctx.fillText(L ? "Waiting for the Pod…" : "Not connected", w / 2, h / 2);
       this.statusText = "";
@@ -150,7 +151,7 @@ export class LoopView {
     const secs = span / (L.sampleRate * loop.rate);
     this.statusText = `${label} · ${secs.toFixed(secs < 10 ? 2 : 1)} s at ${Math.round((L.sampleRate * loop.rate) / 1000)}k`;
     ctx.fillStyle = this.colours.text;
-    ctx.font = "11px system-ui, sans-serif";
+    ctx.font = "10px ui-monospace, monospace";
     ctx.textAlign = "left";
     ctx.fillText("oldest", 4, bottom + 13);
     ctx.textAlign = "right";

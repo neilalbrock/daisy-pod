@@ -4,89 +4,72 @@
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <title>Daisy Pod</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      rel="stylesheet"
+      href="https://fonts.googleapis.com/css2?family=Archivo:wdth,wght@62..125,400..800&family=JetBrains+Mono:wght@400;600&display=swap"
+    />
     <link rel="stylesheet" href="css/style.css" />
     <script type="module" src="js/main.js"></script>
   </head>
   <body>
     <header class="bar">
       <div class="brand">
-        <span class="brand-mark" aria-hidden="true"></span>
-        <span class="brand-name">Daisy Pod</span>
-        <span class="brand-divider" aria-hidden="true"></span>
-        <span class="app-name" id="app-name"></span>
+        <span class="brand-pod">Daisy Pod</span>
+        <h1 class="app-name" id="app-name">Daisy Pod</h1>
+        <span class="app-tagline" id="app-tagline"></span>
       </div>
+      <div class="header-extra" id="header-extra"></div>
+      <section class="presets" id="presets" aria-label="Presets" hidden>
+        <span class="label">Preset</span>
+        <div class="preset-slots" role="group" aria-label="Preset slots"></div>
+        <button type="button" class="button preset-save">Save</button>
+        <span class="preset-meta" role="status"></span>
+      </section>
       <div class="connection">
         <span class="status" id="status" data-state="off" role="status"
-          ><span class="status-text">Not connected</span><span class="status-port" id="status-port"></span
-        ></span>
-        <details class="ports" id="ports">
-          <summary class="button">MIDI ports</summary>
-          <div class="ports-panel">
+          ><span class="status-text">Not connected</span></span
+        >
+        <details class="setup" id="setup">
+          <summary class="button">Setup</summary>
+          <div class="setup-panel">
             <label>In <select id="input" aria-label="MIDI input from the Pod"></select></label>
             <label>Out <select id="output" aria-label="MIDI output to the Pod"></select></label>
+            <button type="button" id="connect" class="button">Connect</button>
+            <button type="button" class="button button-quiet preset-reset" id="preset-reset" hidden>Factory reset…</button>
           </div>
         </details>
-        <button type="button" id="connect" class="button">Connect</button>
       </div>
     </header>
 
-    <main>
+    <main class="surface" id="surface">
       <p class="notice" id="notice" hidden></p>
 
-      <section class="scope" id="scope" aria-label="Sample buffer">
-        <div class="panel-head">
-          <h2>Buffer</h2>
-          <div class="legend" aria-hidden="true">
-            <span data-legend="speed"><i class="sw sw-slow"></i>slower</span>
-            <span data-legend="speed"><i class="sw sw-unity"></i>normal</span>
-            <span data-legend="speed"><i class="sw sw-fast"></i>faster</span>
-            <span data-legend="tap"><i class="sw sw-tap"></i>delay tap</span>
-            <span data-legend="onset"><i class="sw sw-onset"></i>note</span>
+      <div class="side">
+        <section class="display" id="display" aria-label="What the Pod is doing">
+          <div class="display-head">
+            <h2 id="display-title">Waiting for the Pod</h2>
+            <span class="display-meta" id="display-meta"></span>
           </div>
-          <span class="panel-meta" id="scope-meta" hidden></span>
-          <div class="segmented span" role="group" aria-label="Time shown">
-            <button type="button" data-span="2" aria-pressed="false">2 s</button>
-            <button type="button" data-span="8" aria-pressed="true">8 s</button>
-            <button type="button" data-span="22" aria-pressed="false">All</button>
+          <canvas class="scope" id="scope" role="img" hidden
+            aria-label="The sample buffer over time, with the voices and delay taps reading from it"></canvas>
+          <canvas class="trace-strip" id="traces" role="img" hidden aria-label="Values over time"></canvas>
+          <div class="display-row">
+            <canvas class="xy" id="xy" role="img" hidden aria-label="Input against output"></canvas>
+            <div class="meters" id="levels"></div>
           </div>
-        </div>
-        <canvas id="buffer" class="buffer" role="img"
-          aria-label="The sample buffer over time, with the voices and delay taps reading from it"></canvas>
-      </section>
-
-      <section class="scope" id="trace-panel" aria-label="Traces" hidden>
-        <div class="panel-head">
-          <h2 id="trace-title">Traces</h2>
-          <div class="segmented span" role="group" aria-label="Time shown">
-            <button type="button" data-trace-span="2" aria-pressed="false">2 s</button>
-            <button type="button" data-trace-span="8" aria-pressed="true">8 s</button>
-            <button type="button" data-trace-span="20" aria-pressed="false">20 s</button>
+          <div class="tempo" id="tempo" hidden></div>
+          <div class="display-foot">
+            <span class="readouts" id="readouts">Plug the Pod in by USB, running an app.</span>
+            <span class="cpu" id="cpu"></span>
           </div>
-        </div>
-        <canvas id="traces" class="traces" role="img" aria-label="Values over time"></canvas>
-      </section>
+        </section>
+        <nav class="rail" id="rail" aria-label="Sections" hidden></nav>
+      </div>
 
-      <section class="readouts">
-        <div class="readout" id="tempo" hidden></div>
-        <div class="readout" id="xy" hidden>
-          <div class="panel-head"><h2 id="xy-title"></h2><span class="panel-meta">in against out</span></div>
-          <canvas class="xy-plot" role="img" aria-label="Input against output"></canvas>
-        </div>
-        <div class="readout" id="levels"></div>
-        <div class="readout" id="cpu"></div>
-      </section>
-
-      <section class="group presets" id="presets" aria-label="Presets" hidden>
-        <div class="group-head">
-          <h2>Presets</h2>
-          <span class="panel-meta"></span>
-          <button type="button" class="button preset-save">Save</button>
-          <button type="button" class="button preset-reset">Factory reset</button>
-        </div>
-        <div class="segmented options preset-slots" role="group" aria-label="Preset slots"></div>
-      </section>
-
-      <section class="controls" id="controls" aria-label="Controls"></section>
+      <div class="feature" id="feature"></div>
+      <div class="below" id="below"></div>
     </main>
   </body>
 </html>

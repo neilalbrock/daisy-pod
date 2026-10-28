@@ -1,5 +1,7 @@
-// Wavebyte's touches on the generic page: the Pod's page colours (LED 2,
-// Hue(page / 11)), readable units, and a tab per layer. A layer's cards
+// Wavebyte's touches on the faceplate: the Pod's page colours (LED 2,
+// Hue(page / 11)), readable units, a tab per layer (the Layer switch, in
+// the header), and sections: a rail beside the display picks one at a
+// time, and the effects show only while a slot uses them. A layer's cards
 // and parameters come with the layer's letter ("B/Filter", "B: Cutoff"),
 // which the page leaves out, so the names here are the plain ones. Matches apps/wavebyte/main.cpp and
 // synth_engine.h, adsr.h, voice_filter.h, lfo.h, mod_matrix.h and
@@ -44,7 +46,7 @@ function hue(h) {
 const pct = (v) => `${Math.round(v * 100)}%`;
 const bipolar = (v) => 2 * v - 1;
 const seconds = (s) => (s < 1 ? `${Math.round(s * 1000)} ms` : `${s.toFixed(s < 10 ? 2 : 1)} s`);
-const hz = (f) => (f >= 1000 ? `${(f / 1000).toFixed(f >= 10000 ? 1 : 2)} kHz` : `${Math.round(f)} Hz`);
+const hz = (f) => (f >= 1000 ? `${(f / 1000).toFixed(f >= 10000 ? 1 : 2)} kHz` : f < 10 ? `${f.toFixed(2)} Hz` : `${Math.round(f)} Hz`);
 const NOTE_NAMES = ["C", "C#", "D", "D#", "E", "F", "F#", "G", "G#", "A", "A#", "B"];
 const noteName = (n) => `${NOTE_NAMES[n % 12]}${Math.floor(n / 12) - 1}`;
 
@@ -219,7 +221,33 @@ for (let n = 1; n <= 8; n++) {
 // kLayerHues).
 const LAYER_HUES = [0.0, 0.15, 0.33, 0.83];
 
+// The sections, each a run of the Pod's pages, in the rail.
+const SECTIONS = [
+  { label: "Oscillators", groups: ["Osc 1", "Osc 2", "Pitch"], note: "Pod pages 1–3" },
+  { label: "Filter & character", groups: ["Filter", "Env & Glide", "Character"], note: "Pod pages 4, 5 and 8" },
+  { label: "Envelopes", groups: ["Envelopes"], note: "Pod page 6" },
+  { label: "Amp & LFOs", groups: ["Amp", "LFOs"], note: "Pod pages 7 and 9" },
+  { label: "Mod matrix", groups: ["Mod Matrix"], note: "Pod page 10" },
+  { label: "Effects", groups: ["FX", "Layer", ...EFFECTS], note: "Pod page 11 · effects show while a slot uses them" },
+  { label: "Layers & play", groups: ["Global", "Layer Actions", "Pod Pages", "Play"], note: "the Layer page, and the page's own" },
+];
+
+// Which effect a slot's type knob picks (0: off), as SynthEngine::Pick.
+const fxType = (raw) => Math.min(EFFECTS.length, Math.floor((raw / 16383) * (EFFECTS.length + 1)));
+
 export default {
+  tagline: "8-voice wavetable synth",
+  sections: SECTIONS,
+  // An effect's card shows only while FX 1 or FX 2 runs it.
+  groupVisible: (name, value) => {
+    const i = EFFECTS.indexOf(name) + 1;
+    return i === 0 || fxType(value("FX 1 Type")) === i || fxType(value("FX 2 Type")) === i;
+  },
+  groupTitle: (name) => (name === "Layer" ? "This layer's routing" : undefined),
+  // The mod matrix's amounts run either side of zero.
+  bipolar: (name) => /^Mod \d Amount$/.test(name),
+  displayTraces: ["Wave 1", "Cutoff", "Amp"],
+  readouts: ["Voices", "Stack free"],
   // Each layer's cards are a tab; the Layer parameter (the layer the Pod
   // edits) picks it.
   tabParam: "Layer",
@@ -231,7 +259,7 @@ export default {
     const m = /^AKWF (\d)$/.exec(name);
     return m ? `Table ${m[1]}` : undefined;
   },
-  tracesTitle: "Last voice",
+  tracesTitle: "Last voice · last 8 s",
   groupColour: (name) =>
     GROUPS.includes(name)
       ? hue(GROUPS.indexOf(name) / GROUPS.length)

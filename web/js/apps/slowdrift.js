@@ -1,6 +1,7 @@
-// Slowdrift's touches on the generic page: the Pod's page colours, the
-// choices' LED colours and readable units. Matches apps/slowdrift/main.cpp
-// and slow_engine.cpp.
+// Slowdrift's touches on the faceplate: the Pod's page colours, the
+// choices' LED colours, readable units, and what each mode does. Its Mode
+// is the feature. Matches apps/slowdrift/main.cpp, slow_engine.cpp and its
+// README.
 
 const PAGE_COLOURS = {
   "Page 1": "#4f7dff", // blue
@@ -8,7 +9,15 @@ const PAGE_COLOURS = {
   "Page 3": "#f2b630", // yellow
   "Page 4": "#33d6d6", // cyan
 };
-const MODE_COLOURS = ["#8a3dff", "#f5f0a0", "#2f9cff", "#ff3045", "#ff7a1a"]; // Dream, Light, Rain, Dark, Rise
+const MODE_COLOURS = ["#8a3dff", "#e0c200", "#2f9cff", "#ff3045", "#ff7a1a"]; // Dream, Light (pale gold on the Pod), Rain, Dark, Rise
+// What X does in each mode (the README), under its name.
+const MODE_HINTS = [
+  "Vibrato on the reverb. Button 2 freezes the pad.",
+  "Octave-up shimmer that climbs each trip round.",
+  "Diffusion: echoes at low X, a wash at high.",
+  "An octave-down copy of the input, in the reverb.",
+  "Each note swells the reverb back in, 0.1 to 4 s.",
+];
 const SHAPE_COLOURS = ["#ff4040", "#ccff33", "#33ff99", "#3366ff", "#cc33ff"]; // Hue(i / 5), as LED 2
 const POSITION_COLOURS = ["#ff5a5a", "#45d36b", "#4f7dff"]; // narrow red, medium green, wide blue
 
@@ -28,7 +37,12 @@ const OPTION_COLOURS = {
 };
 
 export default {
-  tracesTitle: "LFO, swell and decay",
+  tagline: "ambient reverb",
+  feature: "Mode",
+  optionHint: (param, index) => (param === "Mode" ? MODE_HINTS[index] : undefined),
+  tracesTitle: "LFO & swell · last 8 s",
+  displayTraces: ["LFO", "Input"], // the decay shows as a number
+  ledColour: (name) => ({ On: "#46c46f", Sustain: "#e0c200", Freeze: "#8a3dff" })[name],
   groupColour: (name) => PAGE_COLOURS[name],
   optionColour: (param, index) => OPTION_COLOURS[param]?.[index],
   format: (name) => FORMATS[name] || pct,

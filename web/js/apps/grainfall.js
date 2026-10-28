@@ -1,13 +1,14 @@
-// Grainfall's touches on the generic page: the Pod's page and variation
-// colours, readable units, and group titles. Matches apps/grainfall/main.cpp
-// and post_fx.cpp.
+// Grainfall's touches on the faceplate: the Pod's page and variation
+// colours, and readable units. Its Effect is the feature (a choice of 44,
+// split into the effects and their variations). Matches
+// apps/grainfall/main.cpp and post_fx.cpp.
 
 const PAGE_COLOURS = {
   "Page 1": "#4f7dff", // blue
   "Page 2": "#e15cf0", // magenta
   "Page 3": "#f2b630", // yellow
   "Page 4": "#33d6d6", // cyan
-  "Page 5": "#e6e6e6", // white
+  "Page 5": "#5b6168", // white on the Pod: grey, to show on the plate
   "Page 6": "#45d36b", // green
 };
 const VARIATION_COLOURS = ["#ff5a5a", "#f2b630", "#45d36b", "#4f7dff"]; // A red, B yellow, C green, D blue
@@ -24,6 +25,7 @@ const FORMATS = {
 };
 
 export default {
+  tagline: "granular & micro-loop",
   groupColour: (name) => PAGE_COLOURS[name],
   optionColour: (param, index) => (param === "Effect" ? VARIATION_COLOURS[index % 4] : undefined),
   format: (name) => FORMATS[name] || pct,

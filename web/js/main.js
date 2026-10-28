@@ -1,27 +1,31 @@
-// Wires the page together: the MIDI link, the control surface built from
-// the app's parameters, and the views, redrawn every animation frame.
+// Wires the page together: the MIDI link, the faceplate built from the
+// app's parameters, and the display, redrawn every animation frame.
 
 import { Controls } from "./controls.js";
 import { Link } from "./link.js";
 import { PresetsPanel } from "./presets.js";
 import { presetReset, presetSave, presetSelect, set } from "./protocol.js";
 import { BufferView } from "./views/buffer.js";
-import { CpuView, Meters, TempoView } from "./views/readouts.js";
-import { TraceView, XYView } from "./views/traces.js";
+import { CpuView, Meters, TempoView, TraceReadouts } from "./views/readouts.js";
+import { TraceStrip, XYView } from "./views/traces.js";
 
 const $ = (sel) => document.querySelector(sel);
 
 const link = new Link();
-const bufferView = new BufferView($("#buffer"));
+const bufferView = new BufferView($("#scope"));
 let view = bufferView; // or the app's own view of its buffer (extras.View)
 const appViews = {};
 const tempo = new TempoView($("#tempo"));
 const meters = new Meters($("#levels"));
 const cpu = new CpuView($("#cpu"));
-const traces = new TraceView($("#traces"));
-const xy = new XYView($("#xy canvas"));
-const controls = new Controls($("#controls"), (index, raw) => link.send(set(index, raw)));
-const presets = new PresetsPanel($("#presets"), {
+const traces = new TraceStrip($("#traces"), $("#display-meta"));
+const readouts = new TraceReadouts($("#readouts"));
+const xy = new XYView($("#xy"));
+const controls = new Controls(
+  { surface: $("#surface"), feature: $("#feature"), below: $("#below"), rail: $("#rail"), headerExtra: $("#header-extra") },
+  (index, raw) => link.send(set(index, raw)),
+);
+const presets = new PresetsPanel($("#presets"), $("#preset-reset"), {
   onSelect: (slot) => link.send(presetSelect(slot)),
   onSave: (slot) => link.send(presetSave(slot)),
   onReset: () => link.send(presetReset()),
@@ -44,6 +48,22 @@ async function loadApp(name) {
   }
 }
 
+// What the display shows: the buffer (or the app's view of it), else the
+// traces the app picks; the traces it doesn't plot show as numbers.
+function setUpDisplay(msg, ex) {
+  const scope = msg.bufferFrames > 0;
+  const plotted = scope ? [] : (ex.displayTraces ?? msg.traces.slice(0, 2).map((t) => t.name));
+  $("#scope").hidden = !scope;
+  $("#traces").hidden = plotted.length === 0;
+  $("#display-title").textContent = scope ? ex.scopeTitle || "Buffer · last 8 s" : ex.tracesTitle || (msg.traces.length ? "Traces · last 8 s" : "Levels");
+  $("#display-meta").replaceChildren();
+  traces.setLayout(msg, plotted);
+  const rest = msg.traces.map((t) => t.name).filter((n) => !plotted.includes(n));
+  readouts.setLayout(msg.traces, ex.readouts ? rest.filter((n) => ex.readouts.includes(n)) : rest);
+  $("#xy").hidden = !msg.xy;
+  $("#xy").setAttribute("aria-label", `${msg.xy}: input against output`);
+}
+
 link.addEventListener("message", async (e) => {
   const msg = e.detail;
   const now = performance.now();
@@ -54,35 +74,26 @@ link.addEventListener("message", async (e) => {
       lastState = null;
       app = loadApp(msg.app);
       $("#app-name").textContent = msg.app;
+      $("#app-tagline").textContent = "";
       document.title = `${msg.app} · Daisy Pod`;
       view.setLayout(msg);
-      traces.setLayout(msg);
       xy.clear();
       meters.setNames(msg.meters);
-      $("#controls").replaceChildren();
+      for (const id of ["#feature", "#below", "#rail", "#header-extra"]) $(id).replaceChildren();
       presets.setup(msg.presets);
-      // Show the views this app has data for.
-      $("#scope").hidden = msg.bufferFrames === 0;
-      $("#trace-panel").hidden = msg.traces.length === 0;
-      $("#xy").hidden = !msg.xy;
-      $("#xy-title").textContent = msg.xy;
       $("#tempo").hidden = true; // until a frame brings a tempo, or the app says it has one
       tempo.idle();
       extras = {};
+      setUpDisplay(msg, extras);
       app.then((loaded) => {
         if (msg !== hello) return;
         extras = loaded;
-        $("#trace-title").textContent = extras.tracesTitle || "Traces";
+        $("#app-tagline").textContent = extras.tagline || "";
         // An app can draw its buffer its own way, under its own title.
-        view = extras.View ? (appViews[msg.app] ??= new extras.View($("#buffer"))) : bufferView;
+        view = extras.View ? (appViews[msg.app] ??= new extras.View($("#scope"))) : bufferView;
         view.setLayout(msg);
-        $("#scope h2").textContent = extras.scopeTitle || "Buffer";
-        // The legend entries this app's view uses (all of them by default).
-        const legend = extras.legend || ["speed", "tap", "onset"];
-        for (const item of document.querySelectorAll("[data-legend]")) item.hidden = !legend.includes(item.dataset.legend);
-        $("#scope .span").hidden = Boolean(extras.View);
-        $("#scope-meta").hidden = !view.status;
-        // An app whose tempo comes and goes keeps its panel, so the page doesn't jump.
+        setUpDisplay(msg, extras);
+        // An app whose tempo comes and goes keeps its line, so the page doesn't jump.
         if (extras.tempo) $("#tempo").hidden = false;
       });
       break;
@@ -92,9 +103,9 @@ link.addEventListener("message", async (e) => {
       // Build once the whole list is in.
       if (params.filter(Boolean).length === hello.numParams) {
         const forHello = hello;
-        const extras = await app;
+        const loaded = await app;
         if (forHello !== hello) return; // a newer hello came in meanwhile
-        controls.build(hello, params, extras);
+        controls.build(hello, params, loaded);
         if (lastState) controls.state(lastState);
       }
       break;
@@ -114,7 +125,10 @@ link.addEventListener("message", async (e) => {
       } else if (extras.tempo) {
         tempo.idle();
       }
-      if (msg.traces) traces.add(msg.traces, now);
+      if (msg.traces) {
+        traces.add(msg.traces, now);
+        readouts.update(msg.traces);
+      }
       if (msg.xy) xy.add(msg.xy);
       if (msg.levels) meters.update(msg.levels, now);
       if (msg.cpu) cpu.update(msg.cpu, now);
@@ -142,11 +156,11 @@ function fillPorts() {
 
 function showStatus() {
   const state = link.live ? "live" : link.connected ? "waiting" : "off";
-  if (state === "live" && status.dataset.state !== "live") $("#ports").open = false; // found it: tuck the ports away
+  if (state === "live" && status.dataset.state !== "live") $("#setup").open = false; // found it: tuck Setup away
   status.dataset.state = state;
   status.querySelector(".status-text").textContent = { live: "Connected", waiting: "Waiting for the Pod…", off: "Not connected" }[state];
   const port = inputSel.selectedOptions[0]?.textContent;
-  $("#status-port").textContent = link.connected && port ? ` · ${port}` : "";
+  status.title = link.connected && port ? `MIDI: ${port}` : "";
   $("#connect").textContent = link.connected ? "Disconnect" : "Connect";
   document.body.classList.toggle("is-live", link.live);
 }
@@ -157,18 +171,6 @@ $("#connect").addEventListener("click", () => {
 });
 for (const sel of [inputSel, outputSel])
   sel.addEventListener("change", () => link.connected && link.connect(inputSel.value, outputSel.value));
-
-// The time-span buttons over the buffer and trace views.
-function spanButtons(attr, target) {
-  const buttons = document.querySelectorAll(`[${attr}]`);
-  for (const b of buttons)
-    b.addEventListener("click", () => {
-      target().spanSeconds = Number(b.getAttribute(attr));
-      for (const o of buttons) o.setAttribute("aria-pressed", String(o === b));
-    });
-}
-spanButtons("data-span", () => view);
-spanButtons("data-trace-span", () => traces);
 
 link.addEventListener("status", showStatus);
 link.addEventListener("ports", fillPorts);
@@ -194,30 +196,30 @@ async function start() {
   if (pref.input) inputSel.value = pref.input.id;
   if (pref.output) outputSel.value = pref.output.id;
   if (pref.input && pref.output && /daisy/i.test(pref.input.name)) link.connect(pref.input.id, pref.output.id);
-  else $("#ports").open = true; // no Daisy found: show the ports to pick from
+  else $("#setup").open = true; // no Daisy found: show the ports to pick from
   showStatus();
 }
 
 // ---------------------------------------------------------------- Drawing
 
-const panels = { scope: $("#scope"), traces: $("#trace-panel"), xy: $("#xy") };
-const scopeMeta = $("#scope-meta");
+const displayMeta = $("#display-meta");
 
 function frame() {
   // performance.now(), the clock the frames were stamped with (the
   // callback's own timestamp can lag it).
   const now = performance.now();
-  if (!panels.scope.hidden) {
+  if (!$("#scope").hidden) {
     view.draw(now);
-    // A view can say what it's showing, in the panel's head ("Playing · 1.37 s at 16k").
-    const meta = view.status?.() ?? "";
-    if (scopeMeta.textContent !== meta) scopeMeta.textContent = meta;
+    // A view can say what it's showing, in the display's head ("Playing · 1.37 s at 16k").
+    if (view.status) {
+      const meta = view.status();
+      if (displayMeta.textContent !== meta) displayMeta.textContent = meta;
+    }
   }
-  if (!panels.traces.hidden) traces.draw(now);
-  if (!panels.xy.hidden) xy.draw();
+  if (!$("#traces").hidden) traces.draw(now);
+  if (!$("#xy").hidden) xy.draw();
   tempo.draw(now);
   meters.draw();
-  cpu.draw(now);
   requestAnimationFrame(frame);
 }
 
