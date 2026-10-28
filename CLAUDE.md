@@ -17,7 +17,9 @@ Each experiment is a separate app in `apps/<name>/`, and all of them live on `ma
 
 Each app has its own `README.md` with its control table. The top-level `README.md` indexes the apps.
 
-`web/` is a browser control surface and visualiser (plain HTML/JS modules, no build step, served by `make web` on localhost because Web MIDI needs a secure context). It talks to an app over USB MIDI SysEx with the protocol in `common/web_link.{h,cpp}`, mirrored in `web/js/protocol.js`: change both together. See `web/README.md`.
+`web/` is a browser control surface and visualiser (plain HTML/JS modules, no build step, served by `make web` on localhost because Web MIDI needs a secure context). It talks to an app over USB MIDI SysEx with the protocol in `common/web_link.{h,cpp}`, mirrored in `web/js/protocol.js`: change both together. See `web/README.md`. (`web/package.json` only marks the modules as ES modules, for Node.)
+
+`m4l/` builds a Max for Live device per app with a web view (`make m4l`): every parameter as a Live parameter, synced both ways with the Pod. Live passes no SysEx through tracks, so each device's `node.script` (`daisy_link.mjs` over `link_core.mjs`, using `@julusian/midi`) opens the Daisy's USB MIDI port itself and speaks the web link, importing `web/js/protocol.js`. The devices are generated: `make m4l` builds each app's `web_view.cpp` (all of the app but `main.cpp`, plus `common/`) for the host with `m4l/tools/dump_params.cpp`, which prints the hello and parameter descriptions, and `m4l/tools/build.mjs` turns them into `m4l/<app>.amxd` and `m4l/specs/<app>.json` (neither checked in), using `web/js/apps/<app>.js` for menus and colours. So a new app's `WriteHello` arguments go in `dump_params.cpp`, and a changed parameter list needs `make m4l` again. The `.amxd` files are unfrozen and read their scripts from `m4l/`. A synth goes in `SYNTHS` in `build.mjs` (a MIDI effect). Max can't be run here: check generated devices by loading them in Live. `node m4l/tools/pod.mjs <app>` checks the USB link without Live. See `m4l/README.md`.
 
 ## Commands
 
@@ -25,6 +27,7 @@ Each app has its own `README.md` with its control table. The top-level `README.m
 git submodule update --init --recursive   # fresh clone only
 make libs            # build libDaisy + DaisySP (once after cloning or after bumping submodules)
 make web             # serve the web control surface (web/) on http://localhost:8000
+make m4l             # build the Max for Live devices -> m4l/<app>.amxd (needs node/npm)
 make                 # build the default app -> build/grainfall/grainfall.{elf,bin,hex}
 make APP=starter     # build another app -> build/starter/starter.{elf,bin,hex}
 make all-apps        # build every app; run this after changing common/

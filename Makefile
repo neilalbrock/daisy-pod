@@ -5,7 +5,7 @@
 APP ?= grainfall
 APPS = $(patsubst apps/%/,%,$(sort $(dir $(wildcard apps/*/*.cpp))))
 
-ifeq ($(filter list new all-apps clean-all web,$(MAKECMDGOALS)),)
+ifeq ($(filter list new all-apps clean-all web m4l,$(MAKECMDGOALS)),)
 ifeq ($(filter $(APP),$(APPS)),)
 $(error No app "$(APP)" in apps/. Available: $(APPS))
 endif
@@ -55,7 +55,7 @@ program debug: build/$(APP).elf
 build/$(APP).elf: $(BUILD_DIR)/$(TARGET).elf
 	ln -sf $(APP)/$(APP).elf $@
 
-.PHONY: list new all-apps clean-all libs web
+.PHONY: list new all-apps clean-all libs web m4l
 
 # List the apps; * marks the one APP selects
 list:
@@ -83,3 +83,20 @@ libs:
 WEB_PORT ?= 8000
 web:
 	@python3 web/serve.py $(WEB_PORT)
+
+# Max for Live devices (m4l/): one per app with a web view, from its
+# parameter list, which a host build of the app's web_view.cpp prints
+M4L_APPS = $(patsubst apps/%/web_view.cpp,%,$(wildcard apps/*/web_view.cpp))
+HOST_CXX ?= c++
+m4l: $(M4L_APPS:%=build/m4l/dump_%) m4l/node_modules
+	node m4l/tools/build.mjs $(foreach a,$(M4L_APPS),$(a)=build/m4l/dump_$(a))
+
+.SECONDEXPANSION:
+build/m4l/dump_%: m4l/tools/dump_params.cpp $$(wildcard apps/$$*/*.cpp apps/$$*/*.h) $(wildcard common/*.cpp common/*.h)
+	@mkdir -p build/m4l
+	$(HOST_CXX) -std=gnu++17 -O1 -w -fconstexpr-steps=100000000 -DAPP_$(shell echo $* | tr a-z A-Z) \
+		-Icommon -Iapps/$* $(filter-out %/main.cpp,$(wildcard apps/$*/*.cpp)) $(wildcard common/*.cpp) $< -o $@
+
+m4l/node_modules: m4l/package.json
+	cd m4l && npm install
+	@touch $@

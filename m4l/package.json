@@ -1,0 +1,9 @@
+{
+  "name": "daisy-pod-m4l",
+  "private": true,
+  "description": "Max for Live devices for the Daisy Pod apps: the web link over Node for Max",
+  "type": "module",
+  "dependencies": {
+    "@julusian/midi": "^3.8.1"
+  }
+}

@@ -39,6 +39,12 @@ levels and CPU) next to all its controls. Run `make web` and open
 http://localhost:8000 in Chrome or Edge. Every app but the starter supports
 it; see [web/README.md](web/README.md).
 
+## Max for Live devices
+
+`m4l/` builds a Max for Live device per app (`make m4l`) with every parameter
+as a Live parameter, for automation and mapping, kept in sync both ways with
+the Pod over USB, along with the Pod's presets. See [m4l/README.md](m4l/README.md).
+
 ## Toolchain
 
 | Tool | Version | Location |
