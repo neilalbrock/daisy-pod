@@ -118,10 +118,17 @@ enum ParamId
     // The Layer page: the layer edited (and played in Single), and the mode.
     kParamLayer,
     kParamLayerMode,
-    // MIDI Split: layer A's channel (B-D the next ones up), and whether A
-    // takes every channel too.
+    // MIDI Split: layer A's channel (B-D the next ones up).
     kParamSplitChannel,
-    kParamAllChannels,
+    // The edited layer's actions, as the Protein's Layer Action menu: back
+    // to the starting sound, copy, paste, and load a layer of a stored
+    // preset (the slot, then which of its layers).
+    kParamInitLayer,
+    kParamCopyLayer,
+    kParamPasteLayer,
+    kParamLoadSlot,
+    kParamLoadFrom,
+    kParamLoadLayer,
     // The effects' values, by type (fx_params.h).
     kParamFxFirst,
     kParamFxLast = kParamFxFirst + kNumFxParams - 1,

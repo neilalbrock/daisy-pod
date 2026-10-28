@@ -195,11 +195,8 @@ bool SynthEngine::Plays(int layer) const
 
 int SynthEngine::SplitLayers(int channel) const
 {
-    int l    = (channel - global_.split_channel) & 15;
-    int mask = l < kLayers && global_.active[l] ? 1 << l : 0;
-    if(global_.all_channels && global_.active[0])
-        mask |= 1;
-    return mask;
+    int l = (channel - global_.split_channel) & 15;
+    return l < kLayers && global_.active[l] ? 1 << l : 0;
 }
 
 int SynthEngine::Route(int channel)

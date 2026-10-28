@@ -6,7 +6,8 @@
 // state messages come back in through state().
 //
 // Groups named "<tab>/<card>" (wavebyte's layers, "A/Filter") go in tabs,
-// one tab's cards showing at a time, under a bar of the tabs. Their
+// one tab's cards showing at a time, under a bar of the tabs; "*/<card>"
+// shows with every tab (wavebyte's Layer Actions, on the layer showing). Their
 // parameters may start with the tab ("B: Cutoff"), which their labels
 // leave out. If the app names a choice parameter as its tabParam, the bar
 // is that parameter's control: picking a tab sets it, and the app setting
@@ -154,7 +155,7 @@ export class Controls {
     this.tabs = [];
     for (const name of hello.groups) {
       const m = TABBED.exec(name);
-      if (m && !this.tabs.includes(m[1])) this.tabs.push(m[1]);
+      if (m && m[1] !== "*" && !this.tabs.includes(m[1])) this.tabs.push(m[1]);
     }
     const tabParam = this.tabs.length > 0 && app.tabParam ? params.find((p) => p && p.name === app.tabParam) : undefined;
     const tabCards = el("div", "controls-more");
@@ -169,7 +170,8 @@ export class Controls {
       const members = params.filter((p) => p && p.group === g && p !== tabParam);
       if (members.length === 0) return;
       const tabbed = TABBED.exec(fullName);
-      const tab = tabbed?.[1];
+      const everyTab = tabbed?.[1] === "*";
+      const tab = everyTab ? undefined : tabbed?.[1];
       const groupName = tabbed ? tabbed[2] : fullName;
       // A tab's parameters, without the tab in front.
       const nameOf = (p) => (tab && p.name.startsWith(`${tab}: `) ? p.name.slice(tab.length + 2) : p.name);
@@ -220,7 +222,8 @@ export class Controls {
         card.dataset.tab = tab;
         card.hidden = tab !== this.tabs[this.tab];
         tabCards.append(card);
-      } else (main ? zones.main : page ? zones.pages : zones.more).append(card);
+      } else if (everyTab && this.tabs.length) tabCards.append(card);
+      else (main ? zones.main : page ? zones.pages : zones.more).append(card);
     });
     this.root.append(...Object.values(zones).filter((zone) => zone.childElementCount));
   }

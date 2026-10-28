@@ -112,11 +112,34 @@ void Presets::Reset()
     reset_req_ = true;
 }
 
+void Presets::LoadPart(int slot, MapFn map)
+{
+    if(slot < 0 || slot >= kSlots || map == nullptr || part_req_ >= 0)
+        return;
+    part_map_ = map;
+    std::atomic_signal_fence(std::memory_order_release);
+    part_req_ = slot;
+}
+
 void Presets::Apply()
 {
     if(!pending_ready_)
         return;
     std::atomic_signal_fence(std::memory_order_acquire);
+    if(pending_part_)
+    {
+        // Part of a preset: to the parameters the map gives. What's loaded
+        // stays the reference for Modified, so the change shows.
+        for(int i = 0; i < num_params_; i++)
+        {
+            int to = pending_[i] >= 0 ? part_map_(i) : -1;
+            if(to >= 0 && to < num_params_)
+                set_(to, pending_[i]);
+        }
+        pending_part_  = false;
+        pending_ready_ = false;
+        return;
+    }
     for(int i = 0; i < num_params_; i++)
         if(pending_[i] >= 0)
             set_(i, pending_[i]);
@@ -188,7 +211,7 @@ void Presets::Poll(uint32_t now_ms)
     if(reset_req_ && !pending_ready_)
     {
         reset_req_  = false;
-        select_req_ = save_req_ = -1;
+        select_req_ = save_req_ = part_req_ = -1;
         store_.EraseAll();
         used_  = 0;
         slot_  = -1;
@@ -218,6 +241,20 @@ void Presets::Poll(uint32_t now_ms)
             }
             else
                 Snapshot(Store::kPreset, loaded_); // empty: the sound stays
+        }
+
+        // Part of a slot, for the callback to map (LoadPart).
+        slot = part_req_;
+        if(slot >= 0 && !pending_ready_)
+        {
+            std::atomic_signal_fence(std::memory_order_acquire);
+            if(Load(slot, pending_))
+            {
+                pending_part_ = true;
+                std::atomic_signal_fence(std::memory_order_release);
+                pending_ready_ = true;
+            }
+            part_req_ = -1;
         }
 
         slot = save_req_;

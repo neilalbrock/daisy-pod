@@ -66,6 +66,7 @@ class Presets
 
     using GetFn = int (*)(int index);
     using SetFn = void (*)(int index, int raw);
+    using MapFn = int (*)(int index); // a stored value's parameter, or -1 to leave it
 
     // Before audio starts: reads the store, then applies the global
     // settings and the preset last selected through `set`. With
@@ -80,6 +81,13 @@ class Presets
     void Save(int slot);   // to this slot, selecting it
     void Reset();          // factory reset
     void Apply();          // once per block: applies a preset the main loop has read
+
+    // Part of a stored preset into the current sound, as wavebyte's Load
+    // Layer takes one layer of one: each value the slot holds goes to the
+    // parameter map(index) gives, or nowhere for -1. The slot stays as
+    // selected, and the sound shows as modified. An empty slot does
+    // nothing. map is called from Apply, in the callback.
+    void LoadPart(int slot, MapFn map);
 
     // A command from the web page: true if it was a preset's (select, save
     // or reset), which this has taken; otherwise the app's to handle.
@@ -133,7 +141,8 @@ class Presets
     uint16_t             *keys_;
 
     // Callback to main loop: requests, -1 for none.
-    volatile int  select_req_ = -1, save_req_ = -1;
+    volatile int  select_req_ = -1, save_req_ = -1, part_req_ = -1;
+    MapFn         part_map_ = nullptr; // for part_req_, and then for the values pending
     volatile bool reset_req_  = false;
     int          target_     = -1; // the callback's idea of the slot, ahead of slot_
 
@@ -141,6 +150,7 @@ class Presets
     // back once it has been.
     int16_t      *pending_;
     volatile bool pending_ready_ = false, applied_ = false;
+    volatile bool pending_part_  = false; // they're part of a preset: map them, and keep loaded_
 
     // The main loop's.
     volatile int      slot_     = -1;

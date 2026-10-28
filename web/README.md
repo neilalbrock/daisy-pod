@@ -67,7 +67,7 @@ modules, with no build step.
   Moving a control on the Pod or over MIDI moves it here too. Groups named
   `<tab>/<card>` (wavebyte's layers, `B/Filter`) go in tabs over the rest,
   one tab's cards at a time, their parameters' labels without the tab in
-  front (`B: Cutoff` shows as Cutoff).
+  front (`B: Cutoff` shows as Cutoff); `*/<card>` shows with every tab.
 
 ## How it talks to the Pod
 

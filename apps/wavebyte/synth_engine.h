@@ -14,8 +14,7 @@
 // layer; the Multi modes play the active layers, all of them on each note
 // (Layered), the next one up on each note (Round Robin), one at random
 // (Random Robin), or each on its own MIDI channel (MIDI Split, from the
-// split channel up; layer A can take every channel too). A note is let go
-// on the layers it went to.
+// split channel up). A note is let go on the layers it went to.
 //
 // It also keeps the MIDI controllers the mod matrix reads (mod_matrix.h),
 // shared by every layer, and each layer's two global LFOs. With MPE on
@@ -162,7 +161,6 @@ class SynthEngine
         int   selected      = 0; // the layer Single plays (and the Pod edits)
         bool  active[kLayers] = {true, false, false, false}; // in the Multi modes
         int   split_channel = 0;     // MIDI Split: layer A's channel (0-15); B-D the next ones up
-        bool  all_channels  = false; // MIDI Split: layer A takes every channel too
         float flavour       = 0.0f;
         float dac           = 0.3f;
         bool  mpe           = false;

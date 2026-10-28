@@ -91,6 +91,10 @@
 // web`), streaming the output level, CPU and traces of the layer's last
 // voice played while the page is open, with the presets.
 //
+// The web page also has the Protein's layer actions, on the layer being
+// edited: Init, Copy, Paste, and Load Layer (one layer of a stored preset,
+// through Presets::LoadPart).
+//
 // Presets (common/presets.h) hold the sound: all four layers and the mode.
 // Master, the play note, MPE, Tempo and the split channel are saved on
 // their own a few seconds after they change. At power-up they come back,
@@ -367,7 +371,6 @@ int   mod_slot      = 0;
 int   fx_slot       = 0;
 int   layer_mode    = SynthEngine::kSingle;
 int   split_channel = 0;
-bool  all_channels  = false;
 float master        = 0.8f;
 float fx_values[kNumFxParams]; // the effects' values, by type (fx_params.h)
 bool  mpe           = false;
@@ -507,6 +510,62 @@ int Limit(int index, int raw)
     return kParams[index].kind == weblink::Kind::kChoice ? Clamp(raw, kParams[index].num_options) : raw != 0;
 }
 
+void SetParam(int index, int raw, uint32_t now_ms);
+int  ParamRaw(int index);
+
+// ---------------------------------------------------------------- Layer actions
+//
+// As the Protein's Layer Action menu, on the web page: on the layer being
+// edited, everything but Active, which belongs to the Multi modes rather
+// than the sound.
+
+int16_t DSY_SDRAM_BSS layer_clip[kLayerParams]; // Copy Layer's buffer
+bool                  layer_clipped = false;    // ... once something's in it
+int                   load_slot = 0, load_from = 0, load_to = 0; // Load Layer
+
+// A layer parameter's starting value, as raw.
+int LayerDefault(int param)
+{
+    if(param < kNumLayerKnobs)
+    {
+        int at = kKnobPlaces.at[param];
+        return (int)(kLayerKnobStart[at / 2][at % 2] * 16383.0f + 0.5f);
+    }
+    return param == kParamFxRouting ? kFxSerial : 0;
+}
+
+void InitLayer(int layer, uint32_t now_ms)
+{
+    for(int p = 0; p < kLayerParams; p++)
+        if(p != kParamActive)
+            SetParam(LayerParam(layer, p), LayerDefault(p), now_ms);
+}
+
+void CopyLayer(int layer)
+{
+    for(int p = 0; p < kLayerParams; p++)
+        layer_clip[p] = (int16_t)ParamRaw(LayerParam(layer, p));
+    layer_clipped = true;
+}
+
+void PasteLayer(int layer, uint32_t now_ms)
+{
+    if(!layer_clipped)
+        return;
+    for(int p = 0; p < kLayerParams; p++)
+        if(p != kParamActive)
+            SetParam(LayerParam(layer, p), layer_clip[p], now_ms);
+}
+
+// Load Layer: a stored value of layer load_from's goes to layer load_to.
+int MapLoadedLayer(int index)
+{
+    if(index >= kParamMaster || index / kLayerParams != load_from)
+        return -1;
+    int p = index % kLayerParams;
+    return p == kParamActive ? -1 : LayerParam(load_to, p);
+}
+
 // A value from the page (or the Pod, MIDI or a preset), in the audio
 // callback.
 void SetParam(int index, int raw, uint32_t now_ms)
@@ -542,7 +601,15 @@ void SetParam(int index, int raw, uint32_t now_ms)
         case kParamLayer: edit_layer = Limit(index, raw); break;
         case kParamLayerMode: layer_mode = Limit(index, raw); break;
         case kParamSplitChannel: split_channel = Limit(index, raw); return;
-        case kParamAllChannels: all_channels = raw != 0; return;
+        case kParamInitLayer: InitLayer(edit_layer, now_ms); return;
+        case kParamCopyLayer: CopyLayer(edit_layer); return;
+        case kParamPasteLayer: PasteLayer(edit_layer, now_ms); return;
+        case kParamLoadSlot: load_slot = Limit(index, raw); return;
+        case kParamLoadFrom: load_from = Limit(index, raw); return;
+        case kParamLoadLayer:
+            load_to = edit_layer;
+            presets.LoadPart(load_slot, MapLoadedLayer);
+            return;
         case kParamPlayNote:
             SetPlayNote(kPlayLow + (int)(raw / 16383.0f * (kPlayHigh - kPlayLow) + 0.5f));
             return;
@@ -591,7 +658,8 @@ int ParamRaw(int index)
         case kParamLayer: return edit_layer;
         case kParamLayerMode: return layer_mode;
         case kParamSplitChannel: return split_channel;
-        case kParamAllChannels: return all_channels;
+        case kParamLoadSlot: return load_slot;
+        case kParamLoadFrom: return load_from;
         case kParamPlayNote: return (int)(PlayNoteRaw() * 16383.0f + 0.5f);
         case kParamPlay: return play_sounding >= 0;
         case kParamMpe: return mpe;
@@ -902,7 +970,6 @@ SynthEngine::Global MakeGlobal()
     for(int l = 0; l < kLayers; l++)
         g.active[l] = Setting(l, kParamActive) != 0;
     g.split_channel = split_channel;
-    g.all_channels  = all_channels;
     g.flavour       = KnobValue(kParamFlavour);
     g.dac           = KnobValue(kParamDac);
     g.mpe           = mpe;

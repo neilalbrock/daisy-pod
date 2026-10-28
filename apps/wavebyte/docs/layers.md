@@ -11,8 +11,8 @@ sequencer (stage 5) are parked, so the questions about them fall away.
 Flavour and DAC are shared, as are Master and the effects; there are no
 key or velocity ranges. The Layer page's knobs do nothing: its encoder
 turn picks the layer, with Shift the mode, and a long press switches the
-layer on or off; the split channel and A All Channels are on the web page
-only. B-D's parameter names start "B: " rather than "B ", since with a
+layer on or off; the split channel is on the web page only, and there's
+no "layer A on all channels" option (see below). B-D's parameter names start "B: " rather than "B ", since with a
 plain space two pairs hashed alike. There are 413 parameters. Measured
 after building: DTCM went from 90.4% to 87.6% with the presets' arrays
 and the page's state in SDRAM, then back to 90.6% with the layers, leaving
@@ -21,6 +21,21 @@ and the page's state in SDRAM, then back to 90.6% with the layers, leaving
 time, against 1% for one layer before. On the Pod, with all four layers
 running and the settings pushed, CPU is 55% average and 60% peak (about
 where one layer with effects was) and the stack has 9 KB never used.
+
+**Checked against the manual** (Protein manual rev. 2, firmware 1.02,
+read after building): the layers match it. Single plays the selected
+layer, the Multi modes (Layered, Round Robin, Random Robin, MIDI Split)
+play the active ones, the four layers share eight voices, the FX routing
+(Out, FX 1, FX 2) is per layer and the two effects global, and each
+layer has its own Poly, Mono or Legato. Its Layer Action menu (Init,
+Load, Copy, Paste Layer) is now on the web page. Differences: the
+Protein's per-layer output Volume and its sound Volume are one Volume
+here; it has a global Omni mode and Receive Channel, where wavebyte
+always listens on every channel and the split channel is only MIDI
+Split's starting point. The reviews' "layer A on all channels" isn't in
+the manual (it seems to be Omni), so the A All Channels toggle built from
+it was taken out again. Flavour's "current
+sound" could mean per layer; it's global here, by choice.
 
 **Short answer:** yes, it fits. Layers don't add voices: the Protein's
 four layers share its eight, so the DSP that dominates the CPU (voices and
@@ -48,7 +63,8 @@ checking against the manual's Layer and Multi pages before building.
     ascending order".
   - **Random Robin:** a random active layer per note.
   - **MIDI Split:** each layer on its own channel, from the global receive
-    channel up. Layer A can receive on all channels.
+    channel up. (The reviews' "layer A can receive on all channels" turned
+    out not to be in the manual.)
 - **Confirmed:** the two effect slots are global and shared. Each layer
   has its own routing: Out (dry), FX 1 (FX 1 then FX 2) or FX 2 (FX 2
   only). This is wavebyte's routing already, moved into the layer.

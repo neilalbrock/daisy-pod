@@ -224,9 +224,9 @@ export default {
   // edits) picks it.
   tabParam: "Layer",
   optionColour: (name, i) => (name === "Layer" ? hue(LAYER_HUES[i]) : undefined),
-  // The AKWF bank's 65 tables as a drop-down, above the Table they take the
-  // place of while picked.
-  menu: (name) => MENUS[name] ?? (/^AKWF \d$/.test(name) || undefined),
+  // The tables as drop-downs: the Table, then the AKWF bank's, which takes
+  // its place while one is picked.
+  menu: (name) => MENUS[name] ?? (/^(Table|AKWF) \d$/.test(name) || undefined),
   overrides: (name) => {
     const m = /^AKWF (\d)$/.exec(name);
     return m ? `Table ${m[1]}` : undefined;

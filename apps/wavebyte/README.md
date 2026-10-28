@@ -269,7 +269,7 @@ Shift, the encoder turn sets the mode:
 - **Random Robin:** each note goes to an active layer at random.
 - **MIDI Split:** each active layer plays the notes on its own channel:
   A on the split channel (1 unless the web page sets another), B on the
-  next and so on. **A All Channels** gives layer A every channel too.
+  next and so on, as the Protein's Receive Channel sets.
 
 A long press on the encoder on the Layer page switches the layer on or off
 (Active, in the Multi modes). Layer A starts active, B-D off, all with the
@@ -277,6 +277,19 @@ same sound. A note is let go on the layers it went to, whatever the mode
 or layer picked has become since. A layer's voice mode is its own: a
 Mono layer plays one voice of the eight, and a Poly layer beside it the
 rest.
+
+The web page's **Layer Actions** card, as the Protein's Layer Action menu,
+works on the layer being edited (the tab showing):
+
+- **Init Layer:** back to the starting sound.
+- **Copy Layer**, then **Paste Layer** onto another: the whole sound, kept
+  until power-off.
+- **Load Layer:** one layer of a stored preset, chosen with **Load Slot**
+  and **Load From**, into this one. The preset selected stays selected,
+  showing as changed.
+
+None of them touches Active, which belongs to the Multi modes rather than
+the sound.
 
 Each layer has its own LFOs, so a Free Global LFO is one per layer, not
 one for the whole synth. The fixed CC map sets the layer being edited, or
@@ -389,7 +402,7 @@ A preset holds the sound: all four layers (every knob but Master, the LFOs
 and mod matrix among them, the tables, AKWF tables and the other choices,
 Dirt type, Osc mode and FX routing among them, Limit Waves, Fixed and
 Active), Flavour, DAC, both FX types, every effect's values, the layer
-mode, the layer picked and A All Channels. Master, the play note, MPE,
+mode and the layer picked. Master, the play note, MPE,
 Tempo and the split channel are saved on their own, a few seconds after
 they last change. At power-up they come back, then the preset last
 selected.
@@ -413,7 +426,7 @@ cutoff, its amp envelope, Flavour's pitch drift on osc 1, both LFOs as it
 sees them, how many voices are sounding, and how much stack the firmware
 has never used (Stack free: its margin in DTCM). Every control is there
 too, with Limit Waves, Fixed, the play note, a Play switch, MPE, Tempo,
-the split channel and A All Channels, which the Pod doesn't have. Each
+and the split channel, which the Pod doesn't have. Each
 layer's cards are in a tab of their own, A-D, which follows the Pod's
 Layer page both ways. See [web/README.md](../../web/README.md).
 

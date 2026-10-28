@@ -33,7 +33,7 @@ const char *const kChannels[]    = {"1", "2", "3", "4", "5", "6", "7", "8",
 // tab of its own. Then the shared ones: the effects each have a card,
 // after the FX card's (kFxGroup + type). The hello carries every name, and
 // must fit in one message (weblink::kMaxMessage, 720 bytes): with these
-// it's 672, so keep new names short.
+// it's 688, so keep new names short. "*/" puts a card in every layer's tab.
 #define LAYER_GROUPS(L)                                                                     \
     L "/Osc 1", L "/Osc 2", L "/Pitch", L "/Filter", L "/Env & Glide", L "/Envelopes",     \
         L "/Amp", L "/Character", L "/LFOs", L "/Mod Matrix", L "/Layer"
@@ -41,12 +41,13 @@ constexpr uint8_t kLayerGroups  = 11;
 const char *const kGroupNames[] = {LAYER_GROUPS("A"), LAYER_GROUPS("B"), LAYER_GROUPS("C"),
                                    LAYER_GROUPS("D"), "Global", "FX", "Chorus", "Flanger",
                                    "Phaser", "Tremolo", "Drive", "Compressor", "EQ", "Delay",
-                                   "Reverb", "Pod Pages", "Play"};
+                                   "Reverb", "Pod Pages", "Play", "*/Layer Actions"};
 #undef LAYER_GROUPS
 constexpr uint8_t kGlobalGroup = kLayers * kLayerGroups;
 constexpr uint8_t kFxGroup     = kGlobalGroup + 1;
 constexpr uint8_t kPodGroup    = kFxGroup + kNumFxTypes;
 constexpr uint8_t kPlayGroup   = kPodGroup + 1;
+constexpr uint8_t kActionGroup = kPlayGroup + 1;
 const char *const kMeterNames[]  = {"Out"};
 
 const weblink::Trace kTraces[kNumTraces] = {
@@ -128,7 +129,7 @@ constexpr Store kPreset = Store::kPreset;
         {P "Voice", Kind::kChoice, G + 2, kVoiceModes, Count(kVoiceModes), 3, kPreset},       \
         {P "Filter Type", Kind::kChoice, G + 3, kFilterTypes, Count(kFilterTypes), 5, kPreset}, \
         {P "Glide Mode", Kind::kChoice, G + 4, kGlideModes, Count(kGlideModes), 2, kPreset},  \
-        {P "Pan Mode", Kind::kChoice, G + 6, kPanModes, Count(kPanModes), 6, kPreset},        \
+        {P "Pan Mode", Kind::kChoice, G + 6, kPanModes, Count(kPanModes), 3, kPreset},        \
         {P "Osc Mode", Kind::kChoice, G + 7, kOscModes, Count(kOscModes), 2, kPreset},        \
         {P "AKWF 1", Kind::kChoice, G + 0, akwf::kNames, akwf::kTables + 1, 4, kPreset},       \
         {P "AKWF 2", Kind::kChoice, G + 1, akwf::kNames, akwf::kTables + 1, 4, kPreset},       \
@@ -157,7 +158,12 @@ constexpr weblink::Param kParams[kNumParams] = {
     {"Layer", Kind::kChoice, kGlobalGroup, kLayerNames, Count(kLayerNames), 4, kPreset},
     {"Layer Mode", Kind::kChoice, kGlobalGroup, kLayerModes, Count(kLayerModes), 3, kPreset},
     {"Split Channel", Kind::kChoice, kGlobalGroup, kChannels, Count(kChannels), 8, Store::kGlobal},
-    {"A All Channels", Kind::kToggle, kGlobalGroup, nullptr, 0, 0, kPreset},
+    {"Init Layer", Kind::kTrigger, kActionGroup, nullptr, 0, 0, Store::kNone},
+    {"Copy Layer", Kind::kTrigger, kActionGroup, nullptr, 0, 0, Store::kNone},
+    {"Paste Layer", Kind::kTrigger, kActionGroup, nullptr, 0, 0, Store::kNone},
+    {"Load Slot", Kind::kChoice, kActionGroup, kSlotNames, Count(kSlotNames), 8, Store::kNone},
+    {"Load From", Kind::kChoice, kActionGroup, kLayerNames, Count(kLayerNames), 4, Store::kNone},
+    {"Load Layer", Kind::kTrigger, kActionGroup, nullptr, 0, 0, Store::kNone},
     {kFxParams[0].name, kKnob, kFxGroup + 1, nullptr, 0, 0, kPreset},
     {kFxParams[1].name, kKnob, kFxGroup + 1, nullptr, 0, 0, kPreset},
     {kFxParams[2].name, kKnob, kFxGroup + 1, nullptr, 0, 0, kPreset},
