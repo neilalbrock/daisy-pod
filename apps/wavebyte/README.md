@@ -409,12 +409,13 @@ before the next.
      rhythms.
    - The 32-step sequencer: pitch offsets and velocity per step, five
      directions, Reset, scale snapping, step recording, 16 patterns.
-6. **Built, not yet tried on the Pod:** Layers: four, sharing the 8 voices. In Single mode one plays;
+6. **Done:** Layers: four, sharing the 8 voices. In Single mode one plays;
    Multi offers Layered, Round Robin, Random Robin and MIDI Split. Flavour,
    DAC and the effects are shared; each layer has its own routing. 413
    parameters in all. The presets' arrays and the web page's state moved
-   to SDRAM to make room in DTCM. Scoped in
-   [docs/layers.md](docs/layers.md).
+   to SDRAM to make room in DTCM. With all four layers running and the
+   settings pushed, CPU is 55% average and 60% peak, as before layers, with
+   9 KB of stack never used. Scoped in [docs/layers.md](docs/layers.md).
 7. **Maybe:** CC learn, and importing wavetables from the web page. A
    bank of tables made from the AKWF single cycles is looked at in
    [docs/akwf.md](docs/akwf.md).

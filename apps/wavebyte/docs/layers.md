@@ -18,8 +18,9 @@ after building: DTCM went from 90.4% to 87.6% with the presets' arrays
 and the page's state in SDRAM, then back to 90.6% with the layers, leaving
 12.4 KB for the stack (12.6 KB before); and in the host benchmark,
 `SetGlobal` and four `SetPatch` come to 4% of the voices and effects'
-time, against 1% for one layer before. The Pod's own CPU and Stack free
-readings on the web page are the real test.
+time, against 1% for one layer before. On the Pod, with all four layers
+running and the settings pushed, CPU is 55% average and 60% peak (about
+where one layer with effects was) and the stack has 9 KB never used.
 
 **Short answer:** yes, it fits. Layers don't add voices: the Protein's
 four layers share its eight, so the DSP that dominates the CPU (voices and
