@@ -31,17 +31,24 @@ class Adsr
 
         void Set(float attack, float decay_x, float sustain_x, float release_x, float block_rate)
         {
-            attack_step = 1.0f / (AttackSeconds(attack) * block_rate);
-            decay       = Fall(FallSeconds(decay_x), block_rate);
-            sustain     = dsp::Clamp(sustain_x, 0.0f, 1.0f);
-            release     = Fall(FallSeconds(release_x), block_rate);
+            SetTimes(AttackSeconds(attack), FallSeconds(decay_x), sustain_x,
+                     FallSeconds(release_x), block_rate);
         }
 
-      private:
-        // Most of the way (95%) in `seconds`.
+        // From times in seconds. Cheap enough (no expf) for a voice to
+        // work out its own each block when the mod matrix moves them.
+        void SetTimes(float attack_s, float decay_s, float sustain_x, float release_s, float block_rate)
+        {
+            attack_step = 1.0f / (attack_s * block_rate);
+            decay       = Fall(decay_s, block_rate);
+            sustain     = dsp::Clamp(sustain_x, 0.0f, 1.0f);
+            release     = Fall(release_s, block_rate);
+        }
+
+        // Most of the way (95%) in `seconds`: 1 - e^(-3 / blocks).
         static float Fall(float seconds, float block_rate)
         {
-            return 1.0f - expf(-3.0f / (seconds * block_rate));
+            return 1.0f - dsp::FastExp2(-4.328085f / (seconds * block_rate));
         }
     };
 

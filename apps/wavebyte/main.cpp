@@ -3,11 +3,11 @@
 // Our own take on the Waldorf Protein: two wavetable oscillators per voice
 // reading 8-bit waves with no interpolation, as the Microwave's chip did
 // (or a Clean mode), Dirt's noises, a filter after the Protein's model of
-// the CEM chip (or a Drive in its place), three envelopes, Flavour and a
-// model of each voice's DAC, and eight voices. Play it over MIDI, or with
-// button 1.
+// the CEM chip (or a Drive in its place), three envelopes, two LFOs, an
+// 8-slot mod matrix, Flavour and a model of each voice's DAC, and eight
+// voices. Play it over MIDI (MPE too), or with button 1.
 //
-// The two knobs are shared across eight pages; press the encoder to change
+// The two knobs are shared across ten pages; press the encoder to change
 // page (LED 2 shows which). Like the Protein's panel, each knob has a
 // second job under Shift (button 2): hold Shift while turning, or tap it to
 // keep it on (LED 1 glows blue) and tap again to let go. After a change of
@@ -23,13 +23,15 @@
 //                                                                 With Shift: Dirt type: Static,
 //                                                                 Crackle, Geiger, Click, Burst 1-3,
 //                                                                 Ring Mod
-//   5 Env & Glide (teal)  Filter Env / Vel    Glide / Bend Range  Glide: Onset, Legato
-//   6 Envelopes (blue)    Attack / Sustain    Decay / Release     Envelope: Wave, Filter, Amp
-//   7 Amp (violet)        Volume / Vel Amnt   Pan / Master        Pan: Fix, Rand 1-5
-//   8 Character (pink)    Flavour             DAC                 Osc: 8-bit, Clean
+//   5 Env & Glide (sea green) Filter Env / Vel    Glide / Bend Range  Glide: Onset, Legato
+//   6 Envelopes (cyan)    Attack / Sustain    Decay / Release     Envelope: Wave, Filter, Amp
+//   7 Amp (azure)         Volume / Vel Amnt   Pan / Master        Pan: Fix, Rand 1-5
+//   8 Character (blue)    Flavour             DAC                 Osc: 8-bit, Clean
 //                         (Shift does nothing here)
+//   9 LFOs (violet)       Speed / Ratio       Shape / Mode        LFO: 1, 2
+//   10 Mod Matrix (pink)  Source / Target     Amount / Amount     Slot: 1-8
 //
-//   Page 9 (LED 2: the slot) Presets. Encoder turn - select a slot, loading
+//   Page 11 (LED 2: the slot) Presets. Encoder turn - select a slot, loading
 //                            its preset; an empty one keeps the sound.
 //                            Encoder long press - save to the slot. LED 2
 //                            shows the slot's colour: dim if empty,
@@ -49,9 +51,13 @@
 // LED 1 shows the last voice's amp envelope, blue with Shift on. Turning
 // the encoder flashes LED 2 with the choice.
 //
-// MIDI on any channel, from the TRS input or USB: notes, pitch bend,
-// sustain (CC 64), all notes off (CC 120 and 123), and program change 1-8
-// (sent as 0-7) for preset slots 1-8.
+// MIDI on any channel, from the TRS input or USB: notes (with release
+// velocity), pitch bend, channel and poly pressure, sustain (CC 64), the
+// mod matrix's controllers (CC 1, 2, 11, 22-31), the fixed CC map below
+// (kCcMap), all notes off (CC 120 and 123), program change 1-8 (sent as
+// 0-7) for preset slots 1-8, and MIDI clock for Clocked LFOs. With MPE
+// on (the web page), channel 1 is the master channel and each other
+// channel's bend, CC 74 and pressure belong to its note.
 //
 // Over USB MIDI it also talks to the web control surface (web/, `make
 // web`), streaming the output level, CPU and traces of the last voice
@@ -75,6 +81,7 @@
 #include "qspi_flash.h"
 #include "sdram_timing.h"
 #include "synth_engine.h"
+#include "tempo.h"
 #include "util/CpuLoadMeter.h"
 #include "wavetables.h"
 #include "web_link.h"
@@ -90,35 +97,61 @@ DaisyPod       hw;
 MidiUsbHandler usb_midi;
 Wavetables     tables;
 SynthEngine    engine;
+Tempo          tempo; // for Clocked LFOs: the Tempo setting, or MIDI clock
 Limiter        limiter; // eight voices can pass full scale
 CpuLoadMeter   cpu_meter;
 QspiFlash      flash(hw.seed.qspi);
 
 PresetsFor<kNumParams> presets;
 
-constexpr int kNumKnobPages = 8;
+constexpr int kNumKnobPages = 10;
 constexpr int kPresetPage   = kNumKnobPages; // after the knob pages; its knobs do nothing
 constexpr int kNumPages     = kNumKnobPages + 1;
 constexpr int kNumKnobs     = 2;
 constexpr int kFilterPage   = 3;
 constexpr int kEnvPage      = 5;
 constexpr int kCharPage     = 7; // one layer: Shift does nothing
+constexpr int kLfoPage      = 8;
+constexpr int kModPage      = 9;
 
-// Layers of the knobs: each page's, and its Shift layer; the envelope page
-// has a pair per envelope, and the Character page has no Shift layer. A
-// layer's knobs are parameters 2 x layer and 2 x layer + 1 (web_view.h).
-constexpr int kNumLayers  = kNumKnobParams / kNumKnobs + 1; // and the preset page's
-constexpr int kPresetLayer = kNumLayers - 1;
+// Layers of the knobs: each page's, and its Shift layer; the envelope and
+// LFO pages have a pair per envelope or LFO, the mod page a pair per slot,
+// and the Character page has no Shift layer. Up to the mod page, a layer's
+// knobs are parameters 2 x layer and 2 x layer + 1 (web_view.h).
+constexpr int kCharLayer   = 2 * (kCharPage + 2);
+constexpr int kLfoLayer    = kCharLayer + 1;
+constexpr int kModLayer    = kLfoLayer + 4;
+constexpr int kPresetLayer = kModLayer + 2 * mod::kSlots;
+constexpr int kNumLayers   = kPresetLayer + 1;
+static_assert(2 * kModLayer == kParamMod1Source, "the knob layers and parameters are out of step");
 
-int Layer(int page, bool shift, int envelope)
+// sub: the page's envelope, LFO or slot.
+int Layer(int page, bool shift, int sub)
 {
-    if(page == kPresetPage)
-        return kPresetLayer;
-    if(page == kEnvPage)
-        return 2 * kEnvPage + 2 * envelope + shift;
-    if(page == kCharPage)
-        return 2 * (kCharPage + 2);
-    return 2 * (page < kEnvPage ? page : page + 2) + shift;
+    switch(page)
+    {
+        case kPresetPage: return kPresetLayer;
+        case kEnvPage: return 2 * kEnvPage + 2 * sub + shift;
+        case kCharPage: return kCharLayer;
+        case kLfoPage: return kLfoLayer + 2 * sub + shift;
+        case kModPage: return kModLayer + 2 * sub + shift;
+        default: return 2 * (page < kEnvPage ? page : page + 2) + shift;
+    }
+}
+
+// Where a knob parameter lives. A mod slot's are Source and Amount, then
+// Target under Shift, whose knob 2 is a copy of Amount (see MirrorAmount).
+void KnobOf(int param, int *layer, int *knob)
+{
+    if(param < kParamMod1Source)
+    {
+        *layer = param / 2;
+        *knob  = param % 2;
+        return;
+    }
+    int slot = (param - kParamMod1Source) / 3, which = (param - kParamMod1Source) % 3;
+    *layer   = kModLayer + 2 * slot + (which == 2);
+    *knob    = which == 1;
 }
 
 // Raw knob positions (0..1) per layer, initial values chosen to sound sensible.
@@ -142,6 +175,19 @@ PagedKnobs<kNumLayers, kNumKnobs> knobs({
     {0.8f, 0.5f},   // volume, pan centred
     {0.5f, 0.8f},   // amp vel, master
     {0.0f, 0.3f},   // flavour, dac
+    {0.724f, 0.5f / 7},  // lfo 1: 5 Hz, sine
+    {10.5f / 22, 0.5f / 3}, // 1/4, Free Voice
+    {0.422f, 1.5f / 7},  // lfo 2: 0.5 Hz, triangle
+    {4.5f / 22, 1.5f / 3},  // 1/1, Free Global
+    {5.5f / 35, 0.556f}, // slot 1: LFO 1 x mod wheel, a little
+    {3.5f / 27, 0.556f}, // ... to Pitch: vibrato on the wheel
+    {0.0f, 0.5f}, {0.0f, 0.5f}, // slots 2-8: off
+    {0.0f, 0.5f}, {0.0f, 0.5f},
+    {0.0f, 0.5f}, {0.0f, 0.5f},
+    {0.0f, 0.5f}, {0.0f, 0.5f},
+    {0.0f, 0.5f}, {0.0f, 0.5f},
+    {0.0f, 0.5f}, {0.0f, 0.5f},
+    {0.0f, 0.5f}, {0.0f, 0.5f},
     {0.0f, 0.0f},   // presets: unused
 });
 
@@ -151,16 +197,23 @@ PagedKnobs<kNumLayers, kNumKnobs> knobs({
 // the main loop reads it for the LEDs and the page.
 
 // Each knob page's encoder choice: tables, voice mode, filter type, glide
-// mode, the envelope shown, pan mode, oscillator mode.
+// mode, the envelope shown, pan mode, oscillator mode, the LFO shown, the
+// mod slot shown.
 constexpr int kChoiceCounts[kNumKnobPages] = {Wavetables::kTables, Wavetables::kTables,
                                               SynthEngine::kNumVoiceModes, VoiceFilter::kNumTypes,
                                               SynthEngine::kNumGlideModes, Voice::kNumEnvs,
-                                              SynthEngine::kNumPanModes, SynthEngine::kNumOscModes};
+                                              SynthEngine::kNumPanModes, SynthEngine::kNumOscModes,
+                                              2, mod::kSlots};
 int  choices[kNumKnobPages] = {0, 0, SynthEngine::kPoly, VoiceFilter::kLp24,
-                               SynthEngine::kGlideOnset, Voice::kAmpEnv, 0, SynthEngine::kOsc8Bit};
+                               SynthEngine::kGlideOnset, Voice::kAmpEnv, 0, SynthEngine::kOsc8Bit,
+                               0, 0};
 int  dirt_type = Dirt::kStatic; // the Filter page's choice with Shift
 bool limit[2]  = {};
 bool fixed[2]  = {};
+bool mpe       = false;
+bool clock_restart = false; // MIDI Start: Clocked LFOs back to the start
+uint32_t sample_count = 0;  // the callback's clock, for the tempo
+float tempo_raw = 0.4f; // 40-240 BPM: 120
 int  page      = 0;
 bool shift_latched = false;
 bool shift_held    = false;
@@ -185,6 +238,22 @@ volatile float    amp_now            = 0.0f;
 bool Shift()
 {
     return shift_latched || shift_held;
+}
+
+constexpr float kMinBpm = 40.0f, kBpmRange = 200.0f;
+
+float KnobValue(int param)
+{
+    int layer, knob;
+    KnobOf(param, &layer, &knob);
+    return knobs.Value(layer, knob);
+}
+
+void SetKnob(int param, float value)
+{
+    int layer, knob;
+    KnobOf(param, &layer, &knob);
+    knobs.Set(layer, knob, value);
 }
 
 float PlayNoteRaw()
@@ -278,9 +347,14 @@ void SetParam(int index, int raw, uint32_t now_ms)
             PlayGate(web_play);
             break;
         case kParamDirtType: SetDirtType(raw, now_ms); break;
+        case kParamMpe: mpe = raw != 0; break;
+        case kParamTempo:
+            tempo_raw = raw / 16383.0f;
+            tempo.SetBpm(kMinBpm + tempo_raw * kBpmRange);
+            break;
         default:
             if(index < kNumKnobParams)
-                knobs.Set(index / 2, index % 2, raw / 16383.0f);
+                SetKnob(index, raw / 16383.0f);
             else if(index >= kFirstChoice && index < kFirstChoice + kNumKnobPages)
                 SetChoice(index - kFirstChoice, raw, now_ms);
             break;
@@ -305,9 +379,11 @@ int ParamRaw(int index)
         case kParamPlayNote: return (int)(PlayNoteRaw() * 16383.0f + 0.5f);
         case kParamPlay: return play_sounding >= 0;
         case kParamDirtType: return dirt_type;
+        case kParamMpe: return mpe;
+        case kParamTempo: return (int)(tempo_raw * 16383.0f + 0.5f);
         default:
             if(index < kNumKnobParams)
-                return (int)(knobs.Value(index / 2, index % 2) * 16383.0f + 0.5f);
+                return (int)(KnobValue(index) * 16383.0f + 0.5f);
             return choices[index - kFirstChoice];
     }
 }
@@ -326,6 +402,8 @@ void Collect(size_t size)
         point[kTraceCutoff] = p.cutoff * 0.001f;
         point[kTraceAmp]    = 100.0f * p.amp;
         point[kTraceDrift]  = p.drift;
+        point[kTraceLfo1]   = 100.0f * p.lfo[0];
+        point[kTraceLfo2]   = 100.0f * p.lfo[1];
         point[kTraceVoices] = (float)p.voices;
         trace_written       = trace_written + 1; // after the point is in place
         trace_samples       = 0;
@@ -388,7 +466,7 @@ void SendWeb(uint32_t now_ms)
 
 // ---------------------------------------------------------------- MIDI
 //
-// Notes, pitch bend and a few CCs on any channel, from the TRS input or USB.
+// Everything on any channel, from the TRS input or USB.
 
 void Panic(uint32_t now_ms)
 {
@@ -399,28 +477,113 @@ void Panic(uint32_t now_ms)
     panic_flash_until = now_ms + 300;
 }
 
-void HandleMidi(MidiEvent e, uint32_t now_ms)
+// The fixed CC map: the Protein maps CCs by learning, which the Pod can't
+// do comfortably. It keeps clear of the mod matrix's controllers (1, 2,
+// 11, 22-31, 64, and 74 with MPE) and 120-127.
+struct CcParam
+{
+    uint8_t cc;
+    uint8_t param;
+};
+constexpr CcParam kCcMap[] = {
+    {5, kParamGlide},          {7, kParamVolume},        {10, kParamPan},
+    {14, kParamMod1Source + 1}, {15, kParamMod1Source + 4}, {16, kParamMod1Source + 7},
+    {17, kParamMod1Source + 10}, {18, kParamMod1Source + 13}, {19, kParamMod1Source + 16},
+    {20, kParamMod1Source + 19}, {21, kParamMod1Source + 22}, // mod amounts 1-8
+    {52, kParamWave1},         {53, kParamEnvAmt1},      {54, kParamLevel1},
+    {55, kParamVel1},          {56, kParamWave2},        {57, kParamEnvAmt2},
+    {58, kParamLevel2},        {59, kParamVel2},         {60, kParamSemitone1},
+    {61, kParamDetune1},       {62, kParamSemitone2},    {63, kParamDetune2},
+    {70, kParamTrack},         {71, kParamResonance},    {74, kParamCutoff}, // not with MPE
+    {76, kParamDirt},          {77, kParamFilterEnv},    {78, kParamFilterVel},
+    {79, kParamBend},          {85, kParamAmpVel},       {86, kParamFlavour},
+    {87, kParamDac},           {102, kParamWaveAttack},  {103, kParamWaveDecay},
+    {104, kParamWaveSustain},  {105, kParamWaveRelease}, {106, kParamFilterAttack},
+    {107, kParamFilterDecay},  {108, kParamFilterSustain}, {109, kParamFilterRelease},
+    {110, kParamAmpAttack},    {111, kParamAmpDecay},    {112, kParamAmpSustain},
+    {113, kParamAmpRelease},   {114, kParamLfo1Speed},   {115, kParamLfo1Shape},
+    {116, kParamLfo2Speed},    {117, kParamLfo2Shape},
+};
+// And choices: CC 3 and 9 pick table 1 and 2 by number (0-63), CC 118 the
+// filter type and CC 119 the Dirt type, split evenly across 0-127.
+
+// 0-127 to 0..1, with 64 exactly in the middle (no amount for a centred
+// bipolar knob).
+float CcValue(int v)
+{
+    return v <= 64 ? (float)v / 128.0f : 0.5f + (float)(v - 64) / 126.0f;
+}
+
+void HandleCc(int channel, int cc, int value, uint32_t now_ms)
+{
+    float v = (float)value / 127.0f;
+    if(cc == 120 || cc == 123)
+    {
+        Panic(now_ms);
+        return;
+    }
+    engine.Control(channel, cc, v); // the matrix's controllers, and sustain
+    switch(cc)
+    {
+        case 3: SetChoice(0, value, now_ms); return;
+        case 9: SetChoice(1, value, now_ms); return;
+        case 118: SetChoice(3, value * VoiceFilter::kNumTypes / 128, now_ms); return;
+        case 119: SetDirtType(value * Dirt::kNumTypes / 128, now_ms); return;
+        case 74:
+            if(mpe)
+                return;
+            break;
+        default: break;
+    }
+    for(const CcParam &m : kCcMap)
+        if(m.cc == cc)
+            SetKnob(m.param, CcValue(value));
+}
+
+void HandleMidi(MidiEvent e, uint32_t now, uint32_t now_ms)
 {
     switch(e.type)
     {
         case NoteOn:
         {
             NoteOnEvent n = e.AsNoteOn();
-            engine.NoteOn(n.note, n.velocity);
+            engine.NoteOn(n.note, n.velocity, n.channel);
             break;
         }
-        case NoteOff: engine.NoteOff(e.AsNoteOff().note); break;
-        case PitchBend: engine.PitchBend(e.AsPitchBend().value / 8192.0f); break;
+        case NoteOff:
+        {
+            NoteOffEvent n = e.AsNoteOff();
+            engine.NoteOff(n.note, n.velocity, n.channel);
+            break;
+        }
+        case PitchBend: engine.PitchBend(e.channel, e.AsPitchBend().value / 8192.0f); break;
+        case ChannelPressure: engine.Pressure(e.channel, e.AsChannelPressure().pressure / 127.0f); break;
+        case PolyphonicKeyPressure:
+        {
+            PolyphonicKeyPressureEvent p = e.AsPolyphonicKeyPressure();
+            engine.PolyPressure(p.note, p.pressure / 127.0f);
+            break;
+        }
         case ControlChange:
         {
             ControlChangeEvent cc = e.AsControlChange();
-            if(cc.control_number == 64)
-                engine.Sustain(cc.value >= 64);
-            else if(cc.control_number == 120 || cc.control_number == 123)
-                Panic(now_ms);
+            HandleCc(cc.channel, cc.control_number, cc.value, now_ms);
             break;
         }
         case ProgramChange: presets.Select(e.AsProgramChange().program); break;
+        case SystemRealTime:
+            switch(e.srt_type)
+            {
+                case TimingClock: tempo.MidiTick(now); break;
+                case Start:
+                    tempo.MidiStart();
+                    clock_restart = true;
+                    break;
+                case Continue: tempo.MidiContinue(); break;
+                case Stop: tempo.MidiStop(); break;
+                default: break;
+            }
+            break;
         case SystemCommon:
             // The web page's settings and presets.
             if(e.sc_type == SystemExclusive)
@@ -439,7 +602,7 @@ void HandleMidi(MidiEvent e, uint32_t now_ms)
 // The patch, from the knobs and choices.
 SynthEngine::Patch MakePatch()
 {
-    auto k = [](int param) { return knobs.Value(param / 2, param % 2); };
+    auto k = [](int param) { return KnobValue(param); };
 
     SynthEngine::Patch p;
     const int wave[2] = {kParamWave1, kParamWave2};
@@ -483,7 +646,41 @@ SynthEngine::Patch MakePatch()
     p.amp_velocity = k(kParamAmpVel);
     p.pan          = k(kParamPan);
     p.pan_mode     = choices[6];
+    for(int i = 0; i < 2; i++)
+    {
+        int first    = kParamLfo1Speed + 4 * i;
+        p.lfo[i].speed = k(first);
+        p.lfo[i].shape = k(first + 1);
+        p.lfo[i].ratio = k(first + 2);
+        p.lfo[i].mode  = k(first + 3);
+    }
+    for(int i = 0; i < mod::kSlots; i++)
+    {
+        int first        = kParamMod1Source + 3 * i;
+        p.mod[i].source = k(first);
+        p.mod[i].amount = k(first + 1);
+        p.mod[i].target = k(first + 2);
+    }
+    p.mpe = mpe;
     return p;
+}
+
+// On a mod slot's Shift layer, knob 2 is Amount again: the layer keeps a
+// copy, kept in step both ways (the knob moving it, or the page, MIDI or a
+// preset setting the real one).
+float mirrored_amount = -1.0f;
+
+void MirrorAmount(int layer, bool entered)
+{
+    if(page != kModPage || !Shift())
+        return;
+    int   main  = layer - 1;
+    float shown = knobs.Value(layer, 1), real = knobs.Value(main, 1);
+    if(entered || (shown == mirrored_amount && real != shown))
+        knobs.Set(layer, 1, real); // lets go of the knob until it moves
+    else if(shown != mirrored_amount)
+        knobs.Set(main, 1, shown);
+    mirrored_amount = knobs.Value(layer, 1);
 }
 
 void AudioCallback(AudioHandle::InputBuffer  in,
@@ -493,13 +690,23 @@ void AudioCallback(AudioHandle::InputBuffer  in,
     cpu_meter.OnBlockStart();
     hw.ProcessAllControls();
     uint32_t now_ms = System::GetNow();
+    uint32_t now    = sample_count;
 
     hw.midi.Listen();
     usb_midi.Listen();
     while(hw.midi.HasEvents())
-        HandleMidi(hw.midi.PopEvent(), now_ms);
+        HandleMidi(hw.midi.PopEvent(), now, now_ms);
     while(usb_midi.HasEvents())
-        HandleMidi(usb_midi.PopEvent(), now_ms);
+        HandleMidi(usb_midi.PopEvent(), now, now_ms);
+
+    // The tempo moves Clocked LFOs on: beats since the last block.
+    float beats_before = tempo.BeatPos();
+    tempo.Update(now);
+    float beats = tempo.BeatPos() - beats_before;
+    if(beats < 0.0f)
+        beats += (float)Tempo::kWrapBeats;
+    engine.Clock(clock_restart ? 0.0f : beats, clock_restart);
+    clock_restart = false;
 
     const DaisyPod::Knob knob_ids[kNumKnobs] = {DaisyPod::KNOB_1, DaisyPod::KNOB_2};
     float                knob[kNumKnobs];
@@ -558,11 +765,15 @@ void AudioCallback(AudioHandle::InputBuffer  in,
         SetChoice(page, choices[page] + inc, now_ms);
     presets.Apply();
 
-    // The knobs work on this page's layer, with Shift's and the envelope's.
-    int layer = Layer(page, Shift(), choices[kEnvPage]);
-    if(layer != knobs.Page())
+    // The knobs work on this page's layer, with Shift's and the envelope's,
+    // LFO's or slot's.
+    int  sub     = page == kEnvPage ? choices[kEnvPage] : (page == kLfoPage ? choices[kLfoPage] : choices[kModPage]);
+    int  layer   = Layer(page, Shift(), sub);
+    bool entered = layer != knobs.Page();
+    if(entered)
         knobs.SetPage(layer, knob);
     knobs.Update(knob);
+    MirrorAmount(layer, entered);
 
     engine.SetPatch(MakePatch());
 
@@ -595,6 +806,7 @@ void AudioCallback(AudioHandle::InputBuffer  in,
     (void)in;
 
     Collect(size);
+    sample_count += (uint32_t)size;
     cpu_meter.OnBlockEnd();
 }
 
@@ -602,11 +814,16 @@ int main(void)
 {
     hw.Init(true); // 480 MHz
     TuneSdramTimings();
-    hw.SetAudioBlockSize(4);
+    // Each voice's control maths (matrix, LFOs, envelopes, pitch, filter
+    // coefficients) runs once per block, and at 8 voices it outweighs the
+    // samples at block size 4. 16 runs it at 3 kHz, with 0.33 ms timing,
+    // and the amplifier still ramps smoothly across each block.
+    hw.SetAudioBlockSize(16);
     hw.SetAudioSampleRate(SaiHandle::Config::SampleRate::SAI_48KHZ);
 
     tables.Init(wave_memory);
     engine.Init(&tables, hw.AudioSampleRate(), hw.AudioBlockSize());
+    tempo.Init(hw.AudioSampleRate());
     limiter.Init(hw.AudioSampleRate());
     cpu_meter.Init(hw.AudioSampleRate(), hw.AudioBlockSize());
     web.Init(kParams, kNumParams);

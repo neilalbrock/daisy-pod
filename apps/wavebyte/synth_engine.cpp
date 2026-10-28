@@ -23,14 +23,23 @@ void SynthEngine::Init(const Wavetables *tables, float sample_rate, size_t block
     Voice::SetFullScale(kVoiceLevel);
     for(int i = 0; i < kVoices; i++)
         voices_[i].Init(tables, sample_rate, block_size, 0x1234567u + 7919u * (uint32_t)i);
+    global_lfo_[0].Seed(0x51ed270bu);
+    global_lfo_[1].Seed(0x2545f491u);
+    frame_.controllers = &controllers_;
     SetPatch(patch_);
 }
 
 void SynthEngine::SetPatch(const Patch &p)
 {
-    // A change of voice mode starts afresh.
-    if(p.voice_mode != patch_.voice_mode)
+    // A change of voice mode starts afresh, as does MPE on or off.
+    if(p.voice_mode != patch_.voice_mode || p.mpe != controllers_.mpe)
         AllNotesOff();
+    if(p.mpe != controllers_.mpe)
+    {
+        controllers_.mpe = p.mpe;
+        for(int c = 0; c < 16; c++)
+            controllers_.channel_bend[c] = controllers_.channel_y[c] = controllers_.channel_pressure[c] = 0.0f;
+    }
     patch_ = p;
 
     Voice::Frame &f = frame_;
@@ -48,7 +57,8 @@ void SynthEngine::SetPatch(const Patch &p)
         fo.fixed    = po.fixed;
     }
 
-    f.bend        = bend_ * (float)BendRange(p.bend_range);
+    f.bend            = controllers_.bend * (float)BendRange(p.bend_range);
+    f.note_bend_range = BendRange(p.bend_range) > 0 ? 48.0f : 0.0f;
     // The glide and envelope coefficients cost a few powf and expf each:
     // only when their settings move.
     if(p.glide != glide_set_)
@@ -65,6 +75,7 @@ void SynthEngine::SetPatch(const Patch &p)
     f.filter_vel = Bipolar(p.filter_vel) * 8.0f;
     f.track      = Bipolar(p.track) * 2.0f;
     f.dirt       = p.dirt * p.dirt;
+    f.dirt_knob  = p.dirt;
     f.dirt_type  = (Dirt::Type)p.dirt_type;
 
     // Flavour's pitch drift on osc 1 is a share of Bend Range, as on the
@@ -85,10 +96,41 @@ void SynthEngine::SetPatch(const Patch &p)
         float       *was = env_set_[e];
         if(s[0] != was[0] || s[1] != was[1] || s[2] != was[2] || s[3] != was[3])
         {
-            f.env[e].Set(s[0], s[1], s[2], s[3], block_rate_);
+            float *t = f.env_times[e];
+            t[0]     = Adsr::Coefs::AttackSeconds(s[0]);
+            t[1]     = Adsr::Coefs::FallSeconds(s[1]);
+            t[2]     = s[2];
+            t[3]     = Adsr::Coefs::FallSeconds(s[3]);
+            f.env[e].SetTimes(t[0], t[1], t[2], t[3], block_rate_);
             for(int i = 0; i < 4; i++)
                 was[i] = s[i];
         }
+    }
+
+    for(int i = 0; i < 2; i++)
+    {
+        const Patch::LfoSettings &l = p.lfo[i];
+        f.lfo_shape[i] = (Lfo::Shape)Pick(l.shape, Lfo::kNumShapes);
+        f.lfo_mode[i]  = (Lfo::Mode)Pick(l.mode, Lfo::kNumModes);
+        f.lfo_rate[i]  = 0.02f * dsp::FastExp2(LfoSpeedOctaves() * l.speed) / block_rate_;
+        lfo_beats_[i]  = Lfo::kRatioBeats[Pick(l.ratio, Lfo::kNumRatios)];
+    }
+
+    // The slots in use, in units.
+    f.num_slots = 0;
+    for(int e = 0; e < Voice::kNumEnvs; e++)
+        f.env_modulated[e] = false;
+    for(int i = 0; i < mod::kSlots; i++)
+    {
+        const Patch::ModSlot &m = p.mod[i];
+        auto  source = (mod::Source)Pick(m.source, mod::kNumSources);
+        auto  target = (mod::Target)Pick(m.target, mod::kNumTargets);
+        float amount = ModAmount(m.amount);
+        if(source == mod::kOff || target == mod::kNone || amount == 0.0f)
+            continue;
+        f.slots[f.num_slots++] = {source, target, amount * mod::kRange[target]};
+        if(target >= mod::kEnvStages)
+            f.env_modulated[(target - mod::kEnvStages) / 4] = true;
     }
 
     f.volume       = p.volume * p.volume * kVoiceLevel;
@@ -120,17 +162,17 @@ int SynthEngine::Allocate()
     return best;
 }
 
-void SynthEngine::Play(Voice &v, int note, float velocity, bool retrigger, bool held_before)
+void SynthEngine::Play(Voice &v, int note, float velocity, bool retrigger, bool held_before, int channel)
 {
     bool  glide = frame_.glide < 1.0f && (patch_.glide_mode == kGlideOnset || held_before);
     float from  = glide ? last_note_ : (float)note;
-    v.Start(note, velocity, from, retrigger);
+    v.Start(note, velocity, from, retrigger, channel);
     v.SetAge(++started_);
     last_voice_ = (int)(&v - voices_);
     last_note_  = (float)note;
 }
 
-void SynthEngine::MonoTo(int note, float velocity, bool retrigger, bool held_before)
+void SynthEngine::MonoTo(int note, float velocity, bool retrigger, bool held_before, int channel)
 {
     Voice &v = voices_[0];
     if(!v.Active())
@@ -138,19 +180,20 @@ void SynthEngine::MonoTo(int note, float velocity, bool retrigger, bool held_bef
     // Glide on from wherever the pitch has got to.
     if(v.Active())
         last_note_ = v.Pitch();
-    Play(v, note, velocity, retrigger, held_before);
+    Play(v, note, velocity, retrigger, held_before, channel);
 }
 
-void SynthEngine::NoteOn(int note, int velocity)
+void SynthEngine::NoteOn(int note, int velocity, int channel)
 {
     if(velocity == 0)
     {
-        NoteOff(note);
+        NoteOff(note, 64, channel);
         return;
     }
     float vel         = (float)velocity / 127.0f;
     bool  held_before = num_held_ > 0;
     velocity_         = vel;
+    channel_          = channel;
     sustained_[note & 127] = false;
 
     // Onto the stack of keys down (a repeat moves to the top).
@@ -172,21 +215,24 @@ void SynthEngine::NoteOn(int note, int velocity)
 
     if(patch_.voice_mode == kPoly)
     {
-        // The same note again takes its own voice back.
+        // The same note again takes its own voice back (with MPE, only
+        // on the same channel).
         int index = -1;
         for(int i = 0; i < kVoices; i++)
-            if(voices_[i].Active() && voices_[i].Note() == note)
+            if(voices_[i].Active() && voices_[i].Note() == note
+               && (!controllers_.mpe || voices_[i].Channel() == channel))
                 index = i;
         if(index < 0)
             index = Allocate();
-        Play(voices_[index], note, vel, true, held_before);
+        Play(voices_[index], note, vel, true, held_before, channel);
     }
     else
-        MonoTo(note, vel, patch_.voice_mode == kMono || !held_before, held_before);
+        MonoTo(note, vel, patch_.voice_mode == kMono || !held_before, held_before, channel);
 }
 
-void SynthEngine::NoteOff(int note)
+void SynthEngine::NoteOff(int note, int velocity, int channel)
 {
+    float release_vel = (float)velocity / 127.0f;
     for(int i = 0; i < num_held_; i++)
         if(held_[i] == note)
         {
@@ -204,8 +250,8 @@ void SynthEngine::NoteOff(int note)
             return;
         }
         for(Voice &v : voices_)
-            if(v.Note() == note && !v.Released())
-                v.Release();
+            if(v.Note() == note && !v.Released() && (!controllers_.mpe || v.Channel() == channel))
+                v.Release(release_vel);
         return;
     }
 
@@ -219,12 +265,63 @@ void SynthEngine::NoteOff(int note)
         for(int i = 1; i < num_held_; i++)
             if(held_[i] > highest)
                 highest = held_[i];
-        MonoTo(highest, velocity_, patch_.voice_mode == kMono, true);
+        MonoTo(highest, velocity_, patch_.voice_mode == kMono, true, channel_);
     }
     else if(sustain_)
         sustained_[note & 127] = true;
     else
-        voices_[0].Release();
+        voices_[0].Release(release_vel);
+}
+
+void SynthEngine::PitchBend(int channel, float amount)
+{
+    if(controllers_.mpe && channel != 0)
+        controllers_.channel_bend[channel & 15] = amount;
+    else
+        controllers_.bend = amount;
+}
+
+void SynthEngine::Pressure(int channel, float amount)
+{
+    if(controllers_.mpe && channel != 0)
+        controllers_.channel_pressure[channel & 15] = amount;
+    else
+        controllers_.pressure = amount;
+}
+
+void SynthEngine::PolyPressure(int note, float amount)
+{
+    controllers_.poly_pressure[note & 127] = amount;
+}
+
+void SynthEngine::Control(int channel, int cc, float value)
+{
+    mod::Controllers &c = controllers_;
+    switch(cc)
+    {
+        case 1: c.wheel = value; break;
+        case 2: c.breath = value; break;
+        case 11: c.expression = value; break;
+        case 64:
+            c.pedal = value;
+            Sustain(value >= 0.5f);
+            break;
+        case 74:
+            if(c.mpe && channel != 0)
+                c.channel_y[channel & 15] = value;
+            break;
+        default:
+            if(cc >= 22 && cc <= 31)
+                c.cc[cc - 22] = value;
+            break;
+    }
+}
+
+void SynthEngine::Clock(float beats, bool restart)
+{
+    clock_beats_ = beats;
+    if(restart)
+        clock_restart_ = true;
 }
 
 void SynthEngine::Sustain(bool down)
@@ -256,6 +353,23 @@ void SynthEngine::AllNotesOff()
 
 void SynthEngine::Process(float *l, float *r, size_t size)
 {
+    // The global LFOs: Free Global's speed follows the matrix of the voice
+    // last played; Clocked follows the tempo.
+    for(int i = 0; i < 2; i++)
+    {
+        Lfo::Mode mode = frame_.lfo_mode[i];
+        if(mode == Lfo::kFreeVoice)
+            continue;
+        if(mode == Lfo::kClocked && clock_restart_)
+            global_lfo_[i].Restart();
+        float rate = mode == Lfo::kClocked
+                         ? clock_beats_ / lfo_beats_[i]
+                         : frame_.lfo_rate[i]
+                               * dsp::FastExp2(voices_[last_voice_].Mod((mod::Target)(mod::kLfo1Speed + i)));
+        controllers_.lfo[i] = global_lfo_[i].Advance(rate, frame_.lfo_shape[i]);
+    }
+    clock_restart_ = false;
+
     for(size_t i = 0; i < size; i++)
         l[i] = r[i] = 0.0f;
     for(Voice &v : voices_)
@@ -273,6 +387,8 @@ SynthEngine::Probe SynthEngine::GetProbe() const
     p.amp     = v.AmpEnv();
     p.note    = v.Note();
     p.drift   = v.DriftCents();
+    p.lfo[0]  = v.LfoValue(0);
+    p.lfo[1]  = v.LfoValue(1);
     p.voices  = 0;
     for(const Voice &u : voices_)
         if(u.Active())

@@ -5,8 +5,8 @@ has two wavetable oscillators reading 8-bit waves with no interpolation,
 as the Microwave's chip did (or smoothly, in Clean mode), and Dirt's
 noises. A filter follows, after the Protein's model of the CEM chip, or a
 Drive in its place, then an amplifier that models the voice's DAC, and
-three envelopes. Flavour adds small, steady variations. Play it over MIDI,
-or with button 1.
+three envelopes. Two LFOs and an 8-slot mod matrix move it, Flavour adds
+small, steady variations. Play it over MIDI (MPE too), or with button 1.
 
 ```sh
 make APP=wavebyte program-dfu
@@ -15,10 +15,11 @@ make APP=wavebyte program-dfu
 Every control is also on the [web page](#the-web-page). Eight
 [presets](#presets) are kept in flash.
 
-This is the second of several stages (see [Roadmap](#roadmap)). It has one
+This is the third of several stages (see [Roadmap](#roadmap)). It has one
 layer, the oscillators, Dirt, filter, envelopes, voice modes, glide,
-Flavour and the DAC model. Next come the LFOs, mod matrix and MPE, the
-effects, the arpeggiator and sequencer, and the Protein's four layers.
+Flavour, the DAC model, the LFOs, the mod matrix, aftertouch and MPE.
+Next come the effects, the arpeggiator and sequencer, and the Protein's
+four layers.
 
 ## Signal flow
 
@@ -29,6 +30,7 @@ per voice (8):
                                                                           |
   wave env -> both waves   filter env -> cutoff   amp env -> level        |
   Flavour -> waves, osc 1 pitch, cutoff, level                            |
+  mod matrix (8 slots): envelopes, LFOs, MIDI -> 26 targets               |
                                                                           |
 all voices -------------------------------------------------------------- + -> Master -> limiter -> out
 ```
@@ -58,7 +60,7 @@ smooth and the top end is softer. It costs a little more CPU.
 
 ## Controls
 
-The two knobs are shared across eight pages. Press the encoder to change
+The two knobs are shared across ten pages. Press the encoder to change
 page (LED 2 shows which). As on the Protein's panel, each knob has a second
 job under **Shift** (button 2): hold Shift while turning, or tap it to keep
 it on (LED 1 glows blue) and tap again to let go. After a change of page or
@@ -72,16 +74,18 @@ the Filter page, turning it with Shift sets the Dirt type instead.
 | 2 Osc 2 (orange) | Wave / Level | Env Amnt / Vel | Table |
 | 3 Pitch (lime) | Semitone 2 / Semitone 1 | Detune 2 / Detune 1 | Voice: Poly, Mono, Legato |
 | 4 Filter (green) | Cutoff / Keytrack | Resonance / Dirt | Type: LP 24, LP 12, HP, Drive, Off. With Shift, Dirt type: Static, Crackle, Geiger, Click, Burst 1-3, Ring Mod |
-| 5 Env & Glide (teal) | Filter Env / Filter Vel | Glide / Bend Range | Glide: Onset, Legato |
-| 6 Envelopes (blue) | Attack / Sustain | Decay / Release | Envelope: Wave, Filter, Amp |
-| 7 Amp (violet) | Volume / Vel Amnt | Pan / Master | Pan: Fix, Rand 1-5 |
-| 8 Character (pink) | Flavour (Shift: the same) | DAC (Shift: the same) | Osc: 8-bit, Clean |
+| 5 Env & Glide (sea green) | Filter Env / Filter Vel | Glide / Bend Range | Glide: Onset, Legato |
+| 6 Envelopes (cyan) | Attack / Sustain | Decay / Release | Envelope: Wave, Filter, Amp |
+| 7 Amp (azure) | Volume / Vel Amnt | Pan / Master | Pan: Fix, Rand 1-5 |
+| 8 Character (blue) | Flavour (Shift: the same) | DAC (Shift: the same) | Osc: 8-bit, Clean |
+| 9 LFOs (violet) | Speed / Ratio | Shape / Mode | LFO: 1, 2 |
+| 10 Mod Matrix (pink) | Source / Target | Amount (Shift: the same) | Slot: 1-8 |
 
 | Control | Function |
 |---|---|
 | Encoder press | Next page |
 | Encoder long press (0.6 s) | All notes off (LED 1 flashes red). On the preset page, it saves instead |
-| Page 9 (LED 2: the slot) | Presets: the encoder turn selects a slot (see [Presets](#presets)) |
+| Page 11 (LED 2: the slot) | Presets: the encoder turn selects a slot (see [Presets](#presets)) |
 | Button 1 | Play: sounds the play note while held, as the Protein's Play button does. Turn the encoder while holding it to change the note, by octaves with Shift |
 | Button 2 | Shift |
 
@@ -150,10 +154,52 @@ LED 1 shows the last voice's amp envelope, and glows blue with Shift on.
   converter also has its own small gain error and a little crossover
   distortion around zero. At 0 the converter is ideal.
 - **Osc:** 8-bit, or Clean (see [Wavetables](#wavetables)).
+- **LFOs:** two, chosen with the LFO page's encoder turn.
+  - **Speed:** 0.02 to 41 Hz, when Free.
+  - **Ratio:** the cycle as a share of the tempo, when Clocked: 4/1 (four
+    bars) to 1/64, with dotted (.) and triplet (T) values between.
+  - **Shape:** Sine, Triangle, Pulse, Saw (falling), Saw Up, Random (glides
+    to a new random value each cycle) and S & H (jumps to one).
+  - **Mode:** Free Voice gives every note its own LFO, starting at the top
+    of its cycle as the note starts. Free Global runs one LFO for every
+    voice. Clocked runs one too, in time with the tempo, as on the
+    Protein, where Clocked always syncs the voices. The tempo is MIDI
+    clock while it's running (MIDI Start puts Clocked LFOs back to the
+    start of their cycle), else the web page's Tempo.
+- **Mod Matrix:** eight slots, chosen with the Mod Matrix page's encoder
+  turn, each a Source, a Target and an Amount, as on the Protein. Source
+  and Target step through their lists as the knob turns; Amount is
+  bipolar, centred at no modulation, and squared (keeping its sign) so
+  small amounts, such as vibrato, are easy to set. Knob 2 is Amount with
+  Shift too, so it's always under your hand. Sources:
+  - Wave Env, Filter Env, Amp Env
+  - LFO 1, LFO 2, and each times the mod wheel (MW) or aftertouch (AT: the
+    larger of channel and poly pressure)
+  - Mod Wheel (CC 1), Pitch Bend, Note PB (MPE per-note bend), Ch Press,
+    Poly AT (with MPE, the note's channel pressure), MPE Y (CC 74, MPE
+    only), Pedal (CC 64), Expression (CC 11), Breath (CC 2), CC 22-31
+  - Keytrack (around C4), Velocity, Rel Velo (release velocity), Random
+    and Random Bipol (drawn per note), Constant
+
+  Targets, with what full Amount does:
+  - Wave 1, Wave 2: ±64 waves
+  - Pitch (both oscillators), O1 Pitch, O2 Pitch: ±24 semitones
+  - O1 Vol, O2 Vol, Dirt, Resonance: the whole range
+  - Cutoff: ±10 octaves. Volume: silent to double. Pan: side to side
+  - LFO 1 Speed, LFO 2 Speed: ±5 octaves (not Clocked). A Free Global
+    LFO follows the matrix of the voice last played
+  - The three envelopes' Att, Dec and Rel rates: ±6 octaves, positive
+    faster; and Sus: the whole range. Each voice works its own out, so
+    Velocity to Amp Env Att works per note
+
+  Envelope sources are a block (0.33 ms) behind, so the envelopes can
+  modulate their own rates.
 
 Starting values: Reso Saw on both oscillators, osc 2 a few cents up,
 LP 24 at 7 kHz with a little resonance and filter envelope, Poly, no glide,
-no Flavour, DAC at 0.3, 8-bit.
+no Flavour, DAC at 0.3, 8-bit. LFO 1 is a 5 Hz sine (Free Voice), LFO 2 a
+0.5 Hz triangle (Free Global), and slot 1 is LFO 1 * MW to Pitch at +1.3%
+(±0.3 semitones): vibrato on the mod wheel.
 
 ## MIDI
 
@@ -161,18 +207,47 @@ Wavebyte listens on every channel, on the Pod's TRS MIDI input and over USB:
 
 | Message | |
 |---|---|
-| Notes | Note on and off, with velocity |
+| Notes | Note on and off, with velocity and release velocity |
 | Pitch bend | Over Bend Range |
-| CC 64 | Sustain pedal: holds notes released while it's down |
+| Channel and poly pressure | Ch Press and Poly AT in the mod matrix |
+| CC 1, 2, 11, 22-31 | Mod Wheel, Breath, Expression and CC 22-31 in the mod matrix |
+| CC 64 | Sustain pedal: holds notes released while it's down. Also Pedal in the matrix |
 | CC 120, 123 | All notes off |
 | Program change 1-8 (sent as 0-7) | Preset slot 1-8 |
+| Clock, Start, Continue, Stop | The tempo for Clocked LFOs |
+
+**MPE:** switch it on with MPE on the web page (it's kept with the
+settings, not a preset). Channel 1 is the master channel: its pitch bend,
+pressure and CCs act on every note. Every other channel carries one note,
+and its pitch bend bends that note over ±48 semitones (none with Bend
+Range at 0, as on the Protein), its CC 74 is MPE Y and its pressure is
+Poly AT, for the mod matrix. A note is let go on the channel it came on.
+
+**CC map:** fixed, since the Pod can't learn CCs comfortably as the
+Protein does. Values are 0-127, with 64 exactly at the centre of bipolar
+controls.
+
+| CC | Parameter | CC | Parameter |
+|---|---|---|---|
+| 3, 9 | Table 1, 2 (0-63) | 76 | Dirt |
+| 5 | Glide | 77, 78 | Filter Env, Filter Vel |
+| 7 | Volume | 79 | Bend Range |
+| 10 | Pan | 85 | Amp Vel |
+| 14-21 | Mod slot 1-8 Amount | 86, 87 | Flavour, DAC |
+| 52-55 | Osc 1 Wave, Env Amnt, Level, Vel | 102-105 | Wave Env A, D, S, R |
+| 56-59 | Osc 2 Wave, Env Amnt, Level, Vel | 106-109 | Filter Env A, D, S, R |
+| 60, 61 | Semitone 1, Detune 1 | 110-113 | Amp Env A, D, S, R |
+| 62, 63 | Semitone 2, Detune 2 | 114, 115 | LFO 1 Speed, Shape |
+| 70 | Keytrack | 116, 117 | LFO 2 Speed, Shape |
+| 71 | Resonance | 118 | Filter type (split evenly) |
+| 74 | Cutoff (not with MPE) | 119 | Dirt type (split evenly) |
 
 ## Presets
 
 Eight preset slots, kept in the Seed's flash, so they survive power-off and
 reflashing. Every app keeps its own.
 
-- **On the Pod:** page 9 is the preset page. Turning the encoder there
+- **On the Pod:** page 11 is the preset page. Turning the encoder there
   selects a slot and loads its preset; an empty slot is only selected,
   keeping the sound, ready to save into. A long press on the encoder saves
   the current settings to the slot. The knobs do nothing on this page.
@@ -183,9 +258,10 @@ reflashing. Every app keeps its own.
 - **On the web page:** a button per slot, and Save. Selecting the slot
   already selected reloads it, dropping any changes.
 
-A preset holds the sound: every knob but Master, the tables and the other
-choices (Dirt type and Osc mode among them), Limit Waves and Fixed. Master and the play note are saved on their
-own, a few seconds after they last change. At power-up they come back, then
+A preset holds the sound: every knob but Master (the LFOs and mod matrix
+among them), the tables and the other choices (Dirt type and Osc mode
+among them), Limit Waves and Fixed. Master, the play note, MPE and Tempo
+are saved on their own, a few seconds after they last change. At power-up they come back, then
 the preset last selected.
 
 **Factory reset:** hold both buttons while powering up the Pod (through
@@ -199,8 +275,9 @@ back to its defaults.
 Run `make web` and open http://localhost:8000 in Chrome or Edge with the Pod
 connected by USB. The page shows the output level, CPU, and traces of the
 last voice played: both wave positions, its cutoff, its amp envelope,
-Flavour's pitch drift on osc 1, and how many voices are sounding. Every control is there too, with Limit Waves,
-Fixed, the play note and a Play switch, which the Pod doesn't have. See
+Flavour's pitch drift on osc 1, both LFOs as it sees them, and how many
+voices are sounding. Every control is there too, with Limit Waves, Fixed,
+the play note, a Play switch, MPE and Tempo, which the Pod doesn't have. See
 [web/README.md](../../web/README.md).
 
 ## Roadmap
@@ -217,7 +294,7 @@ before the next.
    scales with Bend Range, as on the Protein, so a range of 0 means none);
    a model of the per-voice DACs; and a Clean mode for the oscillators
    beside the 8-bit one.
-3. **Modulation:** two LFOs (seven shapes, Speed or a tempo Ratio from 4
+3. **Done:** Modulation: two LFOs (seven shapes, Speed or a tempo Ratio from 4
    bars to 1/64, Free or Clocked, Global or per Voice); the 8-slot matrix
    with the Protein's sources and targets; aftertouch; MPE (per-note bend
    over ±48 semitones, CC 74 as MPE Y, pressure as poly aftertouch); and a

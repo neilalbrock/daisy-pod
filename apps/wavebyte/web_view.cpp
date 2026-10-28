@@ -20,8 +20,10 @@ const char *const kPanModes[]    = {"Fix", "Rand 1", "Rand 2", "Rand 3", "Rand 4
 const char *const kOscModes[]    = {"8-bit", "Clean"};
 const char *const kDirtTypes[]   = {"Static", "Crackle", "Geiger", "Click",
                                     "Burst 1", "Burst 2", "Burst 3", "Ring Mod"};
+const char *const kLfoNames[]    = {"LFO 1", "LFO 2"};
+const char *const kSlotNames[]   = {"1", "2", "3", "4", "5", "6", "7", "8"};
 const char *const kGroupNames[]  = {"Osc 1", "Osc 2", "Pitch", "Filter", "Env & Glide",
-                                    "Envelopes", "Amp", "Character", "Play"};
+                                    "Envelopes", "Amp", "Character", "LFOs", "Mod Matrix", "Play"};
 const char *const kMeterNames[]  = {"Out"};
 
 const weblink::Trace kTraces[kNumTraces] = {
@@ -30,6 +32,8 @@ const weblink::Trace kTraces[kNumTraces] = {
     {"Cutoff", "kHz", 0, 20},
     {"Amp", "%", 0, 100},
     {"Drift", "ct", -100, 100},
+    {"LFO 1", "%", -100, 100},
+    {"LFO 2", "%", -100, 100},
     {"Voices", "voices", 0, 8},
 };
 
@@ -82,6 +86,38 @@ constexpr weblink::Param kParams[kNumParams] = {
     {"Master", kKnob, 6, nullptr, 0, 0, Store::kGlobal},
     {"Flavour", kKnob, 7, nullptr, 0, 0, kPreset},
     {"DAC", kKnob, 7, nullptr, 0, 0, kPreset},
+    {"LFO 1 Speed", kKnob, 8, nullptr, 0, 0, kPreset},
+    {"LFO 1 Shape", kKnob, 8, nullptr, 0, 0, kPreset},
+    {"LFO 1 Ratio", kKnob, 8, nullptr, 0, 0, kPreset},
+    {"LFO 1 Mode", kKnob, 8, nullptr, 0, 0, kPreset},
+    {"LFO 2 Speed", kKnob, 8, nullptr, 0, 0, kPreset},
+    {"LFO 2 Shape", kKnob, 8, nullptr, 0, 0, kPreset},
+    {"LFO 2 Ratio", kKnob, 8, nullptr, 0, 0, kPreset},
+    {"LFO 2 Mode", kKnob, 8, nullptr, 0, 0, kPreset},
+    {"Mod 1 Source", kKnob, 9, nullptr, 0, 0, kPreset},
+    {"Mod 1 Amount", kKnob, 9, nullptr, 0, 0, kPreset},
+    {"Mod 1 Target", kKnob, 9, nullptr, 0, 0, kPreset},
+    {"Mod 2 Source", kKnob, 9, nullptr, 0, 0, kPreset},
+    {"Mod 2 Amount", kKnob, 9, nullptr, 0, 0, kPreset},
+    {"Mod 2 Target", kKnob, 9, nullptr, 0, 0, kPreset},
+    {"Mod 3 Source", kKnob, 9, nullptr, 0, 0, kPreset},
+    {"Mod 3 Amount", kKnob, 9, nullptr, 0, 0, kPreset},
+    {"Mod 3 Target", kKnob, 9, nullptr, 0, 0, kPreset},
+    {"Mod 4 Source", kKnob, 9, nullptr, 0, 0, kPreset},
+    {"Mod 4 Amount", kKnob, 9, nullptr, 0, 0, kPreset},
+    {"Mod 4 Target", kKnob, 9, nullptr, 0, 0, kPreset},
+    {"Mod 5 Source", kKnob, 9, nullptr, 0, 0, kPreset},
+    {"Mod 5 Amount", kKnob, 9, nullptr, 0, 0, kPreset},
+    {"Mod 5 Target", kKnob, 9, nullptr, 0, 0, kPreset},
+    {"Mod 6 Source", kKnob, 9, nullptr, 0, 0, kPreset},
+    {"Mod 6 Amount", kKnob, 9, nullptr, 0, 0, kPreset},
+    {"Mod 6 Target", kKnob, 9, nullptr, 0, 0, kPreset},
+    {"Mod 7 Source", kKnob, 9, nullptr, 0, 0, kPreset},
+    {"Mod 7 Amount", kKnob, 9, nullptr, 0, 0, kPreset},
+    {"Mod 7 Target", kKnob, 9, nullptr, 0, 0, kPreset},
+    {"Mod 8 Source", kKnob, 9, nullptr, 0, 0, kPreset},
+    {"Mod 8 Amount", kKnob, 9, nullptr, 0, 0, kPreset},
+    {"Mod 8 Target", kKnob, 9, nullptr, 0, 0, kPreset},
     {"Table 1", Kind::kChoice, 0, Wavetables::kNames, Wavetables::kTables, 4, kPreset},
     {"Table 2", Kind::kChoice, 1, Wavetables::kNames, Wavetables::kTables, 4, kPreset},
     {"Voice", Kind::kChoice, 2, kVoiceModes, Count(kVoiceModes), 3, kPreset},
@@ -90,13 +126,17 @@ constexpr weblink::Param kParams[kNumParams] = {
     {"Envelope", Kind::kChoice, 5, kEnvNames, Count(kEnvNames), 3, Store::kNone},
     {"Pan Mode", Kind::kChoice, 6, kPanModes, Count(kPanModes), 6, kPreset},
     {"Osc Mode", Kind::kChoice, 7, kOscModes, Count(kOscModes), 2, kPreset},
+    {"LFO", Kind::kChoice, 8, kLfoNames, Count(kLfoNames), 2, Store::kNone},
+    {"Mod Slot", Kind::kChoice, 9, kSlotNames, Count(kSlotNames), 8, Store::kNone},
     {"Dirt Type", Kind::kChoice, 3, kDirtTypes, Count(kDirtTypes), 4, kPreset},
     {"Limit Waves 1", Kind::kToggle, 0, nullptr, 0, 0, kPreset},
     {"Limit Waves 2", Kind::kToggle, 1, nullptr, 0, 0, kPreset},
     {"Fixed 1", Kind::kToggle, 2, nullptr, 0, 0, kPreset},
     {"Fixed 2", Kind::kToggle, 2, nullptr, 0, 0, kPreset},
-    {"Play Note", kKnob, 8, nullptr, 0, 0, Store::kGlobal},
-    {"Play", Kind::kToggle, 8, nullptr, 0, 0, Store::kNone},
+    {"Play Note", kKnob, 10, nullptr, 0, 0, Store::kGlobal},
+    {"Play", Kind::kToggle, 10, nullptr, 0, 0, Store::kNone},
+    {"MPE", Kind::kToggle, 10, nullptr, 0, 0, Store::kGlobal},
+    {"Tempo", kKnob, 10, nullptr, 0, 0, Store::kGlobal},
 };
 static_assert(UniqueKeys(kParams, kNumParams), "two parameter names share a preset key");
 

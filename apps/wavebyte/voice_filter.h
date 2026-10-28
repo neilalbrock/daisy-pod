@@ -92,9 +92,13 @@ class VoiceFilter
             {
                 float g = G(octaves);
                 g_      = g / (1.0f + g);
+                g2_     = g_ * g_;
+                g3_     = g2_ * g_;
+                g4_     = g2_ * g2_;
                 // 4 is where the loop starts to oscillate.
                 float r = dsp::Clamp(resonance, 0.0f, 1.0f);
                 k_      = r < 0.8f ? 5.0f * r : 4.0f + kLadderPast * (r - 0.8f);
+                inv_    = 1.0f / (1.0f + k_ * g4_); // the loop's solution, without a divide per sample
                 // Past 4 the clip holds the level, rising with k: scale it back.
                 comp_ = (1.0f + kLadderMakeup * fminf(k_, 4.0f)) / kLadderIn;
                 if(k_ > 4.0f)
@@ -132,11 +136,11 @@ class VoiceFilter
         {
             case kLp24:
             {
-                float G = g_, G2 = G * G, G4 = G2 * G2;
+                float G  = g_;
                 float in = (x + Hiss()) * kLadderIn;
-                float S  = (1.0f - G) * (G2 * G * s_[0] + G2 * s_[1] + G * s_[2] + s_[3]);
-                float y4 = (G4 * in + S) / (1.0f + k_ * G4);
-                float u  = dsp::SoftClip(in - k_ * y4);
+                float S  = (1.0f - G) * (g3_ * s_[0] + g2_ * s_[1] + G * s_[2] + s_[3]);
+                float y4 = (g4_ * in + S) * inv_;
+                float u  = Clip(in - k_ * y4);
                 for(float &s : s_)
                 {
                     float v = (u - s) * G;
@@ -152,7 +156,7 @@ class VoiceFilter
                 float v1 = a1_ * ic1_ + a2_ * v3;
                 float v2 = ic2_ + a2_ * ic1_ + a3_ * v3;
                 ic1_     = 2.0f * v1 - ic1_;
-                ic1_ += (dsp::SoftClip(ic1_) - ic1_) * clip_;
+                ic1_ += (Clip(ic1_) - ic1_) * clip_;
                 ic2_     = 2.0f * v2 - ic2_;
                 return type_ == kLp12 ? v2 : x - k_ * v1 - v2;
             }
@@ -182,13 +186,19 @@ class VoiceFilter
     }
 
     // A little white noise, as an analog filter has, so it rings up from
-    // silence quickly rather than from rounding error.
+    // silence quickly rather than from rounding error. An LCG is plenty.
     float Hiss()
     {
-        hiss_ ^= hiss_ << 13;
-        hiss_ ^= hiss_ >> 17;
-        hiss_ ^= hiss_ << 5;
+        hiss_ = hiss_ * 1664525u + 1013904223u;
         return (float)(int32_t)hiss_ * (kHiss / 2147483648.0f);
+    }
+
+    // The loops' saturation: a cubic, slope 1 at 0, flat at 1 from 1.5 on.
+    // No divide, unlike dsp::SoftClip, as it runs per sample in every voice.
+    static float Clip(float x)
+    {
+        x = dsp::Clamp(x, -1.5f, 1.5f);
+        return x - (4.0f / 27.0f) * x * x * x;
     }
 
     float Shape(float v) const
@@ -213,6 +223,7 @@ class VoiceFilter
 
     Type       type_  = kLp24;
     float      g_     = 0.5f, k_ = 0.0f, comp_ = 1.0f;
+    float      g2_ = 0.25f, g3_ = 0.125f, g4_ = 0.0625f, inv_ = 1.0f;
     float      s_[4]  = {};
     float      a1_ = 1.0f, a2_ = 0.0f, a3_ = 0.0f, ic1_ = 0.0f, ic2_ = 0.0f, clip_ = 1.0f;
     uint32_t   hiss_  = 0x9E3779B9u;

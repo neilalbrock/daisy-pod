@@ -3,8 +3,8 @@
 // The parameter list in the page's order, and the hello and telemetry
 // frame messages (common/web_link.h). Frames carry the output level, CPU,
 // and traces of the last voice played: both oscillators' wave positions,
-// its cutoff, amp envelope and Flavour's pitch drift, and how many voices
-// are sounding. main.cpp
+// its cutoff, amp envelope, Flavour's pitch drift and both LFOs, and how
+// many voices are sounding. main.cpp
 // reads and sets the values, collects the Telemetry in the audio callback
 // and sends the messages. libDaisy-free.
 
@@ -17,9 +17,12 @@
 
 namespace web_view
 {
-// The knob parameters come first, in pairs: the Pod's knob layers in
-// order, layer i / 2, knob i % 2 (see main.cpp). Each page has a layer, a
-// second under Shift, and the envelope page one pair per envelope.
+// The knob parameters come first, in the Pod's order of knob layers (see
+// main.cpp's KnobOf): up to the mod matrix, in pairs, layer i / 2, knob
+// i % 2. Each page has a layer, a second under Shift, the envelope and LFO
+// pages a pair per envelope or LFO, and the Character page one. The mod
+// matrix has three per slot: Source and Amount, then Target under Shift
+// (where knob 2 is Amount again).
 enum ParamId
 {
     kParamWave1,
@@ -60,6 +63,16 @@ enum ParamId
     kParamMaster,
     kParamFlavour,
     kParamDac,
+    kParamLfo1Speed,
+    kParamLfo1Shape,
+    kParamLfo1Ratio,
+    kParamLfo1Mode,
+    kParamLfo2Speed,
+    kParamLfo2Shape,
+    kParamLfo2Ratio,
+    kParamLfo2Mode,
+    kParamMod1Source, // then Amount and Target, for each of the 8 slots
+    kParamLastMod = kParamMod1Source + 3 * 8 - 1,
     // The pages' encoder choices.
     kParamTable1,
     kParamTable2,
@@ -69,6 +82,8 @@ enum ParamId
     kParamEnvSelect,
     kParamPanMode,
     kParamOscMode,
+    kParamLfoSelect,
+    kParamModSlot,
     // The Filter page's encoder turn with Shift.
     kParamDirtType,
     // The web page's alone.
@@ -78,9 +93,11 @@ enum ParamId
     kParamFixed2,
     kParamPlayNote,
     kParamPlay,
+    kParamMpe,
+    kParamTempo,
     kNumParams,
 };
-constexpr int kNumKnobParams = kParamDac + 1;
+constexpr int kNumKnobParams = kParamLastMod + 1;
 constexpr int kFirstChoice   = kParamTable1;
 
 extern const weblink::Param kParams[kNumParams];
@@ -92,6 +109,8 @@ enum TraceId
     kTraceCutoff,
     kTraceAmp,
     kTraceDrift,
+    kTraceLfo1,
+    kTraceLfo2,
     kTraceVoices,
     kNumTraces,
 };

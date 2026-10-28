@@ -8,6 +8,12 @@
 // one played: always (Onset) or only while another key is held (Legato).
 // The sustain pedal holds notes released while it's down.
 //
+// It also keeps the MIDI controllers the mod matrix reads (mod_matrix.h)
+// and the two global LFOs. With MPE on, channel 1 is the master channel
+// and each other channel carries one note: its pitch bend (over 48
+// semitones, or none with Bend Range at 0, as on the Protein), CC 74 (MPE
+// Y) and pressure (the Poly AT source).
+//
 // The patch is the Pod's and the web page's values, as they set them:
 // knobs 0..1 and choices as indices. The engine maps them to units, so the
 // mappings live in one place (web/js/apps/wavebyte.js shows the same).
@@ -20,6 +26,10 @@
 #include <cstddef>
 #include <cstdint>
 
+#include <cmath>
+
+#include "lfo.h"
+#include "mod_matrix.h"
 #include "voice.h"
 #include "voice_filter.h"
 #include "wavetables.h"
@@ -97,7 +107,40 @@ class SynthEngine
         float amp_velocity = 0.5f;
         float pan          = 0.5f; // bipolar
         int   pan_mode     = 0;    // Fix, Rand 1-5
+
+        // The knobs that pick from a list (shape, ratio, mode, source,
+        // target) are 0..1 across it, as the Pod's knobs set them.
+        struct LfoSettings
+        {
+            float speed = 0.5f;
+            float shape = 0.0f;
+            float ratio = 0.5f;
+            float mode  = 0.0f;
+        } lfo[2];
+
+        struct ModSlot
+        {
+            float source = 0.0f;
+            float amount = 0.5f; // bipolar
+            float target = 0.0f;
+        } mod[mod::kSlots];
+
+        bool mpe = false;
     };
+
+    // A knob across a list of n: which one.
+    static int Pick(float x, int n)
+    {
+        int i = (int)(x * (float)n);
+        return i < 0 ? 0 : (i >= n ? n - 1 : i);
+    }
+    // A mod amount: bipolar, squared (keeping its sign) so small amounts
+    // are easy to set.
+    static float ModAmount(float x)
+    {
+        float a = 2.0f * x - 1.0f;
+        return a * fabsf(a);
+    }
 
     // What the web page shows: the voice last started.
     struct Probe
@@ -107,6 +150,7 @@ class SynthEngine
         float amp;     // its amp envelope
         int   note;
         float drift;  // Flavour's on osc 1, cents
+        float lfo[2]; // as that voice sees them
         int   voices; // sounding
     };
 
@@ -114,11 +158,20 @@ class SynthEngine
 
     void SetPatch(const Patch &p);
 
-    void NoteOn(int note, int velocity);
-    void NoteOff(int note);
-    void PitchBend(float amount) { bend_ = amount; } // -1..1
+    // channel: 0-15 (MIDI channel 1-16). Without MPE it only follows the
+    // note, for the matrix.
+    void NoteOn(int note, int velocity, int channel = 0);
+    void NoteOff(int note, int velocity = 64, int channel = 0);
+    void PitchBend(int channel, float amount);   // -1..1
+    void Pressure(int channel, float amount);    // channel pressure, 0..1
+    void PolyPressure(int note, float amount);   // 0..1
+    void Control(int channel, int cc, float value); // CC 1, 2, 11, 64, 74 (MPE Y), 22-31
     void Sustain(bool down);
     void AllNotesOff();
+
+    // Once per block from the tempo (Clocked LFOs): beats since the last
+    // block, and true after MIDI Start, which puts them back to the start.
+    void Clock(float beats, bool restart);
 
     // Writes (not adds) one block.
     void Process(float *l, float *r, size_t size);
@@ -132,32 +185,38 @@ class SynthEngine
     static float GlideSeconds(float x); // 0: off
     static float Bipolar(float x) { return 2.0f * x - 1.0f; }
     static float DacBits(float x) { return 12.0f - 6.0f * x; } // for x > 0; 0 is off
+    static float LfoSpeedOctaves() { return 11.0f; }
 
   private:
     static constexpr int kMaxHeld = 16;
 
     int  Allocate();
-    void Play(Voice &v, int note, float velocity, bool retrigger, bool held_before);
-    void MonoTo(int note, float velocity, bool retrigger, bool held_before);
+    void Play(Voice &v, int note, float velocity, bool retrigger, bool held_before, int channel);
+    void MonoTo(int note, float velocity, bool retrigger, bool held_before, int channel);
     bool Held(int note) const;
 
     const Wavetables *tables_ = nullptr;
-    float             sample_rate_ = 48000.0f, block_rate_ = 12000.0f;
+    float             sample_rate_ = 48000.0f, block_rate_ = 3000.0f;
     Voice             voices_[kVoices];
     Voice::Frame      frame_ = {};
     Patch             patch_;
     float             glide_set_ = -1.0f; // the settings frame_'s coefficients are for
     float             dac_set_   = -1.0f;
+    mod::Controllers  controllers_;
+    Lfo               global_lfo_[2];
+    float             clock_beats_   = 0.0f; // since the last block
+    bool              clock_restart_ = false;
     float             env_set_[Voice::kNumEnvs][4] = {{-1.0f}, {-1.0f}, {-1.0f}};
     uint32_t          started_ = 0; // notes so far, to age the voices
     int               last_voice_ = 0;
     float             last_note_ = 60.0f; // where the next glide starts
-    float             bend_ = 0.0f;
     bool              sustain_ = false;
 
     // Keys down, oldest first.
     int   held_[kMaxHeld];
     int   num_held_ = 0;
     float velocity_ = 1.0f; // the last note's
+    int   channel_  = 0;    // ... and its channel
+    float lfo_beats_[2] = {4.0f, 4.0f}; // Clocked: a cycle's length
     bool  sustained_[128] = {}; // released while the pedal was down
 };
