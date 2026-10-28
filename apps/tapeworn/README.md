@@ -1,7 +1,7 @@
 # Tapeworn
 
-Lo-fi tape machine, our own take on a deconstructed VHS/cassette deck (after
-Chase Bliss's Generation Loss MKII). Each artifact a tape machine adds has its
+A lo-fi tape machine, after Chase Bliss's Generation Loss MKII: a
+deconstructed VHS/cassette deck. Each artifact a tape machine adds has its
 own control, so you can have one part badly broken and the rest pristine.
 
 ```sh

@@ -1,7 +1,7 @@
 // Tapeworn - lo-fi tape machine for the Daisy Pod (Daisy Seed 3)
 //
-// Our own take on a deconstructed VHS/cassette deck (after Chase Bliss's
-// Generation Loss): every artifact a tape machine adds gets its own control.
+// Our own take on Chase Bliss's Generation Loss MKII, a deconstructed
+// VHS/cassette deck: every artifact a tape machine adds gets its own control.
 // The two knobs are shared across four pages; press the encoder to change
 // page (LED 2 shows which). After a page change a knob does nothing until it
 // is moved, so values don't jump.

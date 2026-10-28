@@ -7,7 +7,7 @@ a separate app under `apps/`, all built from `main`.
 |---|---|
 | [grainfall](apps/grainfall/README.md) | Granular and micro-loop effects after the Hologram Microcosm, with tap tempo, MIDI clock and the Microcosm's MIDI map (default) |
 | [driftnet](apps/driftnet/README.md) | Always-listening micro-looper and spatial effect after Chase Bliss's MOOD MKII, with a CLOCK that sets the sample rate of both, MOOD's MIDI map, hidden options, ramping and Synth Mode |
-| [tapeworn](apps/tapeworn/README.md) | Lo-fi tape machine: wow, flutter, hysteresis saturation, tape models, failures |
+| [tapeworn](apps/tapeworn/README.md) | Lo-fi tape machine after Chase Bliss's Generation Loss MKII: a deconstructed VHS/cassette deck with wow, flutter, hysteresis saturation, tape models and failures, each on its own control |
 | [slowdrift](apps/slowdrift/README.md) | Stereo ambient reverb after Walrus Audio's Slöer: a modulated plate with five modes (shimmer, octave down, echoes, swells, a frozen pad), Stretch, which lowers its sample rate, and a MIDI CC map |
 | [wavebyte](apps/wavebyte/README.md) | 8-voice wavetable synth after the Waldorf Protein: two oscillators reading our own 64 tables of 8-bit Microwave-style waves, a CEM-style filter or Drive, three envelopes, Poly, Mono and Legato, and Shift for a second layer of knobs |
 | [starter](apps/starter/README.md) | Low-pass filter toolchain and hardware check; template for new apps |
