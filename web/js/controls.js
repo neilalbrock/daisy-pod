@@ -4,6 +4,13 @@
 // from a list (the app's menu(name) gives the list), as a knob stepping
 // through it does on the Pod. Changes go out through onSet(index, raw); the app's
 // state messages come back in through state().
+//
+// Groups named "<tab>/<card>" (wavebyte's layers, "A/Filter") go in tabs,
+// one tab's cards showing at a time, under a bar of the tabs. Their
+// parameters may start with the tab ("B: Cutoff"), which their labels
+// leave out. If the app names a choice parameter as its tabParam, the bar
+// is that parameter's control: picking a tab sets it, and the app setting
+// it picks the tab.
 
 import { createKnob } from "./knob.js";
 import { Kind, UNIT_MAX } from "./protocol.js";
@@ -47,6 +54,8 @@ function throttled(send) {
     }
   };
 }
+
+const TABBED = /^([^/]+)\/(.+)$/;
 
 const el = (tag, className) => {
   const e = document.createElement(tag);
@@ -123,6 +132,9 @@ export class Controls {
     this.root = root;
     this.onSet = onSet;
     this.widgets = [];
+    this.tabs = [];
+    this.tab = 0;
+    this.tabBar = null;
   }
 
   // Three zones, the same for every app: a group that is one big choice
@@ -132,18 +144,36 @@ export class Controls {
   build(hello, params, app) {
     this.root.replaceChildren();
     this.widgets = [];
-    const zones = { main: el("div", "controls-main"), pages: el("div", "controls-pages"), more: el("div", "controls-more") };
-    hello.groups.forEach((groupName, g) => {
-      const members = params.filter((p) => p && p.group === g);
+    this.tabs = [];
+    for (const name of hello.groups) {
+      const m = TABBED.exec(name);
+      if (m && !this.tabs.includes(m[1])) this.tabs.push(m[1]);
+    }
+    const tabParam = this.tabs.length > 0 && app.tabParam ? params.find((p) => p && p.name === app.tabParam) : undefined;
+    const tabCards = el("div", "controls-more");
+    const zones = {
+      main: el("div", "controls-main"),
+      tabbed: el("div", "controls-tabbed"),
+      pages: el("div", "controls-pages"),
+      more: el("div", "controls-more"),
+    };
+    if (this.tabs.length) zones.tabbed.append(this.buildTabBar(tabParam, app), tabCards);
+    hello.groups.forEach((fullName, g) => {
+      const members = params.filter((p) => p && p.group === g && p !== tabParam);
       if (members.length === 0) return;
+      const tabbed = TABBED.exec(fullName);
+      const tab = tabbed?.[1];
+      const groupName = tabbed ? tabbed[2] : fullName;
+      // A tab's parameters, without the tab in front.
+      const nameOf = (p) => (tab && p.name.startsWith(`${tab}: `) ? p.name.slice(tab.length + 2) : p.name);
 
       const page = /^Page (\d+)$/.exec(groupName);
       const main = members.length === 1 && members[0].kind === Kind.CHOICE && members[0].options.length > 8;
       // A page is titled by its knobs (the chip has its number), or by what's
       // on it if it has none.
-      const knobNames = members.filter((m) => m.kind === Kind.CONTINUOUS).map((m) => m.name);
-      const pageNames = knobNames.length ? knobNames : members.map((m) => m.name);
-      const title = app.groupTitle?.(groupName, members.map((m) => m.name)) || (page ? pageNames.join(" · ") : groupName);
+      const knobNames = members.filter((m) => m.kind === Kind.CONTINUOUS).map(nameOf);
+      const pageNames = knobNames.length ? knobNames : members.map(nameOf);
+      const title = app.groupTitle?.(groupName, members.map(nameOf)) || (page ? pageNames.join(" · ") : groupName);
 
       const card = el("section", "group");
       const colour = app.groupColour?.(groupName);
@@ -169,25 +199,55 @@ export class Controls {
         switches: el("div", "group-switches"),
       };
       for (const p of members) {
-        const showLabel = !main && p.name !== groupName && p.name !== title;
-        this.widgets[p.index] = this.widget(p, app, parts, { showLabel, wrap: main, meta });
+        const name = nameOf(p);
+        const showLabel = !main && name !== groupName && name !== title;
+        this.widgets[p.index] = this.widget(p, app, parts, { showLabel, wrap: main, meta, name });
       }
       card.append(head, ...Object.values(parts).filter((part) => part.childElementCount));
-      (main ? zones.main : page ? zones.pages : zones.more).append(card);
+      if (tab) {
+        card.dataset.tab = tab;
+        card.hidden = tab !== this.tabs[this.tab];
+        tabCards.append(card);
+      } else (main ? zones.main : page ? zones.pages : zones.more).append(card);
     });
     this.root.append(...Object.values(zones).filter((zone) => zone.childElementCount));
   }
 
-  widget(p, app, parts, { showLabel, wrap, meta }) {
+  // The bar of tabs, as the tab parameter's control if there is one.
+  buildTabBar(tabParam, app) {
+    const bar = el("div", "controls-tabs");
+    const label = el("span", "choice-label");
+    label.textContent = tabParam?.name ?? "Tab";
+    const param = { name: label.textContent, options: this.tabs, columns: this.tabs.length };
+    const opts = optionButtons(param, app, (i) => {
+      this.showTab(i);
+      if (tabParam) this.onSet(tabParam.index, i);
+    });
+    this.tabBar = opts;
+    bar.append(label, opts.el);
+    if (tabParam) this.widgets[tabParam.index] = { set: (raw) => this.showTab(raw) };
+    this.tab = Math.min(this.tab, this.tabs.length - 1);
+    opts.select(this.tab);
+    return bar;
+  }
+
+  showTab(i) {
+    if (i < 0 || i >= this.tabs.length) return;
+    this.tab = i;
+    this.tabBar?.select(i);
+    for (const card of this.root.querySelectorAll(".group[data-tab]")) card.hidden = card.dataset.tab !== this.tabs[i];
+  }
+
+  widget(p, app, parts, { showLabel, wrap, meta, name = p.name }) {
     const send = (raw) => this.onSet(p.index, raw);
     switch (p.kind) {
       case Kind.CONTINUOUS: {
-        const list = app.menu?.(p.name);
-        if (list) return this.menu(p, list, parts, send);
+        const list = app.menu?.(name);
+        if (list) return this.menu(p, list, parts, send, name);
         const out = throttled(send);
         const knob = createKnob({
-          label: p.name,
-          format: app.format?.(p.name),
+          label: name,
+          format: app.format?.(name),
           onInput: (v) => out(v * UNIT_MAX),
         });
         parts.knobs.append(knob.el);
@@ -197,7 +257,7 @@ export class Controls {
         const box = el("div", "choice");
         if (showLabel) {
           const label = el("div", "choice-label");
-          label.textContent = p.name;
+          label.textContent = name;
           box.append(label);
         }
         const pick = (i) => {
@@ -213,7 +273,7 @@ export class Controls {
         return { set: (raw) => pick(raw) };
       }
       case Kind.TOGGLE: {
-        const b = switchButton("toggle", p.name);
+        const b = switchButton("toggle", name);
         b.setAttribute("aria-pressed", "false");
         b.addEventListener("click", () => {
           const on = b.getAttribute("aria-pressed") !== "true";
@@ -224,7 +284,7 @@ export class Controls {
         return { set: (raw) => b.setAttribute("aria-pressed", String(raw !== 0)) };
       }
       default: {
-        const b = switchButton("trigger", p.name);
+        const b = switchButton("trigger", name);
         b.addEventListener("pointerdown", () => {
           send(1);
           b.classList.remove("fired");
@@ -245,10 +305,10 @@ export class Controls {
 
   // A list over a continuous value: the item i is the middle of its step,
   // (i + 0.5) / n, so the Pod's knob reading lands on the same item.
-  menu(p, list, parts, send) {
+  menu(p, list, parts, send, name = p.name) {
     const box = el("label", "menu");
     const label = el("span", "choice-label");
-    label.textContent = p.name;
+    label.textContent = name;
     const select = el("select");
     list.forEach((name, i) => {
       const o = el("option");

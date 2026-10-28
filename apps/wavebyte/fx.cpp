@@ -73,7 +73,7 @@ void FxChain::Set(const Settings &s, size_t size)
     for(int i = 0; i < 2; i++)
     {
         Slot  &slot = slots_[i];
-        bool   used = s.routing == kFxSerial || (s.routing == kFxOnlyTwo && i == 1);
+        bool   used = (s.routes & (1 << kFxSerial)) || (i == 1 && (s.routes & (1 << kFxOnlyTwo)));
         FxType want = used ? s.type[i] : kFxOff;
         if(i == 1 && s.type[1] == s.type[0])
             want = kFxOff; // a type in one slot at a time
@@ -99,28 +99,44 @@ void FxChain::Set(const Settings &s, size_t size)
     }
 }
 
-void FxChain::Process(float *l, float *r, size_t size)
+void FxChain::RunSlot(Slot &slot, float *l, float *r, size_t size)
 {
+    if(slot.running == kFxOff || slot.clearing || (slot.fade <= 0.0f && slot.target <= 0.0f))
+        return;
     float dry_l[16], dry_r[16];
-    for(Slot &slot : slots_)
+    for(size_t n = 0; n < size; n++)
     {
-        if(slot.running == kFxOff || slot.clearing || (slot.fade <= 0.0f && slot.target <= 0.0f))
-            continue;
-        for(size_t n = 0; n < size; n++)
-        {
-            dry_l[n] = l[n];
-            dry_r[n] = r[n];
-        }
-        Run(slot.running, l, r, size);
-        float fade = slot.fade, step = slot.target > fade ? fade_step_ : -fade_step_;
-        if(fade == slot.target)
-            step = 0.0f;
-        for(size_t n = 0; n < size; n++)
-        {
-            fade = dsp::Clamp(fade + step, 0.0f, 1.0f);
-            l[n] = dsp::Lerp(dry_l[n], l[n], fade);
-            r[n] = dsp::Lerp(dry_r[n], r[n], fade);
-        }
-        slot.fade = fade;
+        dry_l[n] = l[n];
+        dry_r[n] = r[n];
+    }
+    Run(slot.running, l, r, size);
+    float fade = slot.fade, step = slot.target > fade ? fade_step_ : -fade_step_;
+    if(fade == slot.target)
+        step = 0.0f;
+    for(size_t n = 0; n < size; n++)
+    {
+        fade = dsp::Clamp(fade + step, 0.0f, 1.0f);
+        l[n] = dsp::Lerp(dry_l[n], l[n], fade);
+        r[n] = dsp::Lerp(dry_r[n], r[n], fade);
+    }
+    slot.fade = fade;
+}
+
+void FxChain::Process(float *const l[kNumFxRoutings], float *const r[kNumFxRoutings], size_t size)
+{
+    float *l1 = l[kFxSerial], *r1 = r[kFxSerial];
+    float *l2 = l[kFxOnlyTwo], *r2 = r[kFxOnlyTwo];
+    float *out_l = l[kFxDry], *out_r = r[kFxDry];
+    RunSlot(slots_[0], l1, r1, size);
+    for(size_t n = 0; n < size; n++)
+    {
+        l2[n] += l1[n];
+        r2[n] += r1[n];
+    }
+    RunSlot(slots_[1], l2, r2, size);
+    for(size_t n = 0; n < size; n++)
+    {
+        out_l[n] += l2[n];
+        out_r[n] += r2[n];
     }
 }

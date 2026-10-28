@@ -24,12 +24,29 @@ const char *const kLfoNames[]    = {"LFO 1", "LFO 2"};
 const char *const kSlotNames[]   = {"1", "2", "3", "4", "5", "6", "7", "8"};
 const char *const kFxSlots[]     = {"FX 1", "FX 2"};
 const char *const kFxRoutings[]  = {"Dry", "FX 1 > FX 2", "FX 2 only"};
-// The effects each have a card, after the FX page's (group 10 + type).
-const char *const kGroupNames[]  = {"Osc 1", "Osc 2", "Pitch", "Filter", "Env & Glide", "Envelopes",
-                                    "Amp", "Character", "LFOs", "Mod Matrix", "FX", "Chorus",
-                                    "Flanger", "Phaser", "Tremolo", "Drive", "Compressor", "EQ",
-                                    "Delay", "Reverb", "Play"};
-constexpr uint8_t kFxGroup = 10, kPlayGroup = 20;
+const char *const kLayerNames[]  = {"A", "B", "C", "D"};
+const char *const kLayerModes[]  = {"Single", "Layered", "Round Robin", "Random Robin", "MIDI Split"};
+const char *const kChannels[]    = {"1", "2", "3", "4", "5", "6", "7", "8",
+                                    "9", "10", "11", "12", "13", "14", "15", "16"};
+
+// Each layer's cards, as "<layer>/<card>": the page shows a layer's in a
+// tab of its own. Then the shared ones: the effects each have a card,
+// after the FX card's (kFxGroup + type). The hello carries every name, and
+// must fit in one message (weblink::kMaxMessage, 720 bytes): with these
+// it's 672, so keep new names short.
+#define LAYER_GROUPS(L)                                                                     \
+    L "/Osc 1", L "/Osc 2", L "/Pitch", L "/Filter", L "/Env & Glide", L "/Envelopes",     \
+        L "/Amp", L "/Character", L "/LFOs", L "/Mod Matrix", L "/Layer"
+constexpr uint8_t kLayerGroups  = 11;
+const char *const kGroupNames[] = {LAYER_GROUPS("A"), LAYER_GROUPS("B"), LAYER_GROUPS("C"),
+                                   LAYER_GROUPS("D"), "Global", "FX", "Chorus", "Flanger",
+                                   "Phaser", "Tremolo", "Drive", "Compressor", "EQ", "Delay",
+                                   "Reverb", "Pod Pages", "Play"};
+#undef LAYER_GROUPS
+constexpr uint8_t kGlobalGroup = kLayers * kLayerGroups;
+constexpr uint8_t kFxGroup     = kGlobalGroup + 1;
+constexpr uint8_t kPodGroup    = kFxGroup + kNumFxTypes;
+constexpr uint8_t kPlayGroup   = kPodGroup + 1;
 const char *const kMeterNames[]  = {"Out"};
 
 const weblink::Trace kTraces[kNumTraces] = {
@@ -54,92 +71,91 @@ constexpr Kind  kKnob   = Kind::kContinuous;
 constexpr Store kPreset = Store::kPreset;
 } // namespace
 
+// One layer's parameters, in ParamId's order: P is the name's prefix ("" for
+// layer A, "B: " and so on), G the layer's first card.
+#define MOD_SLOT(P, G, N)                                                                     \
+    {P "Mod " N " Source", kKnob, G + 9, nullptr, 0, 0, kPreset},                             \
+        {P "Mod " N " Amount", kKnob, G + 9, nullptr, 0, 0, kPreset},                         \
+        {P "Mod " N " Target", kKnob, G + 9, nullptr, 0, 0, kPreset}
+#define LAYER_PARAMS(P, G)                                                                    \
+    {P "Wave 1", kKnob, G + 0, nullptr, 0, 0, kPreset},                                       \
+        {P "Env Amnt 1", kKnob, G + 0, nullptr, 0, 0, kPreset},                               \
+        {P "Level 1", kKnob, G + 0, nullptr, 0, 0, kPreset},                                  \
+        {P "Vel 1", kKnob, G + 0, nullptr, 0, 0, kPreset},                                    \
+        {P "Wave 2", kKnob, G + 1, nullptr, 0, 0, kPreset},                                   \
+        {P "Env Amnt 2", kKnob, G + 1, nullptr, 0, 0, kPreset},                               \
+        {P "Level 2", kKnob, G + 1, nullptr, 0, 0, kPreset},                                  \
+        {P "Vel 2", kKnob, G + 1, nullptr, 0, 0, kPreset},                                    \
+        {P "Semitone 2", kKnob, G + 2, nullptr, 0, 0, kPreset},                               \
+        {P "Detune 2", kKnob, G + 2, nullptr, 0, 0, kPreset},                                 \
+        {P "Semitone 1", kKnob, G + 2, nullptr, 0, 0, kPreset},                               \
+        {P "Detune 1", kKnob, G + 2, nullptr, 0, 0, kPreset},                                 \
+        {P "Cutoff", kKnob, G + 3, nullptr, 0, 0, kPreset},                                   \
+        {P "Resonance", kKnob, G + 3, nullptr, 0, 0, kPreset},                                \
+        {P "Keytrack", kKnob, G + 3, nullptr, 0, 0, kPreset},                                 \
+        {P "Dirt", kKnob, G + 3, nullptr, 0, 0, kPreset},                                     \
+        {P "Filter Env", kKnob, G + 4, nullptr, 0, 0, kPreset},                               \
+        {P "Glide", kKnob, G + 4, nullptr, 0, 0, kPreset},                                    \
+        {P "Filter Vel", kKnob, G + 4, nullptr, 0, 0, kPreset},                               \
+        {P "Bend Range", kKnob, G + 4, nullptr, 0, 0, kPreset},                               \
+        {P "Wave Attack", kKnob, G + 5, nullptr, 0, 0, kPreset},                              \
+        {P "Wave Decay", kKnob, G + 5, nullptr, 0, 0, kPreset},                               \
+        {P "Wave Sustain", kKnob, G + 5, nullptr, 0, 0, kPreset},                             \
+        {P "Wave Release", kKnob, G + 5, nullptr, 0, 0, kPreset},                             \
+        {P "Filter Attack", kKnob, G + 5, nullptr, 0, 0, kPreset},                            \
+        {P "Filter Decay", kKnob, G + 5, nullptr, 0, 0, kPreset},                             \
+        {P "Filter Sustain", kKnob, G + 5, nullptr, 0, 0, kPreset},                           \
+        {P "Filter Release", kKnob, G + 5, nullptr, 0, 0, kPreset},                           \
+        {P "Amp Attack", kKnob, G + 5, nullptr, 0, 0, kPreset},                               \
+        {P "Amp Decay", kKnob, G + 5, nullptr, 0, 0, kPreset},                                \
+        {P "Amp Sustain", kKnob, G + 5, nullptr, 0, 0, kPreset},                              \
+        {P "Amp Release", kKnob, G + 5, nullptr, 0, 0, kPreset},                              \
+        {P "Volume", kKnob, G + 6, nullptr, 0, 0, kPreset},                                   \
+        {P "Pan", kKnob, G + 6, nullptr, 0, 0, kPreset},                                      \
+        {P "Amp Vel", kKnob, G + 6, nullptr, 0, 0, kPreset},                                  \
+        {P "LFO 1 Speed", kKnob, G + 8, nullptr, 0, 0, kPreset},                              \
+        {P "LFO 1 Shape", kKnob, G + 8, nullptr, 0, 0, kPreset},                              \
+        {P "LFO 1 Ratio", kKnob, G + 8, nullptr, 0, 0, kPreset},                              \
+        {P "LFO 1 Mode", kKnob, G + 8, nullptr, 0, 0, kPreset},                               \
+        {P "LFO 2 Speed", kKnob, G + 8, nullptr, 0, 0, kPreset},                              \
+        {P "LFO 2 Shape", kKnob, G + 8, nullptr, 0, 0, kPreset},                              \
+        {P "LFO 2 Ratio", kKnob, G + 8, nullptr, 0, 0, kPreset},                              \
+        {P "LFO 2 Mode", kKnob, G + 8, nullptr, 0, 0, kPreset},                               \
+        MOD_SLOT(P, G, "1"), MOD_SLOT(P, G, "2"), MOD_SLOT(P, G, "3"), MOD_SLOT(P, G, "4"),   \
+        MOD_SLOT(P, G, "5"), MOD_SLOT(P, G, "6"), MOD_SLOT(P, G, "7"), MOD_SLOT(P, G, "8"),   \
+        {P "Table 1", Kind::kChoice, G + 0, Wavetables::kNames, Wavetables::kTables, 4, kPreset}, \
+        {P "Table 2", Kind::kChoice, G + 1, Wavetables::kNames, Wavetables::kTables, 4, kPreset}, \
+        {P "Voice", Kind::kChoice, G + 2, kVoiceModes, Count(kVoiceModes), 3, kPreset},       \
+        {P "Filter Type", Kind::kChoice, G + 3, kFilterTypes, Count(kFilterTypes), 5, kPreset}, \
+        {P "Glide Mode", Kind::kChoice, G + 4, kGlideModes, Count(kGlideModes), 2, kPreset},  \
+        {P "Pan Mode", Kind::kChoice, G + 6, kPanModes, Count(kPanModes), 6, kPreset},        \
+        {P "Osc Mode", Kind::kChoice, G + 7, kOscModes, Count(kOscModes), 2, kPreset},        \
+        {P "Dirt Type", Kind::kChoice, G + 3, kDirtTypes, Count(kDirtTypes), 4, kPreset},     \
+        {P "FX Routing", Kind::kChoice, G + 10, kFxRoutings, Count(kFxRoutings), 3, kPreset}, \
+        {P "Limit Waves 1", Kind::kToggle, G + 0, nullptr, 0, 0, kPreset},                    \
+        {P "Limit Waves 2", Kind::kToggle, G + 1, nullptr, 0, 0, kPreset},                    \
+        {P "Fixed 1", Kind::kToggle, G + 2, nullptr, 0, 0, kPreset},                          \
+        {P "Fixed 2", Kind::kToggle, G + 2, nullptr, 0, 0, kPreset},                          \
+        {P "Active", Kind::kToggle, G + 10, nullptr, 0, 0, kPreset}
+
 constexpr weblink::Param kParams[kNumParams] = {
-    {"Wave 1", kKnob, 0, nullptr, 0, 0, kPreset},
-    {"Env Amnt 1", kKnob, 0, nullptr, 0, 0, kPreset},
-    {"Level 1", kKnob, 0, nullptr, 0, 0, kPreset},
-    {"Vel 1", kKnob, 0, nullptr, 0, 0, kPreset},
-    {"Wave 2", kKnob, 1, nullptr, 0, 0, kPreset},
-    {"Env Amnt 2", kKnob, 1, nullptr, 0, 0, kPreset},
-    {"Level 2", kKnob, 1, nullptr, 0, 0, kPreset},
-    {"Vel 2", kKnob, 1, nullptr, 0, 0, kPreset},
-    {"Semitone 2", kKnob, 2, nullptr, 0, 0, kPreset},
-    {"Detune 2", kKnob, 2, nullptr, 0, 0, kPreset},
-    {"Semitone 1", kKnob, 2, nullptr, 0, 0, kPreset},
-    {"Detune 1", kKnob, 2, nullptr, 0, 0, kPreset},
-    {"Cutoff", kKnob, 3, nullptr, 0, 0, kPreset},
-    {"Resonance", kKnob, 3, nullptr, 0, 0, kPreset},
-    {"Keytrack", kKnob, 3, nullptr, 0, 0, kPreset},
-    {"Dirt", kKnob, 3, nullptr, 0, 0, kPreset},
-    {"Filter Env", kKnob, 4, nullptr, 0, 0, kPreset},
-    {"Glide", kKnob, 4, nullptr, 0, 0, kPreset},
-    {"Filter Vel", kKnob, 4, nullptr, 0, 0, kPreset},
-    {"Bend Range", kKnob, 4, nullptr, 0, 0, kPreset},
-    {"Wave Attack", kKnob, 5, nullptr, 0, 0, kPreset},
-    {"Wave Decay", kKnob, 5, nullptr, 0, 0, kPreset},
-    {"Wave Sustain", kKnob, 5, nullptr, 0, 0, kPreset},
-    {"Wave Release", kKnob, 5, nullptr, 0, 0, kPreset},
-    {"Filter Attack", kKnob, 5, nullptr, 0, 0, kPreset},
-    {"Filter Decay", kKnob, 5, nullptr, 0, 0, kPreset},
-    {"Filter Sustain", kKnob, 5, nullptr, 0, 0, kPreset},
-    {"Filter Release", kKnob, 5, nullptr, 0, 0, kPreset},
-    {"Amp Attack", kKnob, 5, nullptr, 0, 0, kPreset},
-    {"Amp Decay", kKnob, 5, nullptr, 0, 0, kPreset},
-    {"Amp Sustain", kKnob, 5, nullptr, 0, 0, kPreset},
-    {"Amp Release", kKnob, 5, nullptr, 0, 0, kPreset},
-    {"Volume", kKnob, 6, nullptr, 0, 0, kPreset},
-    {"Pan", kKnob, 6, nullptr, 0, 0, kPreset},
-    {"Amp Vel", kKnob, 6, nullptr, 0, 0, kPreset},
-    {"Master", kKnob, 6, nullptr, 0, 0, Store::kGlobal},
-    {"Flavour", kKnob, 7, nullptr, 0, 0, kPreset},
-    {"DAC", kKnob, 7, nullptr, 0, 0, kPreset},
-    {"LFO 1 Speed", kKnob, 8, nullptr, 0, 0, kPreset},
-    {"LFO 1 Shape", kKnob, 8, nullptr, 0, 0, kPreset},
-    {"LFO 1 Ratio", kKnob, 8, nullptr, 0, 0, kPreset},
-    {"LFO 1 Mode", kKnob, 8, nullptr, 0, 0, kPreset},
-    {"LFO 2 Speed", kKnob, 8, nullptr, 0, 0, kPreset},
-    {"LFO 2 Shape", kKnob, 8, nullptr, 0, 0, kPreset},
-    {"LFO 2 Ratio", kKnob, 8, nullptr, 0, 0, kPreset},
-    {"LFO 2 Mode", kKnob, 8, nullptr, 0, 0, kPreset},
-    {"Mod 1 Source", kKnob, 9, nullptr, 0, 0, kPreset},
-    {"Mod 1 Amount", kKnob, 9, nullptr, 0, 0, kPreset},
-    {"Mod 1 Target", kKnob, 9, nullptr, 0, 0, kPreset},
-    {"Mod 2 Source", kKnob, 9, nullptr, 0, 0, kPreset},
-    {"Mod 2 Amount", kKnob, 9, nullptr, 0, 0, kPreset},
-    {"Mod 2 Target", kKnob, 9, nullptr, 0, 0, kPreset},
-    {"Mod 3 Source", kKnob, 9, nullptr, 0, 0, kPreset},
-    {"Mod 3 Amount", kKnob, 9, nullptr, 0, 0, kPreset},
-    {"Mod 3 Target", kKnob, 9, nullptr, 0, 0, kPreset},
-    {"Mod 4 Source", kKnob, 9, nullptr, 0, 0, kPreset},
-    {"Mod 4 Amount", kKnob, 9, nullptr, 0, 0, kPreset},
-    {"Mod 4 Target", kKnob, 9, nullptr, 0, 0, kPreset},
-    {"Mod 5 Source", kKnob, 9, nullptr, 0, 0, kPreset},
-    {"Mod 5 Amount", kKnob, 9, nullptr, 0, 0, kPreset},
-    {"Mod 5 Target", kKnob, 9, nullptr, 0, 0, kPreset},
-    {"Mod 6 Source", kKnob, 9, nullptr, 0, 0, kPreset},
-    {"Mod 6 Amount", kKnob, 9, nullptr, 0, 0, kPreset},
-    {"Mod 6 Target", kKnob, 9, nullptr, 0, 0, kPreset},
-    {"Mod 7 Source", kKnob, 9, nullptr, 0, 0, kPreset},
-    {"Mod 7 Amount", kKnob, 9, nullptr, 0, 0, kPreset},
-    {"Mod 7 Target", kKnob, 9, nullptr, 0, 0, kPreset},
-    {"Mod 8 Source", kKnob, 9, nullptr, 0, 0, kPreset},
-    {"Mod 8 Amount", kKnob, 9, nullptr, 0, 0, kPreset},
-    {"Mod 8 Target", kKnob, 9, nullptr, 0, 0, kPreset},
+    LAYER_PARAMS("", 0),
+    LAYER_PARAMS("B: ", kLayerGroups),
+    LAYER_PARAMS("C: ", 2 * kLayerGroups),
+    LAYER_PARAMS("D: ", 3 * kLayerGroups),
+    {"Master", kKnob, kGlobalGroup, nullptr, 0, 0, Store::kGlobal},
+    {"Flavour", kKnob, kGlobalGroup, nullptr, 0, 0, kPreset},
+    {"DAC", kKnob, kGlobalGroup, nullptr, 0, 0, kPreset},
     {"FX 1 Type", kKnob, kFxGroup, nullptr, 0, 0, kPreset},
     {"FX 2 Type", kKnob, kFxGroup, nullptr, 0, 0, kPreset},
-    {"Table 1", Kind::kChoice, 0, Wavetables::kNames, Wavetables::kTables, 4, kPreset},
-    {"Table 2", Kind::kChoice, 1, Wavetables::kNames, Wavetables::kTables, 4, kPreset},
-    {"Voice", Kind::kChoice, 2, kVoiceModes, Count(kVoiceModes), 3, kPreset},
-    {"Filter Type", Kind::kChoice, 3, kFilterTypes, Count(kFilterTypes), 5, kPreset},
-    {"Glide Mode", Kind::kChoice, 4, kGlideModes, Count(kGlideModes), 2, kPreset},
-    {"Envelope", Kind::kChoice, 5, kEnvNames, Count(kEnvNames), 3, Store::kNone},
-    {"Pan Mode", Kind::kChoice, 6, kPanModes, Count(kPanModes), 6, kPreset},
-    {"Osc Mode", Kind::kChoice, 7, kOscModes, Count(kOscModes), 2, kPreset},
-    {"LFO", Kind::kChoice, 8, kLfoNames, Count(kLfoNames), 2, Store::kNone},
-    {"Mod Slot", Kind::kChoice, 9, kSlotNames, Count(kSlotNames), 8, Store::kNone},
-    {"FX Slot", Kind::kChoice, kFxGroup, kFxSlots, Count(kFxSlots), 2, Store::kNone},
-    {"Dirt Type", Kind::kChoice, 3, kDirtTypes, Count(kDirtTypes), 4, kPreset},
-    {"FX Routing", Kind::kChoice, kFxGroup, kFxRoutings, Count(kFxRoutings), 3, kPreset},
+    {"Envelope", Kind::kChoice, kPodGroup, kEnvNames, Count(kEnvNames), 3, Store::kNone},
+    {"LFO", Kind::kChoice, kPodGroup, kLfoNames, Count(kLfoNames), 2, Store::kNone},
+    {"Mod Slot", Kind::kChoice, kPodGroup, kSlotNames, Count(kSlotNames), 8, Store::kNone},
+    {"FX Slot", Kind::kChoice, kPodGroup, kFxSlots, Count(kFxSlots), 2, Store::kNone},
+    {"Layer", Kind::kChoice, kGlobalGroup, kLayerNames, Count(kLayerNames), 4, kPreset},
+    {"Layer Mode", Kind::kChoice, kGlobalGroup, kLayerModes, Count(kLayerModes), 3, kPreset},
+    {"Split Channel", Kind::kChoice, kGlobalGroup, kChannels, Count(kChannels), 8, Store::kGlobal},
+    {"A All Channels", Kind::kToggle, kGlobalGroup, nullptr, 0, 0, kPreset},
     {kFxParams[0].name, kKnob, kFxGroup + 1, nullptr, 0, 0, kPreset},
     {kFxParams[1].name, kKnob, kFxGroup + 1, nullptr, 0, 0, kPreset},
     {kFxParams[2].name, kKnob, kFxGroup + 1, nullptr, 0, 0, kPreset},
@@ -212,15 +228,22 @@ constexpr weblink::Param kParams[kNumParams] = {
     {kFxParams[69].name, kKnob, kFxGroup + 9, nullptr, 0, 0, kPreset},
     {kFxParams[70].name, kKnob, kFxGroup + 9, nullptr, 0, 0, kPreset},
     {kFxParams[71].name, kKnob, kFxGroup + 9, nullptr, 0, 0, kPreset},
-    {"Limit Waves 1", Kind::kToggle, 0, nullptr, 0, 0, kPreset},
-    {"Limit Waves 2", Kind::kToggle, 1, nullptr, 0, 0, kPreset},
-    {"Fixed 1", Kind::kToggle, 2, nullptr, 0, 0, kPreset},
-    {"Fixed 2", Kind::kToggle, 2, nullptr, 0, 0, kPreset},
     {"Play Note", kKnob, kPlayGroup, nullptr, 0, 0, Store::kGlobal},
     {"Play", Kind::kToggle, kPlayGroup, nullptr, 0, 0, Store::kNone},
     {"MPE", Kind::kToggle, kPlayGroup, nullptr, 0, 0, Store::kGlobal},
     {"Tempo", kKnob, kPlayGroup, nullptr, 0, 0, Store::kGlobal},
 };
+#undef LAYER_PARAMS
+#undef MOD_SLOT
+// Too many entries won't compile; too few would leave the last unnamed.
+constexpr bool AllNamed(const weblink::Param *params, int n)
+{
+    for(int i = 0; i < n; i++)
+        if(params[i].name == nullptr)
+            return false;
+    return true;
+}
+static_assert(AllNamed(kParams, kNumParams), "the list is out of step with ParamId");
 static_assert(UniqueKeys(kParams, kNumParams), "two parameter names share a preset key");
 
 void WriteHello(weblink::Writer &w, float sample_rate)

@@ -18,14 +18,20 @@
 
 namespace web_view
 {
-// The knob parameters come first, in the Pod's order of knob layers (see
-// main.cpp's KnobOf): up to the mod matrix, in pairs, layer i / 2, knob
-// i % 2. Each page has a layer, a second under Shift, the envelope and LFO
-// pages a pair per envelope or LFO, and the Character page one. The mod
-// matrix has three per slot: Source and Amount, then Target under Shift
-// (where knob 2 is Amount again). The FX page's only knob parameters are
-// the slots' types: its other knobs show the effects' values (kParamFxFirst
-// on), which have no knob of their own.
+// The parameters come in two parts: each layer's, four times over (layer
+// A's, then B's...), then those the layers share. A layer's start with its
+// knob parameters, in the Pod's order of knob layers (see main.cpp's
+// KnobOf): up to the LFOs in pairs, a layer and its Shift layer per page,
+// the envelope and LFO pages a pair per envelope or LFO. The mod matrix
+// has three per slot: Source and Amount, then Target under Shift (where
+// knob 2 is Amount again). Then the layer's choices and switches.
+//
+// Layer A's names are the ones wavebyte had before it had layers, so
+// presets saved then come back as layer A; B-D's put the layer first ("B:
+// Cutoff": with a plain space, two pairs of names hash alike). LayerParam()
+// gives a layer's index of one of its parameters.
+constexpr int kLayers = 4;
+
 enum ParamId
 {
     kParamWave1,
@@ -62,10 +68,7 @@ enum ParamId
     kParamAmpRelease,
     kParamVolume,
     kParamPan,
-    kParamAmpVel,
-    kParamMaster,
-    kParamFlavour,
-    kParamDac,
+    kParamAmpVel, // its knob 2 shows Master, which is shared
     kParamLfo1Speed,
     kParamLfo1Shape,
     kParamLfo1Ratio,
@@ -76,39 +79,60 @@ enum ParamId
     kParamLfo2Mode,
     kParamMod1Source, // then Amount and Target, for each of the 8 slots
     kParamLastMod = kParamMod1Source + 3 * 8 - 1,
-    kParamFx1Type,
-    kParamFx2Type,
-    // The pages' encoder choices.
-    kParamTable1,
+    kNumLayerKnobs,
+    // The layer's pages' encoder choices.
+    kParamTable1 = kNumLayerKnobs,
     kParamTable2,
     kParamVoiceMode,
     kParamFilterType,
     kParamGlideMode,
-    kParamEnvSelect,
     kParamPanMode,
     kParamOscMode,
-    kParamLfoSelect,
-    kParamModSlot,
-    kParamFxSlot,
     // The Filter and FX pages' encoder turns with Shift.
     kParamDirtType,
     kParamFxRouting,
-    // The effects' values, by type (fx_params.h).
-    kParamFxFirst,
-    kParamFxLast = kParamFxFirst + kNumFxParams - 1,
     // The web page's alone.
     kParamLimit1,
     kParamLimit2,
     kParamFixed1,
     kParamFixed2,
+    // In the Multi modes: whether the layer plays.
+    kParamActive,
+    kLayerParams,
+
+    // Shared by the layers.
+    kParamMaster = kLayers * kLayerParams,
+    kParamFlavour,
+    kParamDac,
+    kParamFx1Type,
+    kParamFx2Type,
+    // What the Pod's pages show: the envelope, LFO, mod slot and FX slot.
+    kParamEnvSelect,
+    kParamLfoSelect,
+    kParamModSlot,
+    kParamFxSlot,
+    // The Layer page: the layer edited (and played in Single), and the mode.
+    kParamLayer,
+    kParamLayerMode,
+    // MIDI Split: layer A's channel (B-D the next ones up), and whether A
+    // takes every channel too.
+    kParamSplitChannel,
+    kParamAllChannels,
+    // The effects' values, by type (fx_params.h).
+    kParamFxFirst,
+    kParamFxLast = kParamFxFirst + kNumFxParams - 1,
+    // The web page's alone.
     kParamPlayNote,
     kParamPlay,
     kParamMpe,
     kParamTempo,
     kNumParams,
 };
-constexpr int kNumKnobParams = kParamFx2Type + 1;
-constexpr int kFirstChoice   = kParamTable1;
+
+constexpr int LayerParam(int layer, int param)
+{
+    return layer * kLayerParams + param;
+}
 
 extern const weblink::Param kParams[kNumParams];
 

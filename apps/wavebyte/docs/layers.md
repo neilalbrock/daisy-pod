@@ -5,6 +5,22 @@ the order to build it in. Written before any of it exists, so the numbers
 are measurements of today's firmware plus estimates; each estimate says
 what it rests on.
 
+**As built** (see the [README](../README.md#layers) for how it plays): it
+followed this scope, with these differences. The arpeggiator and
+sequencer (stage 5) are parked, so the questions about them fall away.
+Flavour and DAC are shared, as are Master and the effects; there are no
+key or velocity ranges. The Layer page's knobs do nothing: its encoder
+turn picks the layer, with Shift the mode, and a long press switches the
+layer on or off; the split channel and A All Channels are on the web page
+only. B-D's parameter names start "B: " rather than "B ", since with a
+plain space two pairs hashed alike. There are 413 parameters. Measured
+after building: DTCM went from 90.4% to 87.6% with the presets' arrays
+and the page's state in SDRAM, then back to 90.6% with the layers, leaving
+12.4 KB for the stack (12.6 KB before); and in the host benchmark,
+`SetGlobal` and four `SetPatch` come to 4% of the voices and effects'
+time, against 1% for one layer before. The Pod's own CPU and Stack free
+readings on the web page are the real test.
+
 **Short answer:** yes, it fits. Layers don't add voices: the Protein's
 four layers share its eight, so the DSP that dominates the CPU (voices and
 effects) stays the same size. What grows is control work (each layer's

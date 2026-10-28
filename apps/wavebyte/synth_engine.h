@@ -1,25 +1,38 @@
 // Wavebyte - the synth engine
 //
-// Eight voices, played as Poly (a voice per note: a free one, else the
-// oldest released, else the oldest), Mono (one voice, retriggered by each
-// note; let go of the note playing and the highest still held takes over,
-// as on the Protein) or Legato (as Mono, but only a note played from
-// silence restarts the envelopes). Glide moves each new note from the last
-// one played: always (Onset) or only while another key is held (Legato).
-// The sustain pedal holds notes released while it's down.
+// Four layers, A-D, as on the Protein, sharing one pool of eight voices.
+// Each layer has its own patch and plays its notes as Poly (a voice per
+// note: a free one, else the oldest released, else the oldest, from any
+// layer), Mono (one voice, retriggered by each note; let go of the note
+// playing and the highest still held takes over, as on the Protein) or
+// Legato (as Mono, but only a note played from silence restarts the
+// envelopes). Glide moves each new note from the layer's last one: always
+// (Onset) or only while another key is held (Legato). The sustain pedal
+// holds notes released while it's down.
 //
-// It also keeps the MIDI controllers the mod matrix reads (mod_matrix.h)
-// and the two global LFOs. With MPE on, channel 1 is the master channel
-// and each other channel carries one note: its pitch bend (over 48
-// semitones, or none with Bend Range at 0, as on the Protein), CC 74 (MPE
-// Y) and pressure (the Poly AT source).
+// Notes reach the layers by the layer mode: Single plays the selected
+// layer; the Multi modes play the active layers, all of them on each note
+// (Layered), the next one up on each note (Round Robin), one at random
+// (Random Robin), or each on its own MIDI channel (MIDI Split, from the
+// split channel up; layer A can take every channel too). A note is let go
+// on the layers it went to.
 //
-// The patch is the Pod's and the web page's values, as they set them:
+// It also keeps the MIDI controllers the mod matrix reads (mod_matrix.h),
+// shared by every layer, and each layer's two global LFOs. With MPE on
+// (not in MIDI Split, which uses the channels itself), channel 1 is the
+// master channel and each other channel carries one note: its pitch bend
+// (over 48 semitones, or none with Bend Range at 0, as on the Protein), CC
+// 74 (MPE Y) and pressure (the Poly AT source).
+//
+// The voices render into three buses by their layer's FX routing (dry,
+// into FX 1, into FX 2), for FxChain to finish.
+//
+// The patches are the Pod's and the web page's values, as they set them:
 // knobs 0..1 and choices as indices. The engine maps them to units, so the
 // mappings live in one place (web/js/apps/wavebyte.js shows the same).
 //
-// Call the note functions and SetPatch from the audio callback, then
-// Process once per block. libDaisy-free.
+// Call the note functions, SetGlobal and SetPatch from the audio callback,
+// then Process once per block. libDaisy-free.
 
 #pragma once
 
@@ -28,6 +41,8 @@
 
 #include <cmath>
 
+#include "dsp.h"
+#include "fx_params.h"
 #include "lfo.h"
 #include "mod_matrix.h"
 #include "voice.h"
@@ -38,6 +53,7 @@ class SynthEngine
 {
   public:
     static constexpr int kVoices = 8;
+    static constexpr int kLayers = 4;
 
     enum VoiceMode
     {
@@ -63,6 +79,19 @@ class SynthEngine
         kNumOscModes,
     };
 
+    // How notes reach the layers: the Protein's Single mode, then its Multi
+    // modes.
+    enum LayerMode
+    {
+        kSingle,
+        kLayered,
+        kRoundRobin,
+        kRandomRobin,
+        kMidiSplit,
+        kNumLayerModes,
+    };
+
+    // One layer's sound.
     struct Patch
     {
         struct Osc
@@ -92,9 +121,7 @@ class SynthEngine
         float dirt       = 0.0f;
         int   dirt_type  = Dirt::kStatic;
 
-        float flavour  = 0.0f;
-        float dac      = 0.3f;
-        int   osc_mode = kOsc8Bit;
+        int osc_mode = kOsc8Bit;
 
         // Wave, filter and amp envelopes: attack, decay, sustain, release.
         float env[Voice::kNumEnvs][4] = {
@@ -125,7 +152,20 @@ class SynthEngine
             float target = 0.0f;
         } mod[mod::kSlots];
 
-        bool mpe = false;
+        int routing = kFxSerial; // FxRouting: dry, through FX 1 and FX 2, or FX 2 only
+    };
+
+    // What the layers share.
+    struct Global
+    {
+        int   layer_mode    = kSingle;
+        int   selected      = 0; // the layer Single plays (and the Pod edits)
+        bool  active[kLayers] = {true, false, false, false}; // in the Multi modes
+        int   split_channel = 0;     // MIDI Split: layer A's channel (0-15); B-D the next ones up
+        bool  all_channels  = false; // MIDI Split: layer A takes every channel too
+        float flavour       = 0.0f;
+        float dac           = 0.3f;
+        bool  mpe           = false;
     };
 
     // A knob across a list of n: which one.
@@ -142,7 +182,7 @@ class SynthEngine
         return a * fabsf(a);
     }
 
-    // What the web page shows: the voice last started.
+    // What the web page shows: a layer's voice last started.
     struct Probe
     {
         float wave[2]; // 0..63
@@ -156,7 +196,9 @@ class SynthEngine
 
     void Init(const Wavetables *tables, float sample_rate, size_t block_size);
 
-    void SetPatch(const Patch &p);
+    // Each block: the global settings first, then every layer's patch.
+    void SetGlobal(const Global &g);
+    void SetPatch(int layer, const Patch &p);
 
     // channel: 0-15 (MIDI channel 1-16). Without MPE it only follows the
     // note, for the matrix.
@@ -173,10 +215,15 @@ class SynthEngine
     // block, and true after MIDI Start, which puts them back to the start.
     void Clock(float beats, bool restart);
 
-    // Writes (not adds) one block.
-    void Process(float *l, float *r, size_t size);
+    // Writes (not adds) one block into each bus, by FxRouting: l[kFxDry],
+    // l[kFxSerial] and l[kFxOnlyTwo], and the same for r.
+    void Process(float *const l[kNumFxRoutings], float *const r[kNumFxRoutings], size_t size);
 
-    Probe GetProbe() const;
+    // The routings in use (a bit each): those of the layers that play, and
+    // of any still sounding. The effects a routing needs keep running.
+    int Routes() const;
+
+    Probe GetProbe(int layer) const;
 
     // The patch's values in units, for the engine and the page alike.
     static int   Semitones(float x) { return (int)(x * 48.0f + 0.5f) - 24; }
@@ -190,33 +237,51 @@ class SynthEngine
   private:
     static constexpr int kMaxHeld = 16;
 
+    struct Layer
+    {
+        Patch        patch;
+        Voice::Frame frame = {};
+        float        glide_set = -1.0f; // the settings frame's coefficients are for
+        float        env_set[Voice::kNumEnvs][4] = {{-1.0f}, {-1.0f}, {-1.0f}};
+        Lfo          lfo[2];             // Free Global and Clocked
+        float        lfo_beats[2] = {4.0f, 4.0f}; // Clocked: a cycle's length
+        int          held[kMaxHeld];     // keys down, oldest first
+        int          num_held   = 0;
+        float        velocity   = 1.0f;  // the last note's
+        int          channel    = 0;     // ... and its channel
+        float        last_note  = 60.0f; // where the next glide starts
+        int          last_voice = -1;    // the voice last started, for the page and Free Global
+        int          mono_voice = -1;    // Mono and Legato: the voice playing
+    };
+
+    // The layers a note on this channel goes to (a bit each).
+    int  Route(int channel);
+    int  SplitLayers(int channel) const;
+    bool Plays(int layer) const;
+    void LayerNoteOn(int layer, int note, float velocity, int channel);
+    void LayerNoteOff(int layer, int note, float velocity, int channel);
+    void LayerNotesOff(int layer);
     int  Allocate();
-    void Play(Voice &v, int note, float velocity, bool retrigger, bool held_before, int channel);
-    void MonoTo(int note, float velocity, bool retrigger, bool held_before, int channel);
-    bool Held(int note) const;
+    void Play(int layer, int voice, int note, float velocity, bool retrigger, bool held_before, int channel);
+    void MonoTo(int layer, int note, float velocity, bool retrigger, bool held_before, int channel);
 
     const Wavetables *tables_ = nullptr;
     float             sample_rate_ = 48000.0f, block_rate_ = 3000.0f;
     Voice             voices_[kVoices];
-    Voice::Frame      frame_ = {};
-    Patch             patch_;
-    float             glide_set_ = -1.0f; // the settings frame_'s coefficients are for
-    float             dac_set_   = -1.0f;
+    Layer             layers_[kLayers];
+    Global            global_;
+    float             dac_set_  = -1.0f; // the setting dac_step_ is for
+    float             dac_step_ = 0.0f;
     mod::Controllers  controllers_;
-    Lfo               global_lfo_[2];
     float             clock_beats_   = 0.0f; // since the last block
     bool              clock_restart_ = false;
-    float             env_set_[Voice::kNumEnvs][4] = {{-1.0f}, {-1.0f}, {-1.0f}};
     uint32_t          started_ = 0; // notes so far, to age the voices
-    int               last_voice_ = 0;
-    float             last_note_ = 60.0f; // where the next glide starts
     bool              sustain_ = false;
+    int               robin_   = kLayers - 1; // Round Robin: the layer last played
+    dsp::Rng          rng_;                  // Random Robin
 
-    // Keys down, oldest first.
-    int   held_[kMaxHeld];
-    int   num_held_ = 0;
-    float velocity_ = 1.0f; // the last note's
-    int   channel_  = 0;    // ... and its channel
-    float lfo_beats_[2] = {4.0f, 4.0f}; // Clocked: a cycle's length
-    bool  sustained_[128] = {}; // released while the pedal was down
+    // By note, a bit per layer: the layers it went to, and those holding it
+    // for the sustain pedal.
+    uint8_t note_layers_[128] = {};
+    uint8_t sustained_[128]   = {};
 };

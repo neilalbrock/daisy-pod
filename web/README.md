@@ -64,7 +64,10 @@ modules, with no build step.
   rest in columns. Every card lays out knobs, then choices (segmented
   controls), then switches (toggles with a light, triggers with a ring). Drag
   a knob up and down (Shift for fine), scroll it, or use the arrow keys.
-  Moving a control on the Pod or over MIDI moves it here too.
+  Moving a control on the Pod or over MIDI moves it here too. Groups named
+  `<tab>/<card>` (wavebyte's layers, `B/Filter`) go in tabs over the rest,
+  one tab's cards at a time, their parameters' labels without the tab in
+  front (`B: Cutoff` shows as Cutoff).
 
 ## How it talks to the Pod
 
@@ -121,7 +124,11 @@ On the page, add `js/apps/<app>.js` for colours and units if you like; the
 plain controls work without it. Its `menu(name)` can return a list of names
 for a continuous parameter that picks from a list (a knob stepping through
 it on the Pod, as wavebyte's mod matrix sources do): the page shows a
-drop-down, and sends the middle of the chosen item's step, (i + 0.5) / n. It can also give a `View`, a class with the
+drop-down, and sends the middle of the chosen item's step, (i + 0.5) / n.
+`tabParam` names a choice parameter whose options are the tabs (wavebyte's
+Layer): the tab bar becomes its control, so picking a tab sets it and the
+Pod setting it picks the tab. `optionColour(name, i)` colours a choice's
+options (the tabs too). It can also give a `View`, a class with the
 buffer view's methods (`setLayout`, `addOverview`, `setFrame`, `draw`, and
 optionally `status`, a line for the panel's head), to draw the buffer section
 its own way under its own `scopeTitle`, as driftnet does with

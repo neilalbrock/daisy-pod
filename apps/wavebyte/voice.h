@@ -27,8 +27,9 @@
 // (crossover distortion, where every bit flips), which roughens quiet
 // sounds most.
 //
-// The engine fills a Frame (what all voices share this block) and calls
-// Render on each sounding voice. libDaisy-free.
+// The engine fills a Frame per layer (what that layer's voices share this
+// block) and calls Render on each sounding voice with its layer's.
+// libDaisy-free.
 
 #pragma once
 
@@ -54,7 +55,7 @@ class Voice
         kNumEnvs,
     };
 
-    // This block's settings, shared by every voice.
+    // This block's settings, shared by every voice of a layer.
     struct Frame
     {
         struct Osc
@@ -95,6 +96,7 @@ class Voice
         float      lfo_rate[2]; // Free Voice: cycles per block
         Lfo::Shape lfo_shape[2];
         Lfo::Mode  lfo_mode[2];
+        float      global_lfo[2]; // the layer's Free Global and Clocked LFOs this block
 
         mod::Slot                slots[mod::kSlots]; // the ones in use
         int                      num_slots;
@@ -122,6 +124,10 @@ class Voice
     // Adds this block's samples into l and r (which nothing else points
     // into, so the filter's state can stay in registers).
     void Render(const Frame &f, float *__restrict l, float *__restrict r, size_t size);
+
+    // The layer playing it (the engine's: 0..3).
+    void SetLayer(int layer) { layer_ = layer; }
+    int  Layer() const { return layer_; }
 
     bool     Active() const { return !env_[kAmpEnv].Idle(); }
     bool     Released() const { return env_[kAmpEnv].Released(); }
@@ -166,6 +172,7 @@ class Voice
     float             sample_rate_ = 48000.0f, block_rate_ = 3000.0f, inv_sample_rate_ = 1.0f / 48000.0f;
     dsp::Rng          rng_;
 
+    int      layer_    = 0;
     int      note_     = 60;
     float    velocity_ = 1.0f;
     float    pitch_    = 60.0f; // gliding towards note_

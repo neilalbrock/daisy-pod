@@ -158,7 +158,7 @@ void Voice::Modulate(const Frame &f)
             lfo_out_[i] = lfo_[i].Advance(rate, f.lfo_shape[i]);
         }
         else
-            lfo_out_[i] = f.controllers->lfo[i];
+            lfo_out_[i] = f.global_lfo[i];
     }
 
     for(float &m : mod_)

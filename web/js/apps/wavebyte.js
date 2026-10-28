@@ -1,5 +1,7 @@
 // Wavebyte's touches on the generic page: the Pod's page colours (LED 2,
-// Hue(page / 11)) and readable units. Matches apps/wavebyte/main.cpp and
+// Hue(page / 11)), readable units, and a tab per layer. A layer's cards
+// and parameters come with the layer's letter ("B/Filter", "B: Cutoff"),
+// which the page leaves out, so the names here are the plain ones. Matches apps/wavebyte/main.cpp and
 // synth_engine.h, adsr.h, voice_filter.h, lfo.h, mod_matrix.h and
 // fx_params.h / fx_effects.h.
 
@@ -213,7 +215,15 @@ for (let n = 1; n <= 8; n++) {
   MENUS[`Mod ${n} Target`] = TARGETS;
 }
 
+// The layers' colours, as LED 1 shows the layer edited (main.cpp's
+// kLayerHues).
+const LAYER_HUES = [0.0, 0.15, 0.33, 0.83];
+
 export default {
+  // Each layer's cards are a tab; the Layer parameter (the layer the Pod
+  // edits) picks it.
+  tabParam: "Layer",
+  optionColour: (name, i) => (name === "Layer" ? hue(LAYER_HUES[i]) : undefined),
   menu: (name) => MENUS[name],
   tracesTitle: "Last voice",
   groupColour: (name) =>

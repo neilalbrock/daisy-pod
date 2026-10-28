@@ -1,10 +1,12 @@
 // Wavebyte - the effects chain
 //
 // Two global slots, as on the Protein, each running one of the nine
-// effects (fx_effects.h) or none. Routing sends the voices dry, through
-// FX 1 then FX 2, or through FX 2 only. A type can be in one slot at a
-// time: if FX 2 is set to FX 1's type it stays silent (dry), where the
-// Protein won't offer it.
+// effects (fx_effects.h) or none. Each layer's routing sends its voices
+// dry, through FX 1 then FX 2, or through FX 2 only, so the engine hands
+// over three buses: FX 1 runs on its own, then FX 2 on what it gave plus
+// the FX 2 bus, then the dry bus joins. A slot runs while some layer's
+// routing needs it. A type can be in one slot at a time: if FX 2 is set
+// to FX 1's type it stays silent (dry), where the Protein won't offer it.
 //
 // A change of type or routing fades the slot out (10 ms), starts the new
 // effect afresh (the reverb's tank is emptied over a few blocks first) and
@@ -34,7 +36,7 @@ class FxChain
     struct Settings
     {
         FxType       type[2];
-        FxRouting    routing;
+        int          routes; // the routings in use, a bit each (SynthEngine::Routes)
         const float *values;           // kNumFxParams, 0..1
         float        samples_per_beat; // the tempo, for Delay Sync
     };
@@ -43,8 +45,10 @@ class FxChain
 
     void Set(const Settings &s, size_t size);
 
-    // In place.
-    void Process(float *l, float *r, size_t size);
+    // The three buses, by FxRouting (l[kFxDry], l[kFxSerial],
+    // l[kFxOnlyTwo]; the same for r), in place: the result is in the dry
+    // bus.
+    void Process(float *const l[kNumFxRoutings], float *const r[kNumFxRoutings], size_t size);
 
     // What each slot is running (kFxOff while it changes).
     FxType Running(int slot) const { return slots_[slot].fade > 0.0f ? slots_[slot].running : kFxOff; }
@@ -61,6 +65,7 @@ class FxChain
     void Start(FxType type);
     void SetEffect(FxType type, const float *values, size_t size);
     void Run(FxType type, float *l, float *r, size_t size);
+    void RunSlot(Slot &slot, float *l, float *r, size_t size);
 
     fx::Context    context_ = {48000.0f, 3000.0f, 24000.0f};
     float          fade_step_ = 0.002f; // per sample: 10 ms

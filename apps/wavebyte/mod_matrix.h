@@ -90,8 +90,7 @@ struct Slot
     float  amount; // in the target's units
 };
 
-// What all voices read: the MIDI controllers (0..1, bend -1..1) and the
-// global LFOs. With MPE, channel 1 is the master channel and every other
+// What all voices read: the MIDI controllers (0..1, bend -1..1). With MPE, channel 1 is the master channel and every other
 // channel carries one note's bend (-1..1, of 48 semitones), Y (CC 74) and
 // pressure.
 struct Controllers
@@ -103,7 +102,6 @@ struct Controllers
     float expression = 1.0f; // full until a pedal says otherwise
     float breath     = 0.0f;
     float cc[10]     = {};   // CC 22-31
-    float lfo[2]     = {};   // the global LFOs this block
     bool  mpe        = false;
 
     float channel_bend[16]     = {};

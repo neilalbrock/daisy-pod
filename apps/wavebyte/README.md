@@ -6,7 +6,9 @@ as the Microwave's chip did (or smoothly, in Clean mode), and Dirt's
 noises. A filter follows, after the Protein's model of the CEM chip, or a
 Drive in its place, then an amplifier that models the voice's DAC, and
 three envelopes. Two LFOs and an 8-slot mod matrix move it, Flavour adds
-small, steady variations, and two effect slots finish it. Play it over
+small, steady variations, and two effect slots finish it. As on the
+Protein, four layers, each a sound of its own, share the eight voices:
+play one, or several together, in turn or by MIDI channel. Play it over
 MIDI (MPE too), or with button 1.
 
 ```sh
@@ -16,16 +18,18 @@ make APP=wavebyte program-dfu
 Every control is also on the [web page](#the-web-page). Eight
 [presets](#presets) are kept in flash.
 
-This is the fourth of several stages (see [Roadmap](#roadmap)). It has one
-layer, the oscillators, Dirt, filter, envelopes, voice modes, glide,
-Flavour, the DAC model, the LFOs, the mod matrix, aftertouch, MPE and the
-effects. Next come the arpeggiator and sequencer, then the Protein's four
-layers.
+This is the sixth of several stages (see [Roadmap](#roadmap)). It has the
+oscillators, Dirt, filter, envelopes, voice modes, glide, Flavour, the DAC
+model, the LFOs, the mod matrix, aftertouch, MPE, the effects and the
+Protein's four [layers](#layers). The arpeggiator and sequencer are
+parked: a DAW or sequencer does their job.
 
 ## Signal flow
 
 ```
-per voice (8):
+notes -> layers A-D (Single, Layered, Round Robin, Random Robin, MIDI Split)
+
+per voice (8, shared by the layers; each plays its layer's sound):
   osc 1 (table, wave) --+
   osc 2 (table, wave) --+-- + Dirt -> filter or Drive -> amp, DAC (pan) --+
                                                                           |
@@ -33,8 +37,10 @@ per voice (8):
   Flavour -> waves, osc 1 pitch, cutoff, level                            |
   mod matrix (8 slots): envelopes, LFOs, MIDI -> 26 targets               |
                                                                           |
-all voices -------------------------------------------------------------- + -> FX 1 -> FX 2 -> Master -> limiter -> out
-                                                       (or FX 2 only, or dry)
+by the voice's layer's routing:                                           |
+  FX 1 > FX 2: ----------------------------> FX 1 --+                     |
+  FX 2 only:   -------------------------------------+-> FX 2 --+          |
+  Dry:         --------------------------------------------------+ -> Master -> limiter -> out
 ```
 
 ## Wavetables
@@ -65,11 +71,15 @@ smooth and the top end is softer. It costs a little more CPU.
 The two knobs are shared across eleven pages. Press the encoder to change
 page (LED 2 shows which). As on the Protein's panel, each knob has a second
 job under **Shift** (button 2): hold Shift while turning, or tap it to keep
-it on (LED 1 glows blue) and tap again to let go. After a change of page or
-Shift a knob does nothing until you move it, so values don't jump. Turning
-the encoder sets that page's choice, and LED 2 flashes it for a second. On
-the Filter page, turning it with Shift sets the Dirt type instead, and on
-the FX page, the routing.
+it on (LED 1 glows blue) and tap again to let go. After a change of page,
+Shift or layer a knob does nothing until you move it, so values don't
+jump. Turning the encoder sets that page's choice, and LED 2 flashes it
+for a second. On the Filter page, turning it with Shift sets the Dirt type
+instead, and on the FX page, the routing.
+
+The pages edit the layer picked on the Layer page (page 12). Master,
+Flavour, DAC and the effects are shared by the layers, so they're the same
+whichever layer is picked.
 
 | Page (LED 2) | Knob 1 / Shift | Knob 2 / Shift | Encoder turn |
 |---|---|---|---|
@@ -83,17 +93,20 @@ the FX page, the routing.
 | 8 Character (blue) | Flavour (Shift: the same) | DAC (Shift: the same) | Osc: 8-bit, Clean |
 | 9 LFOs (violet) | Speed / Ratio | Shape / Mode | LFO: 1, 2 |
 | 10 Mod Matrix (purple) | Source / Target | Amount (Shift: the same) | Slot: 1-8 |
-| 11 FX (pink) | Type / Param | Amount / Value | Slot: FX 1, FX 2. With Shift, routing: Dry, FX 1 > FX 2, FX 2 only |
+| 11 FX (pink) | Type / Param | Amount / Value | Slot: FX 1, FX 2. With Shift, the layer's routing: Dry, FX 1 > FX 2, FX 2 only |
 
 | Control | Function |
 |---|---|
 | Encoder press | Next page |
-| Encoder long press (0.6 s) | All notes off (LED 1 flashes red). On the preset page, it saves instead |
-| Page 12 (LED 2: the slot) | Presets: the encoder turn selects a slot (see [Presets](#presets)) |
+| Encoder long press (0.6 s) | All notes off (LED 1 flashes red). On the Layer page, it switches the layer on or off instead, and on the preset page, it saves |
+| Page 12 (LED 2: the layer's colour) | Layers: the encoder turn picks the layer the pages edit, A-D, and with Shift, the mode (see [Layers](#layers)). The knobs do nothing here |
+| Page 13 (LED 2: the slot) | Presets: the encoder turn selects a slot (see [Presets](#presets)) |
 | Button 1 | Play: sounds the play note while held, as the Protein's Play button does. Turn the encoder while holding it to change the note, by octaves with Shift |
 | Button 2 | Shift |
 
-LED 1 shows the last voice's amp envelope, and glows blue with Shift on.
+LED 1 glows in the colour of the layer being edited (A red, B yellow, C
+green, D magenta), lit up by the amp envelope of that layer's last voice,
+and blue with Shift on.
 
 ### What they do
 
@@ -145,18 +158,20 @@ LED 1 shows the last voice's amp envelope, and glows blue with Shift on.
   preset, like the Protein's Volume dial.
 - **Pan:** Fix holds every voice at Pan. Rand 1-5 throws each note further
   from it at random.
-- **Flavour:** small, steady variations, mostly in wave position and
-  pitch, as on the Protein. Each voice drifts at rates of its own, so the
-  variations are methodical rather than random, and each note starts a
-  little differently. At full: both wave positions move about ±3 waves,
-  the cutoff ±0.3 octaves, the level a little per note, and osc 1's pitch
-  drifts by up to 8% of Bend Range (±16 cents at a range of 2). As on the
-  Protein, a Bend Range of 0 means no pitch drift at all.
-- **DAC:** the amplifier models each voice's digital-to-analog converter.
-  The level is applied before conversion, at 12 bits just above 0 down to
-  6 bits at full, so quiet tails and soft notes turn grainy. Each voice's
-  converter also has its own small gain error and a little crossover
-  distortion around zero. At 0 the converter is ideal.
+- **Flavour** (shared by the layers): small, steady variations, mostly in
+  wave position and pitch, as on the Protein. Each voice drifts at rates
+  of its own, so the variations are methodical rather than random, and
+  each note starts a little differently. At full: both wave positions move
+  about ±3 waves, the cutoff ±0.3 octaves, the level a little per note,
+  and osc 1's pitch drifts by up to 8% of the layer's Bend Range (±16
+  cents at a range of 2). As on the Protein, a Bend Range of 0 means no
+  pitch drift at all.
+- **DAC** (shared by the layers): the amplifier models each voice's
+  digital-to-analog converter. The level is applied before conversion, at
+  12 bits just above 0 down to 6 bits at full, so quiet tails and soft
+  notes turn grainy. Each voice's converter also has its own small gain
+  error and a little crossover distortion around zero. At 0 the converter
+  is ideal.
 - **Osc:** 8-bit, or Clean (see [Wavetables](#wavetables)).
 - **LFOs:** two, chosen with the LFO page's encoder turn.
   - **Speed:** 0.02 to 41 Hz, when Free.
@@ -199,11 +214,46 @@ LED 1 shows the last voice's amp envelope, and glows blue with Shift on.
   Envelope sources are a block (0.33 ms) behind, so the envelopes can
   modulate their own rates.
 
+### Layers
+
+Four layers, A-D, as on the Protein. Each is a whole sound: everything
+above but Flavour and DAC, which are shared, as are Master and the effects.
+They share the eight voices: a note takes a free voice, else the oldest
+released, else the oldest, whichever layer has it, so two notes played on
+four layers at once take every voice.
+
+The Layer page (page 12) picks the layer the other pages edit with the
+encoder turn. LED 2 shows its colour there, dim if it doesn't play. With
+Shift, the encoder turn sets the mode:
+
+- **Single:** the layer picked plays (on its own).
+- **Layered:** every active layer plays each note.
+- **Round Robin:** each note goes to the next active layer up, wrapping
+  round from D to A.
+- **Random Robin:** each note goes to an active layer at random.
+- **MIDI Split:** each active layer plays the notes on its own channel:
+  A on the split channel (1 unless the web page sets another), B on the
+  next and so on. **A All Channels** gives layer A every channel too.
+
+A long press on the encoder on the Layer page switches the layer on or off
+(Active, in the Multi modes). Layer A starts active, B-D off, all with the
+same sound. A note is let go on the layers it went to, whatever the mode
+or layer picked has become since. A layer's voice mode is its own: a
+Mono layer plays one voice of the eight, and a Poly layer beside it the
+rest.
+
+Each layer has its own LFOs, so a Free Global LFO is one per layer, not
+one for the whole synth. The fixed CC map sets the layer being edited, or
+in MIDI Split, the layer on the CC's channel. MPE doesn't work in MIDI
+Split, which uses the channels itself.
+
 ### Effects
 
 Two slots after the voices, as on the Protein. The FX page's encoder turn
-picks the slot; with Shift it sets the routing: **Dry** (no effects),
-**FX 1 > FX 2**, or **FX 2 only**. Knob 1 picks the slot's effect, Off or
+picks the slot; with Shift it sets the routing of the layer being edited:
+**Dry** (no effects), **FX 1 > FX 2**, or **FX 2 only**. Each layer has
+its own routing, and a slot runs while a layer that plays (or still
+sounds) is routed through it. Knob 1 picks the slot's effect, Off or
 one of nine, and knob 2 sets its **Amount**, the first value in its list
 below (Dry/Wet for most). With Shift, knob 1 picks a parameter from the
 list and knob 2 sets its **Value**. LED 2 flashes what knob 1 picks: the
@@ -253,8 +303,11 @@ Wavebyte listens on every channel, on the Pod's TRS MIDI input and over USB:
 | Program change 1-8 (sent as 0-7) | Preset slot 1-8 |
 | Clock, Start, Continue, Stop | The tempo for Clocked LFOs |
 
+The CC map sets the layer being edited, or in MIDI Split, the layer on the
+CC's channel. Notes go to the layers by the [layer mode](#layers).
+
 **MPE:** switch it on with MPE on the web page (it's kept with the
-settings, not a preset). Channel 1 is the master channel: its pitch bend,
+settings, not a preset; it doesn't work in MIDI Split). Channel 1 is the master channel: its pitch bend,
 pressure and CCs act on every note. Every other channel carries one note,
 and its pitch bend bends that note over ±48 semitones (none with Bend
 Range at 0, as on the Protein), its CC 74 is MPE Y and its pressure is
@@ -284,7 +337,7 @@ controls.
 Eight preset slots, kept in the Seed's flash, so they survive power-off and
 reflashing. Every app keeps its own.
 
-- **On the Pod:** page 12 is the preset page. Turning the encoder there
+- **On the Pod:** page 13 is the preset page. Turning the encoder there
   selects a slot and loads its preset; an empty slot is only selected,
   keeping the sound, ready to save into. A long press on the encoder saves
   the current settings to the slot. The knobs do nothing on this page.
@@ -295,12 +348,17 @@ reflashing. Every app keeps its own.
 - **On the web page:** a button per slot, and Save. Selecting the slot
   already selected reloads it, dropping any changes.
 
-A preset holds the sound: every knob but Master (the LFOs, mod matrix and
-both FX types among them), every effect's values, the tables and the other
-choices (Dirt type, Osc mode and FX routing among them), Limit Waves and
-Fixed. Master, the play note, MPE and Tempo
-are saved on their own, a few seconds after they last change. At power-up they come back, then
-the preset last selected.
+A preset holds the sound: all four layers (every knob but Master, the
+LFOs and mod matrix among them, the tables and the other choices, Dirt
+type, Osc mode and FX routing among them, Limit Waves, Fixed and Active),
+Flavour, DAC, both FX types, every effect's values, the layer mode, the
+layer picked and A All Channels. Master, the play note, MPE, Tempo and the
+split channel are saved on their own, a few seconds after they last
+change. At power-up they come back, then the preset last selected.
+
+Layer A's settings are stored under the names they had before wavebyte
+had layers, so a preset saved then loads as layer A, leaving B-D and the
+mode as they were.
 
 **Factory reset:** hold both buttons while powering up the Pod (through
 the bootloader's 2.5 s wait) until both LEDs flash white, then let go. Or
@@ -312,11 +370,14 @@ back to its defaults.
 
 Run `make web` and open http://localhost:8000 in Chrome or Edge with the Pod
 connected by USB. The page shows the output level, CPU, and traces of the
-last voice played: both wave positions, its cutoff, its amp envelope,
-Flavour's pitch drift on osc 1, both LFOs as it sees them, and how many
-voices are sounding. Every control is there too, with Limit Waves, Fixed,
-the play note, a Play switch, MPE and Tempo, which the Pod doesn't have. See
-[web/README.md](../../web/README.md).
+last voice played on the layer being edited: both wave positions, its
+cutoff, its amp envelope, Flavour's pitch drift on osc 1, both LFOs as it
+sees them, how many voices are sounding, and how much stack the firmware
+has never used (Stack free: its margin in DTCM). Every control is there
+too, with Limit Waves, Fixed, the play note, a Play switch, MPE, Tempo,
+the split channel and A All Channels, which the Pod doesn't have. Each
+layer's cards are in a tab of their own, A-D, which follows the Pod's
+Layer page both ways. See [web/README.md](../../web/README.md).
 
 ## Roadmap
 
@@ -341,16 +402,18 @@ before the next.
    Chorus, Flanger, Phaser, Tremolo, Drive, Compressor, EQ, Delay and
    Reverb (on `Plate`, in RAM_D2). Each layer goes dry, through FX 1 then
    FX 2, or through FX 2 only.
-5. **Play options:**
+5. **Parked:** Play options. A DAW or sequencer does their job, so they
+   wait unless that changes:
    - Chord and Scale.
    - The arpeggiator: seven directions, octaves, swing, gate, Reset, 16
      rhythms.
    - The 32-step sequencer: pitch offsets and velocity per step, five
      directions, Reset, scale snapping, step recording, 16 patterns.
-6. **Layers:** four, sharing the 8 voices. In Single mode one plays; Multi
-   offers Layered, Round Robin, Random Robin and MIDI Split. About 450
-   parameters in all, which the web link's 14-bit indices and
-   `PresetsFor` already allow. Scoped, with its CPU and memory cost, in
+6. **Built, not yet tried on the Pod:** Layers: four, sharing the 8 voices. In Single mode one plays;
+   Multi offers Layered, Round Robin, Random Robin and MIDI Split. Flavour,
+   DAC and the effects are shared; each layer has its own routing. 413
+   parameters in all. The presets' arrays and the web page's state moved
+   to SDRAM to make room in DTCM. Scoped in
    [docs/layers.md](docs/layers.md).
 7. **Maybe:** CC learn, and importing wavetables from the web page. A
    bank of tables made from the AKWF single cycles is looked at in
