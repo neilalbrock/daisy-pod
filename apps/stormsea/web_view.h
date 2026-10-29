@@ -17,7 +17,7 @@
 namespace web_view
 {
 // Decay to Undertow are the Pod's knob pages in order: page i / 2, knob
-// i % 2. Width, Predelay and Strike are pages 1, 2 and 6's encoder
+// i % 2. Width, Predelay and Rumble are pages 1, 2 and 6's encoder
 // choices.
 enum ParamId
 {
@@ -32,12 +32,12 @@ enum ParamId
     kParamWind,
     kParamRain,
     kParamLightning,
-    kParamThunder,
+    kParamDistance,
     kParamSurge,
     kParamUndertow,
     kParamWidth,
     kParamPredelay,
-    kParamStrike,
+    kParamRumble,
     kParamTrails,
     kParamKillDry,
     kParamActive,

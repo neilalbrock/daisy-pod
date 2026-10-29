@@ -13,7 +13,7 @@ using weblink::Store;
 
 const char *const kWidthNames[]    = {"Narrow", "Medium", "Wide"};
 const char *const kPredelayNames[] = {"0 ms", "15 ms", "30 ms", "60 ms", "120 ms", "240 ms"};
-const char *const kStrikeNames[]   = {"Flash", "Glint", "Fork"};
+const char *const kRumbleNames[]   = {"Low", "Deep", "Reverse"}; // an octave down, two, reversed
 const char *const kGroupNames[]    = {"Page 1", "Page 2", "Page 3", "Page 4", "Page 5", "Page 6", "Page 7", "Switches"};
 const char *const kMeterNames[]    = {"In", "Wet", "Out"};
 
@@ -47,12 +47,12 @@ constexpr weblink::Param kParams[kNumParams] = {
     {"Wind", Kind::kContinuous, 4, nullptr, 0, 0, Store::kPreset},
     {"Rain", Kind::kContinuous, 4, nullptr, 0, 0, Store::kPreset},
     {"Lightning", Kind::kContinuous, 5, nullptr, 0, 0, Store::kPreset},
-    {"Thunder", Kind::kContinuous, 5, nullptr, 0, 0, Store::kPreset},
+    {"Distance", Kind::kContinuous, 5, nullptr, 0, 0, Store::kPreset},
     {"Surge", Kind::kContinuous, 6, nullptr, 0, 0, Store::kPreset},
     {"Undertow", Kind::kContinuous, 6, nullptr, 0, 0, Store::kPreset},
     {"Width", Kind::kChoice, 0, kWidthNames, Count(kWidthNames), 3, Store::kPreset},
     {"Predelay", Kind::kChoice, 1, kPredelayNames, Count(kPredelayNames), 3, Store::kPreset},
-    {"Strike", Kind::kChoice, 5, kStrikeNames, Count(kStrikeNames), 3, Store::kPreset},
+    {"Rumble", Kind::kChoice, 5, kRumbleNames, Count(kRumbleNames), 3, Store::kPreset},
     {"Trails", Kind::kToggle, 7, nullptr, 0, 0, Store::kGlobal},
     {"Kill dry", Kind::kToggle, 7, nullptr, 0, 0, Store::kGlobal},
     {"On", Kind::kToggle, 7, nullptr, 0, 0, Store::kNone},

@@ -1,8 +1,8 @@
 // Stormsea - the sky: Rain, Lightning and Thunder
 //
 //   the sea's output -> the tail ring (SDRAM, about 11 s)
-//   the tail ring -> rain drops (up to 12 at once)  -+-> into the sea
-//                 -> strikes and thunder (4 at once) -+-> heard, in the wet
+//   the tail ring -> rain drops (up to 12 at once) -+-> into the sea
+//                 -> thunder (up to 8 at once)     -+-> heard, in the wet
 //
 // Everything here plays back what the sea has just been doing, so the
 // weather is always made of the tail itself:
@@ -12,14 +12,16 @@
 // level, through a high-pass that brightens them. From a few a second to a
 // downpour.
 //
-// Lightning: strikes at random. Each takes the last 0.15 to 0.5 s of the
-// tail and plays it back an octave up (Flash) or reversed (Glint), or one
-// of the two at random (Fork), with a sharp attack and a quick decay,
-// its top lifted so it's bright.
+// Lightning: strikes at random, and silently: lightning is seen (LED 1,
+// the web page), and thunder is what's heard. Each strike keeps a slice
+// of the tail as it was, for its thunder.
 //
-// Thunder: each strike's slice again, 0.2 to 3 s later, an octave down,
-// low-passed, swelling in and rolling away; the later it comes, the
-// further away it is, so the quieter and darker.
+// Thunder: each strike's slice, after a delay set by Distance (0.15 s near
+// to 5 s far, varied a little each time). The delay sets the rest, as it
+// would outdoors: near thunder is loud and bright with a sharp attack, far
+// thunder quieter, darker, longer, swelling in slowly. Rumble picks what
+// it plays: the slice an octave down, two octaves down, or reversed (an
+// octave down), swelling in towards you and stopping short.
 //
 // What falls into the sea rings there and stays in a frozen sea; the sea
 // wall keeps it from piling up. The amounts come in already scaled by the
@@ -37,24 +39,25 @@
 class Sky
 {
   public:
-    enum Strike
+    enum Rumble
     {
-        kFlash,
-        kGlint,
-        kFork,
-        kNumStrikes,
+        kOctave,
+        kTwoOctaves,
+        kReverse,
+        kNumRumbles,
     };
 
-    static constexpr uint32_t kRingFrames = 1u << 19; // about 11 s: thunder reads up to 4.5 s back
+    static constexpr uint32_t kRingFrames = 1u << 19; // about 11 s: thunder reads up to 9.9 s back
     static constexpr size_t   kFloats     = 2 * kRingFrames;
 
     // mem: kFloats floats (SDRAM is fine: a handful of reads a sample).
     // Init clears it, so call it before audio starts.
     void Init(float sample_rate, size_t block_size, float *mem);
 
-    // Once per block. rain, lightning, thunder: 0..1, scaled by the storm
-    // already; gust: 0..1, the gusts now, which bring more strikes.
-    void Set(float rain, float lightning, float thunder, int strike, float gust);
+    // Once per block. rain, lightning: 0..1, scaled by the storm already;
+    // distance: 0 near .. 1 far; rumble: what thunder plays; gust: 0..1,
+    // the gusts now, which bring more strikes.
+    void Set(float rain, float lightning, float distance, int rumble, float gust);
 
     // Once per sample, before the sea: what falls into it, and what's heard.
     void Render(float *into_l, float *into_r, float *out_l, float *out_r);
@@ -76,10 +79,10 @@ class Sky
     float Thunder() const { return rolling_; }
 
   private:
-    static constexpr int kDrops = 12;
-    static constexpr int kBolts = 4;
+    static constexpr int kDrops    = 12;
+    static constexpr int kThunders = 8; // far thunder waits up to 6.5 s, so several are pending
 
-    // A slice of the ring played back: a rain drop, a strike or thunder.
+    // A slice of the ring played back: a rain drop or thunder.
     struct Voice
     {
         int   wait;     // samples before it starts (thunder)
@@ -91,26 +94,26 @@ class Sky
         float env_step; // 1 / length
         float t;        // 0..1 through it
         float lp1, lp2, coef; // the voice's one-pole filters: states, coefficient
+        float swell;          // thunder: the share of it swelling in
+        float swell_in, swell_out; // and its envelope's half cycles a unit of t, in and out
     };
 
     float Read(float pos) const; // the ring's mid at a fractional frame
     Voice *Free(Voice *voices, int n);
-    void   StartStrike(int strike);
+    void   Strike(int rumble);
 
     float    sample_rate_ = 48000.0f, block_rate_ = 12000.0f;
     float   *ring_        = nullptr;
     uint32_t pos_         = 0;
     dsp::Rng rng_;
 
-    Voice  drops_[kDrops]   = {};
-    Voice  strikes_[kBolts] = {};
-    Voice  thunder_[kBolts] = {};
-    Wander rumble_[kBolts]; // each thunder's roll
-    float  roll_[kBolts] = {};
+    Voice  drops_[kDrops]     = {};
+    Voice  thunder_[kThunders] = {};
+    Wander rumble_[kThunders]; // each thunder's roll
+    float  roll_[kThunders] = {};
 
-    float rain_ = 0.0f, rain_rate_ = 0.0f, strike_rate_ = 0.0f, thunder_amount_ = 0.0f;
-    float drop_hp_ = 0.0f, strike_hp_ = 0.0f; // the drops' high-pass and the strikes' treble corner
-    float attack_step_ = 0.0f;                // a strike's attack, a sample
+    float rain_ = 0.0f, rain_rate_ = 0.0f, strike_rate_ = 0.0f, distance_ = 0.5f;
+    float drop_hp_ = 0.0f; // the drops' high-pass coefficient
     float flash_ = 0.0f, flash_decay_ = 0.0f;
     float rolling_ = 0.0f;
 };

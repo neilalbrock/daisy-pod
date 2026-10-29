@@ -19,7 +19,7 @@ const WIDTH_COLOURS = ["#ff5a5a", "#45d36b", "#4f7dff"]; // narrow red, medium g
 // The predelay: cyan on the Pod, dim to bright.
 const PREDELAY_COLOURS = ["#0b4a4a", "#126e6e", "#1a8f8f", "#22adad", "#2ac4c4", "#33d6d6"];
 
-const STRIKE_COLOURS = ["#aeb6c2", "#8fb3ff", "#f2b630"]; // Flash (white on the Pod), Glint pale blue, Fork yellow
+const RUMBLE_COLOURS = ["#ff8a1a", "#ff3b1f", "#9a4dff"]; // an octave down amber, two red, reversed violet
 
 const INFINITE = 0.96; // StormEngine::kInfinite: Decay from here up holds the sea
 const HELD_DECAY = 999; // web_view.h kHeldDecay: the Decay trace while held
@@ -30,12 +30,14 @@ const seconds = (s) => (s < 10 ? `${s.toFixed(1)} s` : `${Math.round(s)} s`);
 const FORMATS = {
   Decay: (v) => (v >= INFINITE ? "∞" : seconds(0.5 * Math.pow(120, v / INFINITE))),
   Size: (v) => `${Math.round(30 * Math.pow(1 / 0.3, v))}%`,
+  // Thunder's delay, as sky.cpp sets it: 0.15 s near to 5 s far.
+  Distance: (v) => `thunder ${seconds(0.15 * Math.pow(5 / 0.15, v))}`,
 };
 
 const OPTION_COLOURS = {
   Width: WIDTH_COLOURS,
   Predelay: PREDELAY_COLOURS,
-  Strike: STRIKE_COLOURS,
+  Rumble: RUMBLE_COLOURS,
 };
 
 export default {

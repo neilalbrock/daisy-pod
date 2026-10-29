@@ -85,10 +85,10 @@ class StormEngine
         float wind      = 0.5f; // each element's part in the storm, 0..1
         float rain      = 0.3f;
         float lightning = 0.3f;
-        float thunder   = 0.5f;
+        float distance  = 0.5f; // how far off the storm is: thunder's delay, 0.15 s to 5 s
         float surge     = 0.4f;
         float undertow  = 0.2f;
-        int   strike    = Sky::kFlash;
+        int   rumble    = Sky::kOctave; // what thunder plays
         bool  calm      = false; // held: the storm dies down
         bool  squall    = false; // held: the storm rises to full
     };

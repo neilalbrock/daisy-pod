@@ -18,38 +18,34 @@ constexpr float kDropFurthest = 0.5f;
 constexpr float kDropRates[]  = {1.0f, 1.5f, 2.0f};
 constexpr float kDropHighPass = 600.0f; // Hz
 
-// Lightning: strikes a second at full lightning (more in the gusts), the
-// slice's length, the attack, and the treble boost: the slice plus this
-// much again of what's above the corner. A high-pass alone left a dark
-// tail's strike with next to nothing.
-constexpr float kMaxStrikes     = 0.5f;
-constexpr float kGustStrikes    = 2.0f; // a full gust triples the rate
-constexpr float kSliceShortest  = 0.15f; // s
-constexpr float kSliceLongest   = 0.5f;
-constexpr float kStrikeAttack   = 0.003f; // s
-constexpr float kStrikeCorner   = 1000.0f; // Hz
-constexpr float kStrikeTreble   = 2.0f;
-constexpr float kStrikeDecay    = -8.66f; // log2 of the level at the end: about -52 dB
-// A strike's ceiling, through a soft clip: lifting the top of a bright
-// tail (white noise, at worst) took a strike 19 dB over it.
-constexpr float kStrikeCeiling  = 0.5f;
+// Lightning: strikes a second at full lightning (more in the gusts).
+constexpr float kMaxStrikes  = 0.5f;
+constexpr float kGustStrikes = 2.0f; // a full gust triples the rate
 
-// Thunder: how long after its strike, and its low-pass, near and far.
-constexpr float kThunderSoonest = 0.2f; // s
-constexpr float kThunderLatest  = 3.0f;
-constexpr float kThunderNear    = 300.0f; // Hz
+// Thunder: its delay at Distance 0 and 1 (each strike's varies by up to
+// kDelaySpread either way), and what the delay brings, near to far: the
+// slice of tail it plays, its low-pass, the share of it swelling in, and
+// its level (far is 5 dB down, and darker). Reversed thunder swells in
+// over most of it and stops short.
+constexpr float kThunderSoonest = 0.15f; // s
+constexpr float kThunderLatest  = 5.0f;
+constexpr float kDelaySpread    = 0.3f;
+constexpr float kSliceNear      = 0.12f; // s
+constexpr float kSliceFar       = 0.7f; // two octaves down plays it 4x as long: the ring's 11 s holds 9.9 s back
+constexpr float kThunderNear    = 900.0f; // Hz
 constexpr float kThunderFar     = 120.0f;
-constexpr float kThunderSwell   = 0.35f; // of its length, swelling in
-constexpr float kSwellIn        = 0.5f / kThunderSwell; // the envelope's half cycles a unit of t
-constexpr float kSwellOut       = 0.5f / (1.0f - kThunderSwell);
+constexpr float kSwellNear      = 0.06f;
+constexpr float kSwellFar       = 0.4f;
+constexpr float kSwellReverse   = 0.8f;
+constexpr float kFarLevel       = 0.56f;
+constexpr float kRumbleRates[Sky::kNumRumbles] = {0.5f, 0.25f, -0.5f};
+constexpr float kRumbleLevels[Sky::kNumRumbles] = {1.0f, 0.7f, 1.0f}; // two octaves down keeps more under the low-pass
 
 // Each one's level, into the sea and heard.
-constexpr float kDropGain     = 1.5f;
-constexpr float kStrikeGain   = 4.0f;
-constexpr float kThunderGain  = 5.0f;
-constexpr float kRainIn       = 0.35f, kRainOut = 1.0f;
-constexpr float kStrikeIn     = 0.4f, kStrikeOut = 1.0f;
-constexpr float kThunderIn    = 0.6f, kThunderOut = 1.0f;
+constexpr float kDropGain    = 1.5f;
+constexpr float kThunderGain = 5.0f;
+constexpr float kRainIn      = 0.35f, kRainOut = 1.0f;
+constexpr float kThunderIn   = 0.6f, kThunderOut = 1.0f;
 
 float OnePole(float hz, float sample_rate)
 {
@@ -74,10 +70,8 @@ void Sky::Init(float sample_rate, size_t block_size, float *mem)
     pos_ = 0;
     rng_.Seed(0x5C1E5u);
     drop_hp_     = OnePole(kDropHighPass, sample_rate);
-    strike_hp_   = OnePole(kStrikeCorner, sample_rate);
-    attack_step_ = 1.0f / (kStrikeAttack * sample_rate);
     flash_decay_ = expf(-1.0f / (0.06f * block_rate_));
-    for(int i = 0; i < kBolts; i++)
+    for(int i = 0; i < kThunders; i++)
         rumble_[i].Init(0.04f, 0.15f, block_rate_, 0xB00Bu + 31u * i);
 }
 
@@ -89,67 +83,48 @@ Sky::Voice *Sky::Free(Voice *voices, int n)
     return nullptr;
 }
 
-void Sky::StartStrike(int strike)
+void Sky::Strike(int rumble)
 {
-    Voice *v = Free(strikes_, kBolts);
-    if(!v)
+    flash_ = 1.0f;
+    Voice *t = Free(thunder_, kThunders);
+    if(!t)
         return;
-    float frames = rng_.Range(kSliceShortest, kSliceLongest) * sample_rate_;
-    // The slice ends a little before now, so a Flash, reading at twice
-    // the speed, never catches up with what's being written.
-    float start = (float)pos_ - frames - 64.0f;
+    rumble = rumble < 0 ? 0 : (rumble >= kNumRumbles ? kNumRumbles - 1 : rumble);
+
+    // How far off this one is: Distance's delay, varied, then what the
+    // delay brings with it.
+    float delay = kThunderSoonest * powf(kThunderLatest / kThunderSoonest, distance_);
+    delay *= rng_.Range(1.0f - kDelaySpread, 1.0f + kDelaySpread);
+    float far = Clamp(logf(delay / kThunderSoonest) / logf(kThunderLatest / kThunderSoonest), 0.0f, 1.0f);
+
+    // The slice of tail as it is now, ending a little before the write.
+    float frames = Lerp(kSliceNear, kSliceFar, far) * rng_.Range(0.8f, 1.2f) * sample_rate_;
+    float start  = (float)pos_ - frames - 64.0f;
     if(start < 0.0f)
         start += (float)kRingFrames;
-    if(strike == kFork)
-        strike = rng_.Uni() < 0.5f ? kFlash : kGlint;
 
-    *v = Voice{};
-    if(strike == kFlash)
-    {
-        v->pos    = start;
-        v->rate   = 2.0f;
-        v->length = (int)(0.5f * frames);
-    }
-    else
-    {
-        v->pos  = start + frames;
-        v->rate = -1.0f;
-        v->length = (int)frames;
-        if(v->pos >= (float)kRingFrames)
-            v->pos -= (float)kRingFrames;
-    }
-    v->left     = v->length;
-    v->env_step = 1.0f / (float)v->length;
-    v->coef     = strike_hp_;
-    Pan(1.0f, rng_.Range(0.2f, 0.8f), &v->gain_l, &v->gain_r); // its gain is in Render, before its clip
-    flash_ = 1.0f;
-
-    // Its thunder, the further off the later.
-    if(thunder_amount_ <= 0.0f)
-        return;
-    int i = 0;
-    while(i < kBolts && thunder_[i].left > 0)
-        i++;
-    if(i == kBolts)
-        return;
-    Voice &t    = thunder_[i];
-    float delay = rng_.Range(kThunderSoonest, kThunderLatest);
-    float far   = (delay - kThunderSoonest) / (kThunderLatest - kThunderSoonest);
-    t           = Voice{};
-    t.wait      = (int)(delay * sample_rate_);
-    t.pos       = start;
-    t.rate      = 0.5f;
-    t.length    = (int)(2.0f * frames);
-    t.left      = t.length;
-    t.env_step  = 1.0f / (float)t.length;
-    t.coef      = OnePole(kThunderNear * powf(kThunderFar / kThunderNear, far), sample_rate_);
-    Pan(kThunderGain * thunder_amount_ * (1.0f - 0.7f * far), rng_.Range(0.35f, 0.65f), &t.gain_l, &t.gain_r);
+    float rate = kRumbleRates[rumble];
+    *t         = Voice{};
+    t->wait    = (int)(delay * sample_rate_);
+    t->rate    = rate;
+    t->pos     = rate < 0.0f ? start + frames : start;
+    if(t->pos >= (float)kRingFrames)
+        t->pos -= (float)kRingFrames;
+    t->length    = (int)(frames / fabsf(rate));
+    t->left      = t->length;
+    t->env_step  = 1.0f / (float)t->length;
+    t->coef      = OnePole(kThunderNear * powf(kThunderFar / kThunderNear, far), sample_rate_);
+    t->swell     = rumble == kReverse ? kSwellReverse : Lerp(kSwellNear, kSwellFar, far);
+    t->swell_in  = 0.5f / t->swell;
+    t->swell_out = 0.5f / (1.0f - t->swell);
+    float level  = kThunderGain * kRumbleLevels[rumble] * Lerp(1.0f, kFarLevel, far);
+    Pan(level, rng_.Range(0.3f, 0.7f), &t->gain_l, &t->gain_r);
 }
 
-void Sky::Set(float rain, float lightning, float thunder, int strike, float gust)
+void Sky::Set(float rain, float lightning, float distance, int rumble, float gust)
 {
-    rain_           = Clamp(rain, 0.0f, 1.0f);
-    thunder_amount_ = Clamp(thunder, 0.0f, 1.0f);
+    rain_     = Clamp(rain, 0.0f, 1.0f);
+    distance_ = Clamp(distance, 0.0f, 1.0f);
     flash_ *= flash_decay_;
 
     // A drop or a strike starts in this block with the chance its rate
@@ -177,16 +152,16 @@ void Sky::Set(float rain, float lightning, float thunder, int strike, float gust
     float l      = Clamp(lightning, 0.0f, 1.0f);
     strike_rate_ = kMaxStrikes * l * (1.0f + kGustStrikes * Clamp(gust, 0.0f, 1.0f));
     if(strike_rate_ > 0.0f && rng_.Uni() * block_rate_ < strike_rate_)
-        StartStrike(strike);
+        Strike(rumble);
 
     rolling_ = 0.0f;
-    for(int i = 0; i < kBolts; i++)
+    for(int i = 0; i < kThunders; i++)
     {
         const Voice &v = thunder_[i];
         if(v.left <= 0 || v.wait > 0)
             continue;
         roll_[i] = 0.65f + 0.35f * rumble_[i].Next();
-        float env = v.t < kThunderSwell ? v.t / kThunderSwell : (1.0f - v.t) / (1.0f - kThunderSwell);
+        float env = v.t < v.swell ? v.t / v.swell : (1.0f - v.t) / (1.0f - v.swell);
         rolling_ += env * roll_[i] * (v.gain_l + v.gain_r) * (0.5f / kThunderGain);
     }
 }
@@ -226,31 +201,8 @@ void Sky::Render(float *into_l, float *into_r, float *out_l, float *out_r)
         v.left--;
     }
 
-    // Lightning: a sharp attack, then dying away, with its top lifted.
-    for(Voice &v : strikes_)
-    {
-        if(v.left <= 0)
-            continue;
-        float x = Read(v.pos);
-        v.lp1 += v.coef * (x - v.lp1);
-        float attack = fminf((float)(v.length - v.left) * attack_step_, 1.0f);
-        x            = attack * FastExp2(kStrikeDecay * v.t) * (x + kStrikeTreble * (x - v.lp1));
-        x            = kStrikeCeiling * SoftClip(kStrikeGain / kStrikeCeiling * x);
-        in_l += kStrikeIn * v.gain_l * x;
-        in_r += kStrikeIn * v.gain_r * x;
-        o_l += kStrikeOut * v.gain_l * x;
-        o_r += kStrikeOut * v.gain_r * x;
-        v.t += v.env_step;
-        v.pos += v.rate;
-        if(v.pos < 0.0f)
-            v.pos += ring;
-        else if(v.pos >= ring)
-            v.pos -= ring;
-        v.left--;
-    }
-
     // Thunder: waits, then swells in and rolls away through two low-passes.
-    for(int i = 0; i < kBolts; i++)
+    for(int i = 0; i < kThunders; i++)
     {
         Voice &v = thunder_[i];
         if(v.left <= 0)
@@ -264,9 +216,8 @@ void Sky::Render(float *into_l, float *into_r, float *out_l, float *out_r)
         v.lp1 += v.coef * (x - v.lp1);
         v.lp2 += v.coef * (v.lp1 - v.lp2);
         // Half a cosine up, then half a cosine down.
-        float env = v.t < kThunderSwell
-                        ? 0.5f - 0.5f * FastSin(kSwellIn * v.t + 0.25f)
-                        : 0.5f + 0.5f * FastSin(kSwellOut * (v.t - kThunderSwell) + 0.25f);
+        float env = v.t < v.swell ? 0.5f - 0.5f * FastSin(v.swell_in * v.t + 0.25f)
+                                  : 0.5f + 0.5f * FastSin(v.swell_out * (v.t - v.swell) + 0.25f);
         x = env * roll_[i] * v.lp2;
         in_l += kThunderIn * v.gain_l * x;
         in_r += kThunderIn * v.gain_r * x;
@@ -274,7 +225,9 @@ void Sky::Render(float *into_l, float *into_r, float *out_l, float *out_r)
         o_r += kThunderOut * v.gain_r * x;
         v.t += v.env_step;
         v.pos += v.rate;
-        if(v.pos >= ring)
+        if(v.pos < 0.0f)
+            v.pos += ring;
+        else if(v.pos >= ring)
             v.pos -= ring;
         v.left--;
     }

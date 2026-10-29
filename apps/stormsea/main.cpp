@@ -24,8 +24,11 @@
 //   Page 5 Wind and Rain         Knob 1 - Wind: the tail churns, and whistles
 //          (LED 2 white)         Knob 2 - Rain: drops of the tail, sparkling
 //   Page 6 Lightning             Knob 1 - Lightning: how often it strikes
-//          (LED 2 yellow)        Knob 2 - Thunder: how loud it rolls after
-//                                Encoder - Strike: Flash, Glint, Fork
+//          (LED 2 yellow)                 (silently: thunder is the sound)
+//                                Knob 2 - Distance: how far off the storm is,
+//                                         so how long until the thunder
+//                                Encoder - Rumble: what thunder plays: an
+//                                          octave down, two, or reversed
 //   Page 7 Surge (LED 2 red)     Knob 1 - Surge: the tail swells, then boils
 //                                Knob 2 - Undertow: the tail churns and sinks
 //   (a limiter holds dry + wet under -1 dBFS)
@@ -49,14 +52,14 @@
 // flashing white at each lightning strike. It glows pale moonlight white
 // while frozen. Turning the encoder flashes LED 2 with the choice: red,
 // green or blue for the widths, the predelay as cyan, dim to bright, and
-// white, pale blue or yellow for Flash, Glint or Fork.
+// amber, red or violet for an octave down, two, or reversed.
 //
 // MIDI CCs on any channel, from the TRS input or USB (see README.md):
 //
 //   14 Decay   15 Mix   16 Size   17 Tone   18 Depth   19 Tide
-//   20 Storm   21 Gusts   22 Wind   23 Rain   24 Lightning   25 Thunder
+//   20 Storm   21 Gusts   22 Wind   23 Rain   24 Lightning   25 Distance
 //   26 Surge   27 Undertow
-//   28 Width   29 Predelay   30 Strike   (0-127 split evenly between them)
+//   28 Width   29 Predelay   30 Rumble   (0-127 split evenly between them)
 //   64 Sustain pedal: Freeze while down
 //   102 On/off   103 Freeze   104 Mono in   105 Calm   106 Squall
 //   107 Trails   108 Kill dry   (64 and up: on; Calm and Squall while on)
@@ -67,7 +70,7 @@
 // strength, lightning's flashes, wind, rain, thunder and the decay time
 // while the page is open (it draws the sea from them), with the presets.
 //
-// Presets (common/presets.h) hold the knobs, width, predelay and strike. Mono in,
+// Presets (common/presets.h) hold the knobs, width, predelay and rumble. Mono in,
 // trails and kill dry are saved on their own a few seconds after they
 // change. At power-up they come back, then the preset last selected.
 //
@@ -121,7 +124,7 @@ PagedKnobs<kNumPages, kNumKnobs> pages({
     {0.25f, 0.0f},  // depth, no tide
     {0.0f, 0.4f},   // storm (calm), gusts
     {0.5f, 0.3f},   // wind, rain
-    {0.3f, 0.5f},   // lightning, thunder
+    {0.3f, 0.5f},   // lightning, distance (thunder about 0.9 s after)
     {0.4f, 0.2f},   // surge, undertow
     {0.0f, 0.0f},   // presets: unused
 });
@@ -131,10 +134,10 @@ PagedKnobs<kNumPages, kNumKnobs> pages({
 // What the Pod and the web page set. Only the audio callback writes it;
 // the main loop reads it for the LEDs and the page.
 
-// Each page's encoder choice: width, predelay, strike; the others have none.
+// Each page's encoder choice: width, predelay, rumble; the others have none.
 constexpr int kChoiceCounts[kNumKnobPages] = {StormEngine::kNumWidths, StormEngine::kNumPredelays, 0, 0, 0,
-                                              Sky::kNumStrikes, 0};
-int  choices[kNumKnobPages] = {StormEngine::kWide, 1, 0, 0, 0, Sky::kFlash, 0};
+                                              Sky::kNumRumbles, 0};
+int  choices[kNumKnobPages] = {StormEngine::kWide, 1, 0, 0, 0, Sky::kOctave, 0};
 bool active   = true;
 bool freeze   = false;
 bool trails   = true;
@@ -195,7 +198,7 @@ void SetParam(int index, int raw, uint32_t now_ms)
     {
         case kParamWidth: SetChoice(0, raw, now_ms); break;
         case kParamPredelay: SetChoice(1, raw, now_ms); break;
-        case kParamStrike: SetChoice(5, raw, now_ms); break;
+        case kParamRumble: SetChoice(5, raw, now_ms); break;
         case kParamTrails: trails = raw != 0; break;
         case kParamKillDry: kill_dry = raw != 0; break;
         case kParamActive: active = raw != 0; break;
@@ -223,7 +226,7 @@ int ParamRaw(int index)
     {
         case kParamWidth: return choices[0];
         case kParamPredelay: return choices[1];
-        case kParamStrike: return choices[5];
+        case kParamRumble: return choices[5];
         case kParamTrails: return trails;
         case kParamKillDry: return kill_dry;
         case kParamActive: return active;
@@ -336,7 +339,7 @@ void HandleCc(uint8_t cc, uint8_t value, uint32_t now_ms)
     {
         case 28: SetChoice(0, value * StormEngine::kNumWidths / 128, now_ms); break;
         case 29: SetChoice(1, value * StormEngine::kNumPredelays / 128, now_ms); break;
-        case 30: SetChoice(5, value * Sky::kNumStrikes / 128, now_ms); break;
+        case 30: SetChoice(5, value * Sky::kNumRumbles / 128, now_ms); break;
         case 64: // a sustain pedal holds the sea while it's down
         case 103: freeze = on; break;
         case 102: active = on; break;
@@ -444,10 +447,10 @@ void AudioCallback(AudioHandle::InputBuffer  in,
     p.wind      = pages.Value(4, 0);
     p.rain      = pages.Value(4, 1);
     p.lightning = pages.Value(5, 0);
-    p.thunder   = pages.Value(5, 1);
+    p.distance  = pages.Value(5, 1);
     p.surge     = pages.Value(6, 0);
     p.undertow  = pages.Value(6, 1);
-    p.strike    = choices[5];
+    p.rumble    = choices[5];
     p.calm      = calm || calm_held;
     p.squall    = squall || squall_held;
     p.width     = choices[0];
@@ -540,10 +543,10 @@ int main(void)
         {1.0f, 0.7f, 0.0f}, // Lightning: yellow
         {1.0f, 0.0f, 0.0f}, // Surge: red
     };
-    const float strike_colours[Sky::kNumStrikes][3] = {
-        {1.0f, 1.0f, 1.0f}, // Flash: white
-        {0.5f, 0.7f, 1.0f}, // Glint: pale blue
-        {1.0f, 0.7f, 0.0f}, // Fork: yellow
+    const float rumble_colours[Sky::kNumRumbles][3] = {
+        {1.0f, 0.5f, 0.0f}, // an octave down: amber
+        {1.0f, 0.1f, 0.0f}, // two: red
+        {0.6f, 0.1f, 1.0f}, // reversed: violet
     };
     const float width_colours[StormEngine::kNumWidths][3] = {
         {1.0f, 0.0f, 0.0f}, // narrow: red
@@ -620,9 +623,9 @@ int main(void)
         }
         else if(now < choice_flash_until && page == 5)
         {
-            r = strike_colours[choices[5]][0];
-            g = strike_colours[choices[5]][1];
-            b = strike_colours[choices[5]][2];
+            r = rumble_colours[choices[5]][0];
+            g = rumble_colours[choices[5]][1];
+            b = rumble_colours[choices[5]][2];
         }
         else
         {

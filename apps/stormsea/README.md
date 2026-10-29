@@ -4,8 +4,8 @@ A stereo reverb named after Oceanus Procellarum, the Ocean of Storms on the
 Moon: a dark, glassy plain named for weather it never has. With the storm
 down it's a clean, lush reverb whose tails run from half a second to
 forever. Turn **Storm** up and weather rolls across the tail: wind churns
-it, the sea surges and boils, lightning flashes through it with thunder
-rolling after, rain falls on it, and an undertow drags it down. **Gusts**
+it, the sea surges and boils, lightning flashes and thunder rolls in
+after it, near or far, rain falls on it, and an undertow drags it down. **Gusts**
 makes the storm come and go on its own. The storm only touches the wet
 signal: the dry passes clean.
 
@@ -36,10 +36,10 @@ in -+---------------------------------------------------------------- dry -+
              -> DC block -> Surge: gain past unity, soft clip               |
              -> Undertow: turning -> mixing matrix -> Undertow: sinking     |
              -> sea wall -> back into the lines x Decay                     |
-           <- Lightning and Thunder strike in, Rain falls in                |
-        -> the tail ring: what Rain, Lightning and Thunder play             |
+           <- Thunder rolls in, Rain falls in                               |
+        -> the tail ring: what Rain and Thunder play                        |
         -> Width -> Tone (while held) -> Wind: whistle                      |
-        + Rain, Lightning and Thunder -> Tide -> wet                        |
+        + Rain and Thunder -> Tide -> wet                                   |
     mix <-------------------------------------------------------------------+
     -> limiter -> out
 ```
@@ -104,18 +104,18 @@ it fall back over a few seconds when you let go.
 |---|---|
 | **Wind** | Turbulence: each line's length wanders at random, by up to 5 ms each way and in moves of 1.5 s down to 0.1 s as the wind rises, so the tail's pitch smears and churns (up to a couple of semitones in a gale). And the whistle: a resonant band-pass on the tail, 400 Hz to 2.4 kHz, sweeping at random and lifted by the gusts, a little higher on the right, like wind through rigging |
 | **Rain** | Drops: tiny grains (2 to 20 ms) of the last half second of the tail, through a high-pass at 600 Hz, at a random pitch (unison, a fifth or an octave up), position and level, from 2 a second to a downpour of 250 (with the square of the setting, so a little rain is a few drops). The drops fall into the sea as well as being heard, so rain leaves a shimmer in the tail |
-| **Lightning** | How often it strikes, at random, from none to about one strike every 2 s in a full storm, up to three times as often in a gust. A strike takes the last 0.15 to 0.5 s of the tail and flashes it back into the sea and out, with a sharp attack (3 ms), its top lifted above 1 kHz, dying away by about 50 dB over its length: see Strike below. LED 1 flashes white |
-| **Thunder** | How loud the thunder that follows each strike is. It comes 0.2 to 3 s after its strike: the same slice an octave down (so twice as long), through two low-passes (300 Hz near, down to 120 Hz far), swelling in over its first third and rolling away, its level wavering. Later thunder is further away, so quieter and darker. Without lightning there's no thunder |
+| **Lightning** | How often it strikes, at random, from none to about one strike every 2 s in a full storm, up to three times as often in a gust. A strike is silent, as lightning is: LED 1 flashes white and the web page draws a bolt. Each one keeps a slice of the tail as it was, for its thunder |
+| **Distance** (thunder) | How far off the storm is, so how long until each strike's thunder: 0.15 s near to 5 s far, each strike's varying by up to 30% either way. The distance shapes the thunder as it would outdoors. Near, it plays 0.12 s of tail, bright (two low-passes at 900 Hz), with a sharp attack, about level with the tail. Far, it plays 0.7 s, dark (120 Hz), swelling in over its first 40% and rolling away, about 11 dB under the tail. Its level wavers as it rolls. What it plays is the Rumble choice, below. Without lightning there's no thunder |
 | **Surge** | Stretches the decay towards ∞, so the tail swells and lingers; past 30% of it, it also raises the sea's gain past unity (by up to 12% a trip) into a soft clipper in each line (about 6 dB over the sea wall, so it boils at any playing level), so the tail swells up, thickens and boils instead of dying away. When the storm drops the gain falls back under unity and the sea settles to its Decay |
 | **Undertow** | Turns four pairs of lines (each a short one with a long one) into each other by angles that wander, up to about 57° each way, each move taking 4 to 12 s, so the tail's colours shift and churn as energy moves between lengths. The turning is orthogonal, so an infinite sea stays stable. And it sinks the tail: two lines' feed passes a frequency shifter, lowering every partial by up to 0.6 Hz each trip, so long tails slide down into the deep. A frozen sea under a strong undertow slowly sinks out of hearing: at full, an A at 440 Hz reaches the bottom in about three minutes |
 
-**Strike** chooses what a lightning strike plays:
+**Rumble** chooses what thunder plays:
 
-| Strike | |
+| Rumble | |
 |---|---|
-| Flash | The slice an octave up |
-| Glint | The slice reversed |
-| Fork | Each strike picks one at random |
+| Low | The slice an octave down, so twice as long |
+| Deep | Two octaves down, four times as long: rolls on for nearly 3 s when far |
+| Reverse | An octave down and reversed: it swells in towards you over most of its length and stops short |
 
 ## Weathering
 
@@ -123,7 +123,7 @@ Freeze shuts the input out and holds the sea forever. Let go of Freeze and
 it fades away at the Decay setting.
 
 The storm keeps working on a frozen sea, and what it does stays:
-lightning, thunder and rain leave new partials in it, Surge wears it round,
+thunder and rain leave new partials in it, Surge wears it round,
 Wind smears it, and Undertow turns it and drags it down. Freeze a chord,
 raise a storm, and when the calm comes back the sea isn't the one you
 froze.
@@ -142,7 +142,7 @@ if it has one, and LED 2 flashes it for a second.
 | 3 Motion (green) | Depth | Tide | |
 | 4 Storm (violet) | Storm | Gusts | |
 | 5 Wind and Rain (white) | Wind | Rain | |
-| 6 Lightning (yellow) | Lightning | Thunder | Strike: Flash, Glint, Fork (white, pale blue, yellow) |
+| 6 Lightning (yellow) | Lightning | Distance | Rumble: Low, Deep, Reverse (amber, red, violet) |
 | 7 Surge (red) | Surge | Undertow | |
 | 8 (the slot) | | | Presets: selects a slot (see [Presets](#presets)) |
 
@@ -165,8 +165,8 @@ moonlight white while the sea is frozen (strikes still flash).
 
 Starting values: decay 4 s, mix 35%, size 70%, tone 60%, depth 25%, tide
 0, predelay 15 ms, wide. Storm 0, gusts 40%, and the elements part way up
-(wind 50%, rain 30%, lightning 30%, thunder 50%, surge 40%, undertow 20%,
-Flash), so
+(wind 50%, rain 30%, lightning 30%, distance 50% so thunder comes about
+0.9 s after each strike, Low, surge 40%, undertow 20%), so
 turning Storm up brings a whole storm at once.
 
 ## MIDI
@@ -188,12 +188,12 @@ does nothing until you move it again.
 | 22 | Wind | 0-127 |
 | 23 | Rain | 0-127 |
 | 24 | Lightning | 0-127 |
-| 25 | Thunder | 0-127 |
+| 25 | Distance | 0-127 |
 | 26 | Surge | 0-127 |
 | 27 | Undertow | 0-127 |
 | 28 | Width | 0-42 narrow, 43-85 medium, 86-127 wide |
 | 29 | Predelay | 0-21 0 ms, 22-42 15 ms, 43-63 30 ms, 64-85 60 ms, 86-106 120 ms, 107-127 240 ms |
-| 30 | Strike | 0-42 Flash, 43-85 Glint, 86-127 Fork |
+| 30 | Rumble | 0-42 Low, 43-85 Deep, 86-127 Reverse |
 | 64 | Sustain pedal | Freeze while down (64-127) |
 | 102 | On/off | 0-63 off, 64-127 on |
 | 103 | Freeze | 0-63 off, 64-127 on |
@@ -224,7 +224,7 @@ reflashing. Every app keeps its own.
 - **On the web page:** a button per slot, and Save. Selecting the slot
   already selected reloads it, dropping any changes.
 
-A preset holds the knobs, Width, Predelay and Strike: the sea and its
+A preset holds the knobs, Width, Predelay and Rumble: the sea and its
 weather. Mono in, Trails and Kill dry are saved on their own, a
 few seconds after they last change. At power-up they come back, then the
 preset last selected. On/off, Freeze, Calm and Squall always start from scratch.
@@ -286,16 +286,16 @@ the Pod both ways. See [m4l/README.md](../../m4l/README.md).
   error: a pitch shifter blended with the dry feed lost power wherever the
   two decorrelated, and drained a frozen sea in a minute. At 0 Hz the
   shifter is only an allpass, so it always runs.
-- Rain, Lightning and Thunder (`sky.{h,cpp}`) play from a ring of the
-  sea's output, about 11 s (4 MB) in SDRAM, cleared once at boot: thunder
-  reads up to 4.5 s back. Up to 12 drops, 4 strikes and 4 thunders play at
-  once, each reading 2 frames a sample, by linear interpolation. Strikes
-  lift the top rather than high-passing it: the sea's tail is dark, and a
-  high-pass left a strike with next to nothing. Measured against the tail
-  at the same moment, a strike's first 100 ms comes out about level with
-  it (Flash 1 dB under, Glint 1 dB over), and full rain about 9 dB under
-  it. Each strike goes through a soft clip at 0.5: lifting the top of a
-  very bright tail (white noise, at worst) took a strike 19 dB over it.
+- Rain and Thunder (`sky.{h,cpp}`) play from a ring of the sea's output,
+  about 11 s (4 MB) in SDRAM, cleared once at boot: far thunder two
+  octaves down reads up to 9.9 s back. Up to 12 drops and 8 thunders play
+  at once (far thunder waits up to 6.5 s, so several are pending), each
+  reading 2 frames a sample, by linear interpolation. Full rain sits about
+  9 dB under the tail.
+- Lightning was first heard as well as seen: each strike played its slice
+  back an octave up or reversed, bright. It sounded odd, as lightning
+  makes no sound of its own, so strikes are silent now and thunder, timed
+  and shaped by Distance, is the sound.
 - The web page's traces come every 2 ms rather than 1, so a frame of
   eight stays well under a message.
 - Every element is free-running: its own random processes (`Wander`s),
@@ -318,8 +318,8 @@ beautiful on its own before any weather goes on it.
    the pages, MIDI, presets and the web page.
 2. **Built, to try on the Pod:** Wind, Surge, the Storm and Gusts
    controls, Calm and Squall.
-3. **Built, to try on the Pod:** Lightning, Thunder and Strike, and Rain,
-   over the tail ring.
+3. **Built, to try on the Pod:** Lightning, Thunder (now Distance and
+   Rumble) and Rain, over the tail ring.
 4. **Built, to try on the Pod:** Undertow and the web page's sea view.
    **Still to do:** tuning Storm's curve and the elements' ranges by ear,
    on the Pod.

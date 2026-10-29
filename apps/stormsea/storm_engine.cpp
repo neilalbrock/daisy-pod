@@ -196,7 +196,7 @@ void StormEngine::SetParams(const Params &p)
     // The sky: nothing new while the tail is being cut.
     float sky = cut ? 0.0f : strength_;
     sky_.Set(Clamp(p.rain, 0.0f, 1.0f) * sky, Clamp(p.lightning, 0.0f, 1.0f) * sky,
-             Clamp(p.thunder, 0.0f, 1.0f) * sky, p.strike, gust * gusts);
+             p.distance, p.rumble, gust * gusts);
 
     // Wind: the lines churn, deeper and faster as it rises; the whistle's
     // centre wanders and the gusts lift it.
@@ -293,7 +293,7 @@ void StormEngine::Process(float in_l, float in_r, float *out_l, float *out_r)
     }
     pre_pos_ = (pre_pos_ + 1) & kMask;
 
-    // The sky drops rain, strikes and thunder into the sea, and hears its
+    // The sky drops rain and thunder into the sea, and hears its
     // tail for the weather to come.
     in_energy_ += 0.5f * (l * l + r * r); // what's played, for the wall
     float drop_l, drop_r, sky_l, sky_r;
