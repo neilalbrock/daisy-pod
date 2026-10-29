@@ -158,6 +158,7 @@ class StormEngine
     {
         float fast, size, hold, cutoff, mix, rt_up, rt_down, rt_cut;
         float calm, calm_back, squall, squall_back;
+        float in_rise, in_fall;
     } coef_ = {};
 
     // Smoothed once per block.
@@ -166,6 +167,8 @@ class StormEngine
     float log_cutoff_ = 9.9f, cutoff_set_ = 0.0f;
     float mix_ = 0.35f, dry_ = 1.0f, wet_ = 0.0f;
     float tide_l_ = 1.0f, tide_r_ = 1.0f, tide_db_ = 0.0f;
+    float in_gain_ = 1.0f; // the sea's input, for the decay
+    float in_energy_ = 0.0f, in_level_ = 0.0f, block_scale_ = 0.25f; // the input's level, for the wall
     float storm_knob_ = 0.0f, calm_ = 1.0f, squall_ = 0.0f, strength_ = 0.0f, wind_ = 0.0f;
     float whistle_mix_ = 0.0f, whistle_set_ = 0.0f; // the whistle's level, and the centre last set
 

@@ -31,15 +31,16 @@ constexpr float kDiffusion[Sea::kDiffusers] = {0.7f, 0.7f, 0.6f, 0.6f};
 constexpr float kDcPole = 0.9995f;
 constexpr float kDcGain = 0.5f * (1.0f + kDcPole);
 
-// The sea wall: the lines' mean square it holds the sea under (each line
-// about -15 dBFS RMS), and how hard it pushes back: each trip round, the
-// gain is (ceiling / level) to this power.
-constexpr float kCeiling   = 0.03f;
+// The sea wall: how hard it pushes back. Each trip round, the gain is
+// (ceiling / level) to this power.
 constexpr float kWallSlope = 0.1f;
 
 // Surge's clipper: the most a line can carry.
-constexpr float kClip    = 0.3f;
-constexpr float kInvClip = 1.0f / kClip;
+// It follows the wall, this far over the lines' RMS at the ceiling (about
+// 6 dB), so the sea boils at whatever level it's played at; a fixed clip
+// was never reached by a quiet instrument once the wall followed the input.
+constexpr float kClip         = 0.3f;
+constexpr float kClipOverWall = 2.0f;
 
 // Wind's moves, at speed 0 and 1, in seconds; each takes from 60% to 140%
 // of that, at random.
@@ -189,12 +190,15 @@ void Sea::SetSurge(float surge)
     surge_gain_ = 1.0f + kSurgeGain * surge_;
 }
 
-void Sea::UpdateWall()
+void Sea::UpdateWall(float ceiling)
 {
     float ms = energy_ * block_scale_;
     energy_  = 0.0f;
     level_ += (ms > level_ ? level_attack_ : level_release_) * (ms - level_);
-    wall_ = level_ > kCeiling ? FastExp2(kWallSlope * log2f(kCeiling / level_)) : 1.0f;
+    ceiling   = Clamp(ceiling, kMinCeiling, kMaxCeiling);
+    wall_     = level_ > ceiling ? FastExp2(kWallSlope * log2f(ceiling / level_)) : 1.0f;
+    clip_     = fminf(kClipOverWall * sqrtf(ceiling), kClip);
+    inv_clip_ = 1.0f / clip_;
 }
 
 float Sea::Read(Line &ln, float delay)
@@ -242,7 +246,7 @@ void Sea::Process(float mid, float side, float *l, float *r)
         ln.dc_x = ln.z;
         ln.dc_y = h;
         if(surge_ > 0.0f)
-            h = kClip * SoftClip(surge_gain_ * kInvClip * h);
+            h = clip_ * SoftClip(surge_gain_ * inv_clip_ * h);
         m[i] = h;
     }
     energy_ += energy;

@@ -42,7 +42,10 @@
 // The sea wall is a slow level control in the loop. It reads the lines'
 // level each block and, over a ceiling, takes a little off each trip
 // round, so an infinite sea fed with more and more input settles instead
-// of growing. Below the ceiling it does nothing.
+// of growing. Below the ceiling it does nothing. The caller sets the
+// ceiling, from what's been coming in, so the wall holds an infinite sea
+// near the level it's played at, not at a fixed one a quiet instrument
+// never reaches.
 //
 // Each line's read swings by up to kMaxMod frames: on a slow sine of its
 // own (Depth), and at random (Wind's turbulence, a Wander a line, eased
@@ -96,7 +99,7 @@ class Sea
     static constexpr float kMaxMod    = (float)kModFrames;
 
     static constexpr float kMinSize   = 0.3f;
-    static constexpr float kSurgeGain = 0.25f;
+    static constexpr float kSurgeGain = 0.12f;
 
     // The memory Init needs, in floats.
     static constexpr int kTurns = 4; // pairs of lines Undertow turns
@@ -130,8 +133,13 @@ class Sea
     void SetUndertow(float undertow);
     void SetInputSide(float side) { in_side_ = side; } // 0 mono .. 1 stereo
 
-    // Once per block, after the block: the sea wall reads the level.
-    void UpdateWall();
+    // Once per block, after the block: the sea wall reads the level and
+    // holds it under `ceiling`, the lines' mean square (kMinCeiling to
+    // kMaxCeiling).
+    void UpdateWall(float ceiling);
+
+    static constexpr float kMinCeiling = 1e-5f; // each line at -50 dBFS RMS
+    static constexpr float kMaxCeiling = 0.03f; // -15 dBFS
 
     // Once per sample. Out: unscaled, about the input's level at a few
     // seconds' decay.
@@ -195,6 +203,7 @@ class Sea
     float energy_ = 0.0f; // summed since the last UpdateWall
     float level_  = 0.0f;
     float wall_   = 1.0f;
+    float clip_   = 0.3f, inv_clip_ = 1.0f / 0.3f; // Surge's clipper, following the wall
     float level_attack_ = 0.0f, level_release_ = 0.0f; // per block
     float block_scale_  = 0.0f;                         // 1 / (frames a block x lines)
 };

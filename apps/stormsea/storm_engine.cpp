@@ -25,6 +25,22 @@ constexpr float kTidePan  = 0.5f;  // how far it moves the sea to one side
 constexpr float kLowCut   = 50.0f; // Hz, on the way in
 constexpr float kWetGain  = 1.0f;
 
+// The sea's input: a longer decay piles up more tail, from 5-9 dB under
+// the input at 0.5 s to 9 dB over it at 60 s, so a little Mix was already
+// loud. The input is scaled by (1 s / decay) to this power (0.5 would hold
+// the tail's level flat; this leaves a long decay a few dB bigger), and by
+// kInputGain, which puts a 4 s tail about 6 dB under the input.
+constexpr float kInputGain = 0.66f;
+constexpr float kDecayLevel = 0.25f;
+
+// The sea wall's ceiling, against what's been coming in: the sea's input
+// level, rising in 50 ms and falling over 20 s, but only while something
+// comes in (over kSilence), so stopping playing, or the gate shutting,
+// never lowers it and an infinite sea holds.
+constexpr float kWallOverInput = 1.0f;
+constexpr float kSurgeLift     = 0.5f; // and Surge lifts it, up to 1.5x (1.8 dB) at full
+constexpr float kSilence       = 1e-7f; // mean square: -70 dBFS
+
 // The storm. Gusts swing the strength by up to these shares of Storm's
 // setting: fronts both ways, gusts only up.
 constexpr float kFrontSwing = 0.9f;
@@ -88,6 +104,9 @@ void StormEngine::Init(float sample_rate, size_t block_size, float *fast_mem, fl
     coef_.rt_up   = BlockCoef(0.3f, block_rate);
     coef_.rt_down = BlockCoef(1.0f, block_rate);
     coef_.rt_cut  = BlockCoef(0.05f, block_rate);
+    coef_.in_rise = BlockCoef(0.05f, block_rate);
+    coef_.in_fall = BlockCoef(20.0f, block_rate);
+    block_scale_  = 1.0f / (float)block_size;
     // Calm: down over a couple of seconds, and back the same. Squall: up
     // in a moment, back over a few seconds.
     coef_.calm        = BlockCoef(0.6f, block_rate);
@@ -105,7 +124,11 @@ void StormEngine::Init(float sample_rate, size_t block_size, float *fast_mem, fl
 
 void StormEngine::SetParams(const Params &p)
 {
-    sea_.UpdateWall(); // from the block just played
+    // What's been coming in, from the block just played, for the sea wall.
+    float in_ms = in_energy_ * block_scale_;
+    in_energy_  = 0.0f;
+    if(in_ms > kSilence)
+        in_level_ += (in_ms > in_level_ ? coef_.in_rise : coef_.in_fall) * (in_ms - in_level_);
 
     int   width = p.width < 0 ? 0 : (p.width >= kNumWidths ? kNumWidths - 1 : p.width);
     float tone  = Clamp(p.tone, 0.0f, 1.0f);
@@ -133,6 +156,10 @@ void StormEngine::SetParams(const Params &p)
     float undertow = Clamp(p.undertow, 0.0f, 1.0f) * strength_;
     wind_          = wind;
 
+    // The sea wall holds the sea near what's been played, higher as it
+    // surges.
+    sea_.UpdateWall(kWallOverInput * (1.0f + kSurgeLift * surge) * in_level_);
+
     // Decay, eased in log time: holding comes in over about 0.3 s and lets
     // go over about a second, so a freeze let go fades away at the Decay
     // setting. Off without trails, the tail is cut, so it dies away fast,
@@ -145,6 +172,12 @@ void StormEngine::SetParams(const Params &p)
     float log_target = logf(rt60);
     float rt_coef    = cut ? coef_.rt_cut : (log_target > log_rt60_ ? coef_.rt_up : coef_.rt_down);
     log_rt60_ += rt_coef * (log_target - log_rt60_);
+
+    // The input's level for the decay set (∞ counts as 60 s), so the tail's
+    // level stays near the input's. Surge's stretch isn't counted: the sea
+    // is meant to swell.
+    float log_rt_in = Clamp(log_rt60_, logf(kMinRt60), logf(kMaxRt60));
+    in_gain_        = kInputGain * expf(-kDecayLevel * log_rt_in);
 
     // Surge stretches the decay towards held, in log time, so the tail
     // swells and lingers; past kSurgeBoil it also pushes the gain past
@@ -241,8 +274,8 @@ void StormEngine::Process(float in_l, float in_r, float *out_l, float *out_r)
         gate_ = fminf(gate_ + gate_step_, gate_target_);
     else if(gate_ > gate_target_)
         gate_ = fmaxf(gate_ - gate_step_, gate_target_);
-    float l = low_cut_[0].Process(in_l * gate_);
-    float r = low_cut_[1].Process(in_r * gate_);
+    float l = low_cut_[0].Process(in_l * gate_ * in_gain_);
+    float r = low_cut_[1].Process(in_r * gate_ * in_gain_);
 
     // The predelay, read after the write so 0 ms is no delay.
     constexpr uint32_t kMask = kPredelayFrames - 1;
@@ -262,6 +295,7 @@ void StormEngine::Process(float in_l, float in_r, float *out_l, float *out_r)
 
     // The sky drops rain, strikes and thunder into the sea, and hears its
     // tail for the weather to come.
+    in_energy_ += 0.5f * (l * l + r * r); // what's played, for the wall
     float drop_l, drop_r, sky_l, sky_r;
     sky_.Render(&drop_l, &drop_r, &sky_l, &sky_r);
     l += drop_l;

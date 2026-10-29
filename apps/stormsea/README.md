@@ -61,7 +61,7 @@ Depth.
 
 | Control | |
 |---|---|
-| **Decay** | 0.5 s to 60 s, then **∞** over the knob's last stretch. At ∞ the sea keeps everything you play and layers it, under the sea wall |
+| **Decay** | 0.5 s to 60 s, then **∞** over the knob's last stretch. At ∞ the sea keeps everything you play and layers it, under the sea wall. A longer decay piles up more tail, so the sea's input is turned down as Decay goes up: at full wet, a tail sits about 7 dB under what you play at short decays and about 2 dB under at 60 s, and an ∞ sea settles about level with it |
 | **Mix** | Dry to wet, equal power |
 | **Size** | The lines' lengths, 30% to 100%: from a hall to a vast open sea. Moving it while the sea rings bends the tail's pitch, as the waves stretch |
 | **Tone** | Damping inside the loop, dark to bright: the top dies away in 10% (dark) to 70% (bright) of the decay time. At ∞ and in Freeze it moves to a low-pass on the output instead (1.5 kHz to 16 kHz), so a held sea keeps its colour rather than darkening to a hum |
@@ -71,9 +71,12 @@ Depth.
 | **Width** | Narrow (the same tail on both sides), medium, or wide (the inputs go into the sea separately and it spreads them) |
 
 The **sea wall** is a slow level control inside the loop that holds the
-sea under a ceiling (each line at about -15 dBFS RMS). You only meet it at
-∞, or frozen with a storm feeding in, or with Surge up: it rides the level
-down gently each trip rather than clipping. A low cut at 50 Hz on the way
+sea under a ceiling, and the ceiling follows what you play: it rises with
+the input in 50 ms and falls over 20 s, but only while something's coming
+in, so when you stop playing (or freeze, or switch off) it stays put and
+an infinite sea holds. You only meet it at ∞, at long decays under steady
+playing, frozen with a storm feeding in, or with Surge up: it rides the
+level down gently each trip rather than clipping. A low cut at 50 Hz on the way
 in keeps the sea from filling with rumble, and a DC block in the loop keeps
 it centred.
 
@@ -103,7 +106,7 @@ it fall back over a few seconds when you let go.
 | **Rain** | Drops: tiny grains (2 to 20 ms) of the last half second of the tail, through a high-pass at 600 Hz, at a random pitch (unison, a fifth or an octave up), position and level, from 2 a second to a downpour of 250 (with the square of the setting, so a little rain is a few drops). The drops fall into the sea as well as being heard, so rain leaves a shimmer in the tail |
 | **Lightning** | How often it strikes, at random, from none to about one strike every 2 s in a full storm, up to three times as often in a gust. A strike takes the last 0.15 to 0.5 s of the tail and flashes it back into the sea and out, with a sharp attack (3 ms), its top lifted above 1 kHz, dying away by about 50 dB over its length: see Strike below. LED 1 flashes white |
 | **Thunder** | How loud the thunder that follows each strike is. It comes 0.2 to 3 s after its strike: the same slice an octave down (so twice as long), through two low-passes (300 Hz near, down to 120 Hz far), swelling in over its first third and rolling away, its level wavering. Later thunder is further away, so quieter and darker. Without lightning there's no thunder |
-| **Surge** | Stretches the decay towards ∞, so the tail swells and lingers; past 30% of it, it also raises the sea's gain past unity (by up to 25% a trip) into a soft clipper in each line, so the tail swells up, thickens and boils instead of dying away. When the storm drops the gain falls back under unity and the sea settles to its Decay |
+| **Surge** | Stretches the decay towards ∞, so the tail swells and lingers; past 30% of it, it also raises the sea's gain past unity (by up to 12% a trip) into a soft clipper in each line (about 6 dB over the sea wall, so it boils at any playing level), so the tail swells up, thickens and boils instead of dying away. When the storm drops the gain falls back under unity and the sea settles to its Decay |
 | **Undertow** | Turns four pairs of lines (each a short one with a long one) into each other by angles that wander, up to about 57° each way, each move taking 4 to 12 s, so the tail's colours shift and churn as energy moves between lengths. The turning is orthogonal, so an infinite sea stays stable. And it sinks the tail: two lines' feed passes a frequency shifter, lowering every partial by up to 0.6 Hz each trip, so long tails slide down into the deep. A frozen sea under a strong undertow slowly sinks out of hearing: at full, an A at 440 Hz reaches the bottom in about three minutes |
 
 **Strike** chooses what a lightning strike plays:
