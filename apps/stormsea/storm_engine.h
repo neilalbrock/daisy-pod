@@ -3,13 +3,25 @@
 //   in -+------------------------------------------------------- dry -+
 //       |                                                             |
 //       +-> gate (on/off, Freeze) -> low cut -> predelay              |
-//           -> the sea (sea.h): 8 lines, Size, Decay, Tone, Depth     |
+//           -> the sea (sea.h): 8 lines, Size, Decay, Tone, Depth,    |
+//              [Wind's turbulence, Surge]                             |
 //           -> Width -> Tone's output low-pass (at ∞ and frozen)      |
-//           -> Tide (level and position swells) -> wet                |
+//           [-> Wind's whistle] -> Tide (level and position) -> wet   |
 //       mix (equal power; Kill dry drops the dry) <-------------------+
 //
-// The calm sea, stage 1 of the roadmap in README.md: the storm will go
-// between the sea and the wet output, and into the sea's loop.
+// Stages 1 and 2 of the roadmap in README.md: the calm sea, and the storm
+// so far, in brackets. Each block works out the storm's strength from
+// moment to moment: Storm, swung by Gusts (slow fronts and sudden gusts,
+// both Wanders), eased down to nothing while Calm is held and up to full
+// while Squall is. Each element's own setting x the strength is how much
+// of it there is now; at Storm 0 there's none.
+//
+// Wind: each line's length wanders at random, deeper and faster as it
+// rises, so the tail's pitch churns; and a resonant band-pass on the tail,
+// its centre swept by a Wander and lifted by the gusts, whistles.
+// Surge: stretches the decay towards ∞ and pushes the sea's gain past
+// unity into its clipper, so the tail swells and boils; as the storm
+// drops it settles back to its Decay.
 //
 // The gate closes the sea's input when off (the tail rings out with trails
 // on, and is cut in 5 ms with them off) and while frozen. Decay's top
@@ -60,6 +72,14 @@ class StormEngine
         bool  trails   = true;
         bool  freeze   = false;
         bool  kill_dry = false;
+
+        // The storm
+        float storm  = 0.0f; // 0 calm .. 1 gale
+        float gusts  = 0.4f; // 0 steady .. 1 fronts and gusts
+        float wind   = 0.5f; // each element's part in the storm, 0..1
+        float surge  = 0.4f;
+        bool  calm   = false; // held: the storm dies down
+        bool  squall = false; // held: the storm rises to full
     };
 
     // For the web page and the LEDs.
@@ -69,6 +89,7 @@ class StormEngine
         float tide;  // the level swell now, dB
         float rt60;  // the decay now, s (1e6: held)
         float hold;  // 0..1: how far the sea is held (∞ or frozen)
+        float storm; // the storm's strength now, 0..1
     };
 
     // The memory Init needs, in floats: fast (RAM_D2) for the sea, and
@@ -103,8 +124,9 @@ class StormEngine
 
     Sea         sea_;
     Wander      tide_level_, tide_pan_;
+    Wander      fronts_, gust_, whistle_sweep_;
     dsp::Biquad low_cut_[2];
-    dsp::Svf    lp_[2];
+    dsp::Svf    lp_[2], whistle_bp_[2];
 
     // The predelay: interleaved stereo in SDRAM. A change of length fades
     // from the old read to the new over 30 ms.
@@ -119,6 +141,7 @@ class StormEngine
     struct
     {
         float fast, size, hold, cutoff, mix, rt_up, rt_down, rt_cut;
+        float calm, calm_back, squall, squall_back;
     } coef_ = {};
 
     // Smoothed once per block.
@@ -127,6 +150,8 @@ class StormEngine
     float log_cutoff_ = 9.9f, cutoff_set_ = 0.0f;
     float mix_ = 0.35f, dry_ = 1.0f, wet_ = 0.0f;
     float tide_l_ = 1.0f, tide_r_ = 1.0f, tide_db_ = 0.0f;
+    float storm_knob_ = 0.0f, calm_ = 1.0f, squall_ = 0.0f, strength_ = 0.0f;
+    float whistle_mix_ = 0.0f, whistle_set_ = 0.0f; // the whistle's level, and the centre last set
 
     // Per sample: ramps of 5 ms (bypass, cut, kill dry) and 20 ms (the gate).
     float gate_ = 1.0f, gate_target_ = 1.0f, gate_step_ = 0.0f;

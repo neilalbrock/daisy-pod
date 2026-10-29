@@ -28,6 +28,13 @@ class Wander
         step_  = 1.0f / (rng_.Range(min_, max_) * rate_);
     }
 
+    // Each move from now on takes min_s to max_s seconds.
+    void SetTimes(float min_s, float max_s)
+    {
+        min_ = min_s;
+        max_ = max_s;
+    }
+
     float Next()
     {
         phase_ += step_;

@@ -3,8 +3,9 @@
 //   mid  -> 4 allpass diffusers -+
 //   side -> 4 allpass diffusers -+-> into all 8 lines, a sign pattern each
 //
-//   each line: delay (Size; Depth swings it) -> damping (decay and Tone)
-//              -> DC block
+//   each line: delay (Size; Depth and Wind swing it)
+//              -> damping (decay and Tone) -> DC block
+//              [-> Surge: gain past unity, soft clip]
 //   the 8 lines -> Hadamard matrix x the sea wall -> back into the lines
 //   the lines' outputs, two sign patterns -> left and right
 //
@@ -22,18 +23,22 @@
 // dies away in a fraction of the decay time, the same for every line
 // whatever its length, so the tail darkens evenly.
 //
+// Surge raises each line's gain past unity into a soft clipper, so the
+// tail swells up to the clipper and boils there instead of dying away.
+
 // The sea wall is a slow level control in the loop. It reads the lines'
 // level each block and, over a ceiling, takes a little off each trip
 // round, so an infinite sea fed with more and more input settles instead
 // of growing. Below the ceiling it does nothing.
 //
-// Each line's read swings by up to kMaxMod frames, on a slow sine of its
-// own (Depth; the storm's Wind will add to it), read with first-order
-// allpass interpolation, which passes every frequency at unity. Cubic
+// Each line's read swings by up to kMaxMod frames: on a slow sine of its
+// own (Depth), and at random (Wind's turbulence, a Wander a line, eased
+// sample by sample between blocks). It's read with first-order allpass
+// interpolation, which passes every frequency at unity. Cubic
 // interpolation dulls the top a little every trip: in a frozen sea that
 // took everything above 8 kHz away within seconds. The allpass clicks
-// faintly each time its whole-frame delay steps, but at Depth's slow
-// swings that's below -90 dB.
+// faintly each time its whole-frame delay steps: below -90 dB at Depth's
+// slow swings, louder in Wind's.
 //
 // The lines live in caller memory that reads fast (RAM_D2): about 24
 // reads a sample. libDaisy-free.
@@ -42,6 +47,8 @@
 
 #include <cstddef>
 #include <cstdint>
+
+#include "wander.h"
 
 namespace sea_detail
 {
@@ -74,7 +81,8 @@ class Sea
     static constexpr int   kSpare     = kModFrames + 8;
     static constexpr float kMaxMod    = (float)kModFrames;
 
-    static constexpr float kMinSize = 0.3f;
+    static constexpr float kMinSize   = 0.3f;
+    static constexpr float kSurgeGain = 0.25f;
 
     // The memory Init needs, in floats.
     static constexpr size_t kFloats = sea_detail::Sum(kLengths, kLines) + kLines * kSpare
@@ -89,7 +97,16 @@ class Sea
     // works out each line's damping from its length.
     void SetSize(float size);                  // kMinSize..1, of the lines' full lengths
     void SetDecay(float rt60, float hf_ratio); // seconds (1e6 is as good as forever); the top's decay as a share of it
-    void SetDepth(float frames);               // 0..kMaxMod / 2: each line's swing
+    void SetDepth(float frames);               // 0..kMaxMod / 4: each line's swing, each way
+
+    // Wind's turbulence: each line's length wanders by up to `frames`
+    // (0..kMaxMod / 4) each way, at random, its moves taking about 1.5 s
+    // (speed 0) down to 0.1 s (speed 1).
+    void SetTurbulence(float frames, float speed);
+
+    // Surge, 0..1: each line's gain past unity, up to 1 + kSurgeGain,
+    // into a soft clipper. 0 skips the clipper.
+    void SetSurge(float surge);
     void SetInputSide(float side) { in_side_ = side; } // 0 mono .. 1 stereo
 
     // Once per block, after the block: the sea wall reads the level.
@@ -113,6 +130,8 @@ class Sea
         float  dc_x, dc_y; // DC block
         float  phase, inc; // the swing's sine
         float  ap_y;       // the allpass interpolator's last output
+        float  wind, wind_step; // Wind's swing now, and its step a sample
+        Wander turbulence;
     };
 
     struct Diffuser
@@ -143,6 +162,9 @@ class Sea
     float size_     = 1.0f;
     float depth_    = 0.0f;
     float in_side_  = 1.0f;
+    float surge_    = 0.0f, surge_gain_ = 1.0f;
+
+    float block_frames_ = 4.0f;
 
     float energy_ = 0.0f; // summed since the last UpdateWall
     float level_  = 0.0f;

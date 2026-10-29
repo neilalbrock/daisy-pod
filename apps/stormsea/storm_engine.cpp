@@ -25,6 +25,24 @@ constexpr float kTidePan  = 0.5f;  // how far it moves the sea to one side
 constexpr float kLowCut   = 50.0f; // Hz, on the way in
 constexpr float kWetGain  = 1.0f;
 
+// The storm. Gusts swing the strength by up to these shares of Storm's
+// setting: fronts both ways, gusts only up.
+constexpr float kFrontSwing = 0.9f;
+constexpr float kGustSwing  = 0.8f;
+
+// Wind: the lines' swing at full wind, frames each way; the whistle's
+// centre (Hz) at the bottom and top of its sweep, and its level at full
+// wind (the band-pass is unity at its centre).
+constexpr float kWindFrames  = 240.0f;
+constexpr float kWhistleLow  = 400.0f;
+constexpr float kWhistleHigh = 2400.0f;
+constexpr float kWhistleMix  = 1.2f;
+constexpr float kWhistleSpread = 1.12f; // the right channel's centre over the left's
+
+// Surge: the share of it that only stretches the decay; above it, the sea
+// boils.
+constexpr float kSurgeBoil = 0.3f;
+
 constexpr float kOutSide[StormEngine::kNumWidths] = {0.0f, 0.6f, 1.0f};
 constexpr float kInSide[StormEngine::kNumWidths]  = {0.0f, 0.0f, 1.0f};
 
@@ -50,6 +68,9 @@ void StormEngine::Init(float sample_rate, size_t block_size, float *fast_mem, fl
     sea_.Init(sample_rate, block_size, fast_mem);
     tide_level_.Init(5.0f, 15.0f, block_rate, 0x51DE7u);
     tide_pan_.Init(6.0f, 14.0f, block_rate, 0xB0A7u);
+    fronts_.Init(10.0f, 40.0f, block_rate, 0xF207u);
+    gust_.Init(0.4f, 2.5f, block_rate, 0x6057u);
+    whistle_sweep_.Init(1.0f, 4.0f, block_rate, 0x3157u);
     for(auto &f : low_cut_)
         f.Set(Biquad::Type::kHighPass, kLowCut, 0.707f, 0.0f, sample_rate);
 
@@ -66,6 +87,12 @@ void StormEngine::Init(float sample_rate, size_t block_size, float *fast_mem, fl
     coef_.rt_up   = BlockCoef(0.3f, block_rate);
     coef_.rt_down = BlockCoef(1.0f, block_rate);
     coef_.rt_cut  = BlockCoef(0.05f, block_rate);
+    // Calm: down over a couple of seconds, and back the same. Squall: up
+    // in a moment, back over a few seconds.
+    coef_.calm        = BlockCoef(0.6f, block_rate);
+    coef_.calm_back   = BlockCoef(0.6f, block_rate);
+    coef_.squall      = BlockCoef(0.12f, block_rate);
+    coef_.squall_back = BlockCoef(1.2f, block_rate);
 
     Params p;
     log_rt60_  = logf(DecaySeconds(p.decay));
@@ -88,6 +115,21 @@ void StormEngine::SetParams(const Params &p)
     size_ += coef_.size * (Clamp(p.size, 0.0f, 1.0f) - size_);
     sea_.SetSize(Sea::kMinSize * powf(1.0f / Sea::kMinSize, size_));
 
+    // The storm's strength now: Storm's setting, swung by Gusts' fronts
+    // (both ways) and gusts (only up), then Calm and Squall.
+    storm_knob_ += fast * (Clamp(p.storm, 0.0f, 1.0f) - storm_knob_);
+    float gusts = Clamp(p.gusts, 0.0f, 1.0f);
+    float front = fronts_.Next();
+    float gust  = fmaxf(gust_.Next(), 0.0f);
+    gust *= gust;
+    float swing = fmaxf(1.0f + gusts * (kFrontSwing * front + kGustSwing * gust), 0.0f);
+    calm_ += (p.calm ? coef_.calm : coef_.calm_back) * ((p.calm ? 0.0f : 1.0f) - calm_);
+    squall_ += (p.squall ? coef_.squall : coef_.squall_back) * ((p.squall ? 1.0f : 0.0f) - squall_);
+    strength_ = Lerp(fminf(storm_knob_ * swing, 1.0f) * calm_, 1.0f, squall_);
+
+    float wind  = Clamp(p.wind, 0.0f, 1.0f) * strength_;
+    float surge = Clamp(p.surge, 0.0f, 1.0f) * strength_;
+
     // Decay, eased in log time: holding comes in over about 0.3 s and lets
     // go over about a second, so a freeze let go fades away at the Decay
     // setting. Off without trails, the tail is cut, so it dies away fast,
@@ -101,11 +143,32 @@ void StormEngine::SetParams(const Params &p)
     float rt_coef    = cut ? coef_.rt_cut : (log_target > log_rt60_ ? coef_.rt_up : coef_.rt_down);
     log_rt60_ += rt_coef * (log_target - log_rt60_);
 
+    // Surge stretches the decay towards held, in log time, so the tail
+    // swells and lingers; past kSurgeBoil it also pushes the gain past
+    // unity, into the lines' clipper, and the sea boils. It follows the
+    // storm, which is already smooth.
+    float log_rt = cut ? log_rt60_ : Lerp(log_rt60_, logf(kHoldRt60), surge);
+    sea_.SetSurge(cut ? 0.0f : fmaxf(surge - kSurgeBoil, 0.0f) / (1.0f - kSurgeBoil));
+
     // Held, Tone moves from the loop's damping to the output's low-pass, so
     // the sea keeps the colour it had rather than darkening to a hum.
     hold_ += coef_.hold * ((held && !cut ? 1.0f : 0.0f) - hold_);
     float hf = kDarkHf * powf(kBrightHf / kDarkHf, tone);
-    sea_.SetDecay(expf(log_rt60_), Lerp(hf, 1.0f, hold_));
+    sea_.SetDecay(expf(log_rt), Lerp(hf, 1.0f, hold_));
+
+    // Wind: the lines churn, deeper and faster as it rises; the whistle's
+    // centre wanders and the gusts lift it.
+    sea_.SetTurbulence(kWindFrames * wind * sqrtf(wind), wind);
+    whistle_mix_ = kWhistleMix * wind * sqrtf(wind);
+    float sweep  = Clamp(0.5f + 0.35f * whistle_sweep_.Next() + 0.4f * gust * gusts, 0.0f, 1.0f);
+    float centre = kWhistleLow * powf(kWhistleHigh / kWhistleLow, sweep);
+    if(whistle_mix_ > 0.0f && fabsf(centre - whistle_set_) > 0.003f * whistle_set_)
+    {
+        float q = 4.0f + 8.0f * wind;
+        whistle_bp_[0].Set(centre, q, sample_rate_);
+        whistle_bp_[1].Set(centre * kWhistleSpread, q, sample_rate_);
+        whistle_set_ = centre;
+    }
 
     float tone_cutoff = logf(kDarkCutoff) + tone * logf(kBrightCutoff / kDarkCutoff);
     log_cutoff_ += coef_.cutoff * (Lerp(logf(kOpenCutoff), tone_cutoff, hold_) - log_cutoff_);
@@ -194,8 +257,18 @@ void StormEngine::Process(float in_l, float in_r, float *out_l, float *out_r)
     float mid  = 0.5f * width_gain_ * (wet_l + wet_r);
     float side = 0.5f * width_gain_ * (wet_l - wet_r);
     float bp;
-    wet_l = tide_l_ * lp_[0].Process(mid + out_side_ * side, &bp);
-    wet_r = tide_r_ * lp_[1].Process(mid - out_side_ * side, &bp);
+    wet_l = lp_[0].Process(mid + out_side_ * side, &bp);
+    wet_r = lp_[1].Process(mid - out_side_ * side, &bp);
+    if(whistle_mix_ > 0.0f)
+    {
+        float wl, wr;
+        whistle_bp_[0].Process(wet_l, &wl);
+        whistle_bp_[1].Process(wet_r, &wr);
+        wet_l += whistle_mix_ * wl;
+        wet_r += whistle_mix_ * wr;
+    }
+    wet_l *= tide_l_;
+    wet_r *= tide_r_;
     wet_peak_ = fmaxf(wet_peak_, fmaxf(fabsf(wet_l), fabsf(wet_r)));
 
     // Bypassed, the dry goes to unity, and the wet either rings out
@@ -217,5 +290,6 @@ StormEngine::Probe StormEngine::GetProbe() const
     p.tide  = tide_db_;
     p.rt60  = expf(log_rt60_);
     p.hold  = hold_;
+    p.storm = strength_;
     return p;
 }

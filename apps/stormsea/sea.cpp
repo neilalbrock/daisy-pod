@@ -37,6 +37,15 @@ constexpr float kDcGain = 0.5f * (1.0f + kDcPole);
 constexpr float kCeiling   = 0.03f;
 constexpr float kWallSlope = 0.1f;
 
+// Surge's clipper: the most a line can carry.
+constexpr float kClip    = 0.3f;
+constexpr float kInvClip = 1.0f / kClip;
+
+// Wind's moves, at speed 0 and 1, in seconds; each takes from 60% to 140%
+// of that, at random.
+constexpr float kCalmMove  = 1.5f;
+constexpr float kStormMove = 0.1f;
+
 constexpr float kLn1000 = 6.9077553f; // 60 dB
 } // namespace
 
@@ -54,6 +63,8 @@ void Sea::Init(float sample_rate, size_t block_size, float *mem)
         ln.a = ln.z = ln.dc_x = ln.dc_y = ln.ap_y = 0.0f;
         ln.phase = (float)i / kLines;
         ln.inc   = kSwingHz[i] / sample_rate;
+        ln.wind = ln.wind_step = 0.0f;
+        ln.turbulence.Init(kCalmMove, kCalmMove, sample_rate / (float)block_size, 0x5EA0u + 977u * i);
         for(int k = 0; k < ln.size; k++)
             ln.buf[k] = 0.0f;
         mem += ln.size;
@@ -72,6 +83,7 @@ void Sea::Init(float sample_rate, size_t block_size, float *mem)
         }
 
     float block_rate = sample_rate / (float)block_size;
+    block_frames_    = (float)block_size;
     level_attack_    = 1.0f - expf(-1.0f / (0.02f * block_rate));
     level_release_   = 1.0f - expf(-1.0f / (0.3f * block_rate));
     block_scale_     = 1.0f / ((float)block_size * kLines);
@@ -115,7 +127,26 @@ void Sea::SetDecay(float rt60, float hf_ratio)
 
 void Sea::SetDepth(float frames)
 {
-    depth_ = Clamp(frames, 0.0f, 0.5f * kMaxMod);
+    depth_ = Clamp(frames, 0.0f, 0.25f * kMaxMod);
+}
+
+void Sea::SetTurbulence(float frames, float speed)
+{
+    frames     = Clamp(frames, 0.0f, 0.25f * kMaxMod);
+    float move = kCalmMove * powf(kStormMove / kCalmMove, Clamp(speed, 0.0f, 1.0f));
+    for(int i = 0; i < kLines; i++)
+    {
+        Line &ln = lines_[i];
+        ln.turbulence.SetTimes(0.6f * move, 1.4f * move);
+        float target = frames * (1.0f + ln.turbulence.Next());
+        ln.wind_step = (target - ln.wind) / block_frames_;
+    }
+}
+
+void Sea::SetSurge(float surge)
+{
+    surge_      = Clamp(surge, 0.0f, 1.0f);
+    surge_gain_ = 1.0f + kSurgeGain * surge_;
 }
 
 void Sea::UpdateWall()
@@ -160,7 +191,8 @@ void Sea::Process(float mid, float side, float *l, float *r)
         ln.phase += ln.inc;
         if(ln.phase >= 1.0f)
             ln.phase -= 1.0f;
-        float x = Read(ln, ln.delay + depth_ * (1.0f + FastSin(ln.phase)));
+        ln.wind += ln.wind_step;
+        float x = Read(ln, ln.delay + depth_ * (1.0f + FastSin(ln.phase)) + ln.wind);
         energy += x * x;
         out_l += kOutL[i] * x;
         out_r += kOutR[i] * x;
@@ -169,7 +201,9 @@ void Sea::Process(float mid, float side, float *l, float *r)
         float h = kDcGain * (ln.z - ln.dc_x) + kDcPole * ln.dc_y;
         ln.dc_x = ln.z;
         ln.dc_y = h;
-        m[i]    = h;
+        if(surge_ > 0.0f)
+            h = kClip * SoftClip(surge_gain_ * kInvClip * h);
+        m[i] = h;
     }
     energy_ += energy;
     *l = kOutGain * out_l;

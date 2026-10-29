@@ -2,10 +2,11 @@
 //
 // Our own design, after Oceanus Procellarum, the Ocean of Storms on the
 // Moon. With the storm down it's a clean, lush reverb (a feedback delay
-// network) whose tails run from half a second to forever. This is stage 1
-// of the roadmap in README.md, the calm sea; the storm comes next.
+// network) whose tails run from half a second to forever; Storm raises
+// weather on the tail, and Gusts makes it come and go. This is stage 2 of
+// the roadmap in README.md: the calm sea, and the storm's Wind and Surge.
 //
-// The two knobs are shared across three pages; press the encoder to change
+// The two knobs are shared across five pages; press the encoder to change
 // page (LED 2 shows which). After a page change a knob does nothing until
 // it is moved, so values don't jump. Turning the encoder sets the page's
 // choice, if it has one.
@@ -19,9 +20,13 @@
 //                                Encoder - Predelay: 0, 15, 30, 60, 120, 240 ms
 //   Page 3 Motion (LED 2 green)  Knob 1 - Depth: the lines' slow swing
 //                                Knob 2 - Tide: slow swells of level and position
+//   Page 4 Storm (LED 2 violet)  Knob 1 - Storm: calm to gale
+//                                Knob 2 - Gusts: steady to fronts and gusts
+//   Page 5 Wind and Surge        Knob 1 - Wind: the tail churns, and whistles
+//          (LED 2 white)         Knob 2 - Surge: the tail swells, then boils
 //   (a limiter holds dry + wet under -1 dBFS)
 //
-//   Page 4 (LED 2: the slot) Presets. Encoder turn - select a slot, loading
+//   Page 6 (LED 2: the slot) Presets. Encoder turn - select a slot, loading
 //                            its preset; an empty one keeps the sound.
 //                            Encoder long press - save to the slot. LED 2
 //                            shows the slot's colour: dim if empty,
@@ -30,27 +35,30 @@
 //
 //   Encoder long press - mono in: the left input feeds both channels
 //                        (LED 1 flashes cyan for on, dark for off)
-//   Button 1 tap       - on/off (holding it will be Calm, with the storm)
+//   Button 1 tap       - on/off
+//   Button 1 hold      - Calm: the storm dies down while held
 //   Button 2 tap       - Freeze: holds the sea forever, until tapped again
-//                        (holding it will be Squall, with the storm)
+//   Button 2 hold      - Squall: the storm rises to full while held
 //
-// LED 1 is dark while off, a calm deep blue while on, and pale moonlight
-// white while frozen. Turning the encoder flashes LED 2 with the choice:
-// red, green or blue for the widths, and the predelay as cyan, dim to
-// bright.
+// LED 1 is dark while off and, while on, shows the storm's strength from
+// moment to moment: a calm deep blue through grey to a stormy violet. It
+// glows pale moonlight white while frozen. Turning the encoder flashes
+// LED 2 with the choice: red, green or blue for the widths, and the
+// predelay as cyan, dim to bright.
 //
 // MIDI CCs on any channel, from the TRS input or USB (see README.md):
 //
 //   14 Decay   15 Mix   16 Size   17 Tone   18 Depth   19 Tide
+//   20 Storm   21 Gusts   22 Wind   26 Surge
 //   28 Width   29 Predelay   (0-127 split evenly between them)
 //   64 Sustain pedal: Freeze while down
-//   102 On/off   103 Freeze   104 Mono in   107 Trails   108 Kill dry
-//   (64 and up: on)
+//   102 On/off   103 Freeze   104 Mono in   105 Calm   106 Squall
+//   107 Trails   108 Kill dry   (64 and up: on; Calm and Squall while on)
 //   Program change 1-8 (sent as 0-7) selects preset slot 1-8
 //
 // Over USB MIDI it also talks to the web control surface (web/, `make
-// web`), streaming levels, CPU, the sea's level, Tide's swell and the decay
-// time while the page is open, with the presets.
+// web`), streaming levels, CPU, the sea's level, Tide's swell, the storm's
+// strength and the decay time while the page is open, with the presets.
 //
 // Presets (common/presets.h) hold the knobs, width and predelay. Mono in,
 // trails and kill dry are saved on their own a few seconds after they
@@ -94,7 +102,7 @@ CpuLoadMeter   cpu_meter;
 QspiFlash      flash(hw.seed.qspi);
 PresetsFor<kNumParams> presets;
 
-constexpr int kNumKnobPages = 3;
+constexpr int kNumKnobPages = 5;
 constexpr int kPresetPage   = kNumKnobPages; // after the knob pages; its knobs do nothing
 constexpr int kNumPages     = kNumKnobPages + 1;
 constexpr int kNumKnobs     = 2;
@@ -104,6 +112,8 @@ PagedKnobs<kNumPages, kNumKnobs> pages({
     {0.42f, 0.35f}, // decay 4 s, mix
     {0.7f, 0.6f},   // size, tone
     {0.25f, 0.0f},  // depth, no tide
+    {0.0f, 0.4f},   // storm (calm), gusts
+    {0.5f, 0.4f},   // wind, surge
     {0.0f, 0.0f},   // presets: unused
 });
 
@@ -112,22 +122,27 @@ PagedKnobs<kNumPages, kNumKnobs> pages({
 // What the Pod and the web page set. Only the audio callback writes it;
 // the main loop reads it for the LEDs and the page.
 
-// Each page's encoder choice: width, predelay; the third page has none.
-constexpr int kChoiceCounts[kNumKnobPages] = {StormEngine::kNumWidths, StormEngine::kNumPredelays, 0};
-int  choices[kNumKnobPages] = {StormEngine::kWide, 1, 0};
+// Each page's encoder choice: width, predelay; the others have none.
+constexpr int kChoiceCounts[kNumKnobPages] = {StormEngine::kNumWidths, StormEngine::kNumPredelays, 0, 0, 0};
+int  choices[kNumKnobPages] = {StormEngine::kWide, 1, 0, 0, 0};
 bool active   = true;
 bool freeze   = false;
 bool trails   = true;
 bool kill_dry = false;
 bool mono_in  = false;
+bool calm     = false; // from the web page or MIDI; button 1's hold adds to it
+bool squall   = false; // likewise, button 2's
 
 PressHold encoder_press(600); // hold: mono in, or on the preset page, save
-PressHold button1(500);       // tap: on/off; hold: Calm, with the storm
-PressHold button2(500);       // tap: Freeze; hold: Squall, with the storm
+PressHold button1(500);       // tap: on/off; hold: Calm
+PressHold button2(500);       // tap: Freeze; hold: Squall
+bool      calm_held   = false; // button 1 is held past a tap
+bool      squall_held = false; // button 2 likewise
 
 // Read by the main loop for the LEDs: flash until these times (ms).
 volatile uint32_t choice_flash_until = 0;
 volatile uint32_t mono_flash_until   = 0;
+volatile float    storm_now          = 0.0f; // the storm's strength, 0..1
 
 // ---------------------------------------------------------------- Web link
 //
@@ -173,6 +188,8 @@ void SetParam(int index, int raw, uint32_t now_ms)
         case kParamKillDry: kill_dry = raw != 0; break;
         case kParamActive: active = raw != 0; break;
         case kParamFreeze: freeze = raw != 0; break;
+        case kParamCalm: calm = raw != 0; break;
+        case kParamSquall: squall = raw != 0; break;
         case kParamMono: mono_in = raw != 0; break;
         default:
             if(index < kNumKnobParams)
@@ -198,6 +215,8 @@ int ParamRaw(int index)
         case kParamKillDry: return kill_dry;
         case kParamActive: return active;
         case kParamFreeze: return freeze;
+        case kParamCalm: return calm || calm_held;
+        case kParamSquall: return squall || squall_held;
         case kParamMono: return mono_in;
         default: return (int)(pages.Value(index / 2, index % 2) * 16383.0f + 0.5f);
     }
@@ -206,15 +225,18 @@ int ParamRaw(int index)
 // Once per block, in the audio callback: a trace point every millisecond.
 void Collect(size_t size)
 {
+    StormEngine::Probe p = engine.GetProbe();
+    storm_now            = p.storm;
+
     trace_samples += (int)size;
     if(trace_samples < trace_period)
         return;
     trace_samples = 0;
 
-    StormEngine::Probe p     = engine.GetProbe();
-    float             *point = trace_ring[trace_written & (kTraceRing - 1)];
-    point[kTraceSea]         = 10.0f * log10f(p.level + 1e-7f);
-    point[kTraceTide]        = p.tide;
+    float *point       = trace_ring[trace_written & (kTraceRing - 1)];
+    point[kTraceSea]   = 10.0f * log10f(p.level + 1e-7f);
+    point[kTraceTide]  = p.tide;
+    point[kTraceStorm] = 100.0f * p.storm;
     point[kTraceDecay]       = p.hold > 0.5f ? kHeldDecay : fminf(p.rt60, kHeldDecay);
     trace_written            = trace_written + 1; // after the point is in place
 }
@@ -280,9 +302,19 @@ void SendWeb(uint32_t now_ms)
 // from the web page: the Pod's knob lets go until it's moved. Choices
 // split 0-127 evenly, so a controller's knob sweeps through them.
 
+// Each knob's CC, by parameter: 14-19 the calm sea, 20-27 the storm (Rain,
+// Lightning, Thunder and Undertow, still to come, take 23-25 and 27).
+constexpr uint8_t kKnobCc[kNumKnobParams] = {14, 15, 16, 17, 18, 19, 20, 21, 22, 26};
+
 void HandleCc(uint8_t cc, uint8_t value, uint32_t now_ms)
 {
     bool on = value >= 64;
+    for(int i = 0; i < kNumKnobParams; i++)
+        if(kKnobCc[i] == cc)
+        {
+            pages.Set(i / 2, i % 2, value / 127.0f);
+            return;
+        }
     switch(cc)
     {
         case 28: SetChoice(0, value * StormEngine::kNumWidths / 128, now_ms); break;
@@ -291,13 +323,11 @@ void HandleCc(uint8_t cc, uint8_t value, uint32_t now_ms)
         case 103: freeze = on; break;
         case 102: active = on; break;
         case 104: mono_in = on; break;
+        case 105: calm = on; break;
+        case 106: squall = on; break;
         case 107: trails = on; break;
         case 108: kill_dry = on; break;
-        default:
-            // 14-19: the knobs, page by page
-            if(cc >= 14 && cc < 14 + kNumKnobParams)
-                pages.Set((cc - 14) / 2, (cc - 14) % 2, value / 127.0f);
-            break;
+        default: break;
     }
 }
 
@@ -342,12 +372,16 @@ void AudioCallback(AudioHandle::InputBuffer  in,
     while(usb_midi.HasEvents())
         HandleMidi(usb_midi.PopEvent(), now_ms);
 
-    // The buttons act on a tap, when let go: a hold will be the storm's
-    // (Calm and Squall).
-    if(button1.Update(hw.button1.Pressed(), hw.button1.TimeHeldMs()) == PressHold::Event::kTap)
+    // The buttons act on a tap, when let go; held, they're Calm and Squall
+    // until let go.
+    PressHold::Event b1 = button1.Update(hw.button1.Pressed(), hw.button1.TimeHeldMs());
+    PressHold::Event b2 = button2.Update(hw.button2.Pressed(), hw.button2.TimeHeldMs());
+    if(b1 == PressHold::Event::kTap)
         active = !active;
-    if(button2.Update(hw.button2.Pressed(), hw.button2.TimeHeldMs()) == PressHold::Event::kTap)
+    if(b2 == PressHold::Event::kTap)
         freeze = !freeze;
+    calm_held   = (calm_held || b1 == PressHold::Event::kHold) && hw.button1.Pressed();
+    squall_held = (squall_held || b2 == PressHold::Event::kHold) && hw.button2.Pressed();
 
     const DaisyPod::Knob knob_ids[kNumKnobs] = {DaisyPod::KNOB_1, DaisyPod::KNOB_2};
     float                knob[kNumKnobs];
@@ -387,6 +421,12 @@ void AudioCallback(AudioHandle::InputBuffer  in,
     p.tone     = pages.Value(1, 1);
     p.depth    = pages.Value(2, 0);
     p.tide     = pages.Value(2, 1);
+    p.storm    = pages.Value(3, 0);
+    p.gusts    = pages.Value(3, 1);
+    p.wind     = pages.Value(4, 0);
+    p.surge    = pages.Value(4, 1);
+    p.calm     = calm || calm_held;
+    p.squall   = squall || squall_held;
     p.width    = choices[0];
     p.predelay = choices[1];
     p.active   = active;
@@ -472,6 +512,8 @@ int main(void)
         {0.0f, 0.0f, 1.0f}, // Sea: blue
         {0.0f, 1.0f, 1.0f}, // Shape: cyan
         {0.0f, 1.0f, 0.0f}, // Motion: green
+        {0.6f, 0.0f, 1.0f}, // Storm: violet
+        {1.0f, 1.0f, 1.0f}, // Wind and Surge: white
     };
     const float width_colours[StormEngine::kNumWidths][3] = {
         {1.0f, 0.0f, 0.0f}, // narrow: red
@@ -485,7 +527,8 @@ int main(void)
         float    r, g, b;
 
         // LED 1: the mono in flash, else dark while off, pale moonlight
-        // while frozen, and a calm deep blue otherwise.
+        // while frozen, and otherwise the storm: a calm deep blue, through
+        // grey, to a stormy violet.
         if(now < mono_flash_until)
         {
             r = 0.0f;
@@ -501,9 +544,22 @@ int main(void)
         }
         else
         {
-            r = 0.0f;
-            g = 0.15f;
-            b = 1.0f;
+            // calm (0, 0.15, 1) -> grey (0.35, 0.35, 0.45) -> violet (0.6, 0.05, 1)
+            float s = storm_now;
+            if(s < 0.5f)
+            {
+                float t = 2.0f * s;
+                r       = 0.35f * t;
+                g       = 0.15f + 0.2f * t;
+                b       = 1.0f - 0.55f * t;
+            }
+            else
+            {
+                float t = 2.0f * s - 1.0f;
+                r       = 0.35f + 0.25f * t;
+                g       = 0.35f - 0.3f * t;
+                b       = 0.45f + 0.55f * t;
+            }
         }
         hw.led1.Set(r, g, b);
 

@@ -18,11 +18,12 @@ make APP=stormsea program-dfu
 Every control is also over MIDI (see [MIDI](#midi)) and on the
 [web page](#the-web-page). Eight [presets](#presets) are kept in flash.
 
-This is the first of four stages (see [Roadmap](#roadmap)): **the calm
-sea**, a reverb with Freeze, presets, MIDI and the web page. The storm
-comes next. [The storm](#the-storm) and [Weathering](#weathering) describe
-the plan; the [controls](#controls) and [MIDI](#midi) list what's built,
-and what's to come.
+This is the second of four stages (see [Roadmap](#roadmap)): **the calm
+sea**, a reverb with Freeze, presets, MIDI and the web page, and the first
+of **the storm**: Storm and Gusts, Wind and Surge, and Calm and Squall on
+the buttons. Rain, Lightning, Thunder and Undertow come next.
+[The storm](#the-storm) marks what's built; the [controls](#controls) and
+[MIDI](#midi) list what's built, and what's to come.
 
 ## Signal flow
 
@@ -31,18 +32,20 @@ in -+---------------------------------------------------------------- dry -+
     |                                                                       |
     +-> gate (on/off, Freeze) -> low cut -> predelay -> input diffusers     |
         -> the sea: 8 delay lines, each                                     |
-             delay (Size; Depth [and Wind] move it)                         |
-             -> damping (Tone) -> DC block [-> Surge: gain past unity]      |
+             delay (Size; Depth and Wind move it)                           |
+             -> damping (Tone; Surge stretches the decay)                   |
+             -> DC block -> Surge: gain past unity, soft clip               |
              -> mixing matrix [Undertow: turning, sinking]                  |
              -> sea wall -> back into the lines x Decay                     |
            <- [Lightning and Thunder strike in, Rain falls in]              |
-        -> Width -> Tone (while held) [-> Wind: whistle] -> Tide -> wet     |
+        -> Width -> Tone (while held) -> Wind: whistle -> Tide -> wet       |
     mix <-------------------------------------------------------------------+
     -> limiter -> out
 ```
 
-Everything in brackets is the storm, still to come. It will be scaled by
-Storm's current strength: at Storm 0 none of it runs and the sea is calm.
+Wind and Surge are the storm, scaled by Storm's strength from moment to
+moment: at Storm 0 they don't run and the sea is calm. What's in brackets
+is the rest of the storm, still to come.
 
 ## The calm sea
 
@@ -75,7 +78,8 @@ it centred.
 
 ## The storm
 
-*Stages 2 to 4: not built yet.*
+*Built: Storm, Gusts, Wind, Surge, Calm and Squall. To come: Rain,
+Lightning, Thunder, Strike and Undertow (stages 3 and 4).*
 
 **Storm** sets how strong the storm is, from calm to gale. Each element's
 own control sets its part in the storm, so a preset can be all wind and
@@ -84,18 +88,24 @@ them all together. At Storm 0 every element is off, whatever its setting.
 
 **Gusts** sets how the storm moves. At 0 it holds steady at Storm's
 setting. Turned up, it comes and goes on its own: fronts that build and
-pass over tens of seconds, with sudden gusts on top, swinging above and
-below Storm's setting, so a medium storm has lulls of near calm and gusts
-near full. Gusts runs free, with no tempo, like weather. LED 1 and the web
-page show the storm's strength from moment to moment.
+pass over 10 to 40 s swing it up to 90% above and below Storm's setting,
+and sudden gusts (0.4 s to 2.5 s) lift it up to 80% more, so a medium
+storm has lulls of near calm and gusts near full. Gusts runs free, with no
+tempo, like weather. LED 1 and the web page show the storm's strength from
+moment to moment.
+
+**Calm** (button 1 held) eases the storm down to nothing over a couple of
+seconds, and lets it back when you let go. **Squall** (button 2 held)
+raises it to full in a moment, each element to its own setting, and lets
+it fall back over a few seconds when you let go.
 
 | Element | What it does |
 |---|---|
-| **Wind** | Turbulence: random modulation of every line's length, faster and deeper as the wind rises, so the tail's pitch smears and churns. And the whistle: a resonant band-pass on the tail that sweeps with the gusts, like wind through rigging |
+| **Wind** | Turbulence: each line's length wanders at random, by up to 5 ms each way and in moves of 1.5 s down to 0.1 s as the wind rises, so the tail's pitch smears and churns (up to a couple of semitones in a gale). And the whistle: a resonant band-pass on the tail, 400 Hz to 2.4 kHz, sweeping at random and lifted by the gusts, a little higher on the right, like wind through rigging |
 | **Rain** | Drops: tiny grains (2 to 20 ms) of the recent tail, brighter, at a random pitch (unison, a fifth or an octave up) and position, from a few a second to a downpour. The drops fall into the sea as well as being heard, so rain leaves a shimmer in the tail |
 | **Lightning** | How often it strikes, at random, from none to about one strike every 2 s in a full storm (more in the gusts). A strike takes the last fraction of a second of the tail and flashes it back into the sea, sharp and bright: see Strike below. LED 1 flashes white |
 | **Thunder** | How loud the thunder that follows each strike is. It comes 0.2 to 3 s after its strike: the same slice an octave down, low-passed, swelling and rolling into the sea's low end. Later thunder is further away, so quieter and darker. Without lightning there's no thunder |
-| **Surge** | Raises the sea's gain past unity into a soft clipper in each line, so the tail swells up, thickens and boils instead of dying away. When the storm drops the gain falls back under unity and the sea settles to its Decay |
+| **Surge** | Stretches the decay towards ∞, so the tail swells and lingers; past 30% of it, it also raises the sea's gain past unity (by up to 25% a trip) into a soft clipper in each line, so the tail swells up, thickens and boils instead of dying away. When the storm drops the gain falls back under unity and the sea settles to its Decay |
 | **Undertow** | Slowly turns the mixing matrix (it stays orthogonal, so an infinite sea stays stable), so the tail's colours shift and churn as energy moves between lines; and sinks the tail by a few cents on each trip round, so long tails slide down into the deep |
 
 **Strike** chooses what a lightning strike plays:
@@ -111,15 +121,15 @@ page show the storm's strength from moment to moment.
 Freeze shuts the input out and holds the sea forever. Let go of Freeze and
 it fades away at the Decay setting.
 
-*With the storm (not built yet):* the storm keeps working on a frozen sea,
-and what it does stays: lightning, thunder and rain leave new partials in
-it, Surge wears it round, Wind and Undertow smear and turn it. Freeze a
+The storm keeps working on a frozen sea, and what it does stays: Surge
+wears it round and Wind smears it (and, to come, lightning, thunder and
+rain will leave new partials in it, and Undertow will turn it). Freeze a
 chord, raise a storm, and when the calm comes back the sea isn't the one
 you froze.
 
 ## Controls
 
-The two knobs are shared across three pages. Press the encoder to change
+The two knobs are shared across five pages. Press the encoder to change
 page (LED 2 shows which). After a page change a knob does nothing until you
 move it, so values don't jump. Turning the encoder sets that page's choice,
 if it has one, and LED 2 flashes it for a second.
@@ -129,13 +139,14 @@ if it has one, and LED 2 flashes it for a second.
 | 1 Sea (blue) | Decay | Mix | Width: narrow, medium, wide (red, green, blue) |
 | 2 Shape (cyan) | Size | Tone | Predelay: 0 to 240 ms (dim to bright) |
 | 3 Motion (green) | Depth | Tide | |
-| 4 (the slot) | | | Presets: selects a slot (see [Presets](#presets)) |
+| 4 Storm (violet) | Storm | Gusts | |
+| 5 Wind and Surge (white) | Wind | Surge | |
+| 6 (the slot) | | | Presets: selects a slot (see [Presets](#presets)) |
 
-The storm will add four pages before the preset page:
+When the rest of the storm comes, the pages after Storm will be:
 
 | Page (LED 2) | Knob 1 | Knob 2 | Encoder turn |
 |---|---|---|---|
-| Storm (violet) | Storm | Gusts | |
 | Wind and Rain (white) | Wind | Rain | |
 | Lightning (yellow) | Lightning | Thunder | Strike: Flash, Glint, Fork (white, pale blue, yellow) |
 | Surge (red) | Surge | Undertow | |
@@ -145,20 +156,21 @@ The storm will add four pages before the preset page:
 | Encoder press | Next page |
 | Encoder long press (0.6 s) | Mono in: the left input feeds both channels. LED 1 flashes cyan for on, dark for off. On the preset page, it saves instead |
 | Button 1 tap | On/off, when you let go. With trails on (the default), turning it off shuts the sea's input and lets the tail ring out under the dry signal; with trails off, the tail is cut in 5 ms |
-| Button 1 hold | *With the storm:* **Calm**: the storm dies down over a couple of seconds while held, and comes back when you let go |
+| Button 1 hold | **Calm**: the storm dies down over a couple of seconds while held, and comes back when you let go |
 | Button 2 tap | **Freeze**, when you let go: holds the sea forever, until you tap again (see [Weathering](#weathering)) |
-| Button 2 hold | *With the storm:* **Squall**: the storm rises to full in a moment while held, and falls back to its setting over a few seconds when you let go. Frozen or not |
+| Button 2 hold | **Squall**: the storm rises to full in a moment while held, and falls back to its setting over a few seconds when you let go. Frozen or not |
 
 The buttons act when you let go (within half a second), so that a hold can
 do something else.
 
-LED 1 is dark while the effect is off, a calm deep blue while it's on, and
-pale moonlight white while the sea is frozen. With the storm, it will show
-the storm's strength from moment to moment, from calm blue through grey to
-a stormy violet, and flash white on each lightning strike.
+LED 1 is dark while the effect is off. While it's on, it shows the storm's
+strength from moment to moment, from a calm deep blue through grey to a
+stormy violet (and, with Lightning, will flash white on each strike). It
+glows pale moonlight white while the sea is frozen.
 
 Starting values: decay 4 s, mix 35%, size 70%, tone 60%, depth 25%, tide
-0, predelay 15 ms, wide.
+0, predelay 15 ms, wide. Storm 0, gusts 40%, wind 50% and surge 40%, so
+turning Storm up brings a storm at once.
 
 ## MIDI
 
@@ -174,12 +186,18 @@ does nothing until you move it again.
 | 17 | Tone | 0-127 |
 | 18 | Depth | 0-127 |
 | 19 | Tide | 0-127 |
+| 20 | Storm | 0-127 |
+| 21 | Gusts | 0-127 |
+| 22 | Wind | 0-127 |
+| 26 | Surge | 0-127 |
 | 28 | Width | 0-42 narrow, 43-85 medium, 86-127 wide |
 | 29 | Predelay | 0-21 0 ms, 22-42 15 ms, 43-63 30 ms, 64-85 60 ms, 86-106 120 ms, 107-127 240 ms |
 | 64 | Sustain pedal | Freeze while down (64-127) |
 | 102 | On/off | 0-63 off, 64-127 on |
 | 103 | Freeze | 0-63 off, 64-127 on |
 | 104 | Mono in | 0-63 off, 64-127 on |
+| 105 | Calm | 64-127 while held, like button 1's hold |
+| 106 | Squall | 64-127 while held, like button 2's hold |
 | 107 | Trails | 0-63 off, 64-127 on |
 | 108 | Kill dry | 0-63 off, 64-127 on: no dry at any Mix (or while off), for use on a send |
 
@@ -188,29 +206,23 @@ does nothing until you move it again.
 The choices split 0-127 evenly, so a controller's knob sweeps through them.
 LED 2 flashes a choice changed over MIDI only if its page is showing.
 
-The storm will take these:
+The rest of the storm will take these:
 
 | CC | Control |
 |---|---|
-| 20 | Storm |
-| 21 | Gusts |
-| 22 | Wind |
 | 23 | Rain |
 | 24 | Lightning |
 | 25 | Thunder |
-| 26 | Surge |
 | 27 | Undertow |
 | 30 | Strike: 0-42 Flash, 43-85 Glint, 86-127 Fork |
-| 105 | Calm: 64-127 while held, like button 1's hold |
-| 106 | Squall: 64-127 while held, like button 2's hold |
 
 ## Presets
 
 Eight preset slots, kept in the Seed's flash, so they survive power-off and
 reflashing. Every app keeps its own.
 
-- **On the Pod:** page 4 is the preset page (it will move to the end when
-  the storm's pages come). Turning the encoder there selects a slot and
+- **On the Pod:** page 6 is the preset page (it will move to the end when
+  the rest of the storm's pages come). Turning the encoder there selects a slot and
   loads its preset; an empty slot is only selected, keeping the sound,
   ready to save into. A long press on the encoder saves the current
   settings to the slot. The knobs do nothing on this page. LED 2 shows the
@@ -224,7 +236,7 @@ reflashing. Every app keeps its own.
 A preset holds the knobs, Width and Predelay: the sea (and, with the
 storm, its weather). Mono in, Trails and Kill dry are saved on their own, a
 few seconds after they last change. At power-up they come back, then the
-preset last selected. On/off and Freeze always start from scratch.
+preset last selected. On/off, Freeze, Calm and Squall always start from scratch.
 
 **Factory reset:** hold both buttons while powering up the Pod (through
 the bootloader's 2.5 s wait) until both LEDs flash white, then let go. Or
@@ -236,11 +248,12 @@ back to its defaults.
 
 Run `make web` and open http://localhost:8000 in Chrome or Edge with the Pod
 connected by USB. The page shows the in, wet and out levels and CPU, traces
-of the sea's level and Tide's swell, and the decay time (∞ while the sea
-is held). Every control is there too, with Trails and Kill dry. See
+of the sea's level and the storm's strength, Tide's swell, and the decay
+time (∞ while the sea is held). Every control is there too, with Trails
+and Kill dry, and Calm and Squall as switches. See
 [web/README.md](../../web/README.md).
 
-![Stormsea's web page: the sea and tide traces on the display, the three knob pages and the switches](../../screenshots/faceplate-stormsea.png)
+![Stormsea's web page: the sea and storm traces on the display, the five knob pages and the switches](../../screenshots/faceplate-stormsea.png)
 
 With the storm, the display will become a view of the sea: its surface
 rising and falling with the tail's level and Tide, the sky darkening with
@@ -264,8 +277,13 @@ the Pod both ways. See [m4l/README.md](../../m4l/README.md).
 - The lines are read with first-order allpass interpolation, which passes
   every frequency at unity. Cubic interpolation dulls the top a little on
   each trip: a frozen sea lost everything above 8 kHz within seconds. The
-  allpass clicks faintly when its whole-frame delay steps, below -90 dB at
-  Depth's slow swings. Wind's fast turbulence will need another look.
+  allpass clicks faintly when its whole-frame delay steps: below -90 dB at
+  Depth's slow swings, and in a full gale, on a pure tone's tail, the
+  energy above 6 kHz only rises from -66 dB to -62 dB of the whole, which
+  the storm masks.
+- Wind's turbulence is a `Wander` (`wander.h`) a line, stepped once a block
+  and eased sample by sample in between. Surge's clipper is skipped while
+  there's no Surge.
 - The DC block in the loop is scaled so it never passes unity: unscaled,
   it lifts the very top by 0.025% each trip, and a frozen sea crept up 4
   dB in two minutes.
@@ -276,9 +294,10 @@ the Pod both ways. See [m4l/README.md](../../m4l/README.md).
   will go in SDRAM. Nothing is cleared in the callback: like the other
   apps' rings, it will count what's been written and read silence before
   it.
-- Every element will be free-running: its own random processes, driven by
-  the storm's strength, with no tempo. `Wander` (`wander.h`), which moves
-  Tide, will move the storm too.
+- Every element is free-running: its own random processes (`Wander`s),
+  driven by the storm's strength, with no tempo.
+- On the host the storm at full adds about 20% to the sea's time a sample:
+  watch the CPU on the web page.
 
 ## Roadmap
 
@@ -289,7 +308,8 @@ beautiful on its own before any weather goes on it.
    input diffusers, Decay up to ∞, Size, Tone, Depth, Tide, Predelay,
    Width, the sea wall, Mix, on/off with trails, Freeze, mono in, Kill dry,
    the pages, MIDI, presets and the web page.
-2. Wind, Surge, the Storm and Gusts controls, Calm and Squall.
+2. **Built, to try on the Pod:** Wind, Surge, the Storm and Gusts
+   controls, Calm and Squall.
 3. Lightning, Thunder and Strike, and Rain, over the tail ring.
 4. Undertow, then tuning Storm's curve and the elements' ranges by ear;
    the web page's sea view.

@@ -51,8 +51,9 @@ screens). `CLAUDE.md` here has the design system and the layout rules.
   - **LFO & swell** (slowdrift): the modulation LFO and the reverb's input
     gain (Rise's swells, the gate closing while off or frozen); the decay time
     shows as a number.
-  - **Sea & tide** (stormsea): the sea's level and Tide's level swell; the
-    decay time shows as a number, ∞ while the sea is held.
+  - **Sea & storm** (stormsea): the sea's level and the storm's strength;
+    Tide's swell and the decay time show as numbers, the decay ∞ while the
+    sea is held.
   - **Last voice** (wavebyte): its wave position, cutoff and amp envelope;
     the voices playing and the stack's margin show as numbers.
   - **Tempo** (grainfall, and driftnet, marked not synced while it runs free),
