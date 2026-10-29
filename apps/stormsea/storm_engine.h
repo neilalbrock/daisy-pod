@@ -3,13 +3,15 @@
 //   in -+------------------------------------------------------- dry -+
 //       |                                                             |
 //       +-> gate (on/off, Freeze) -> low cut -> predelay              |
+//           [+ what the sky drops in]                                 |
 //           -> the sea (sea.h): 8 lines, Size, Decay, Tone, Depth,    |
-//              [Wind's turbulence, Surge]                             |
+//              [Wind's turbulence, Surge]  -> [the sky's tail ring]   |
 //           -> Width -> Tone's output low-pass (at ∞ and frozen)      |
-//           [-> Wind's whistle] -> Tide (level and position) -> wet   |
+//           [-> Wind's whistle, + the sky (sky.h): Rain, Lightning,   |
+//            Thunder] -> Tide (level and position) -> wet             |
 //       mix (equal power; Kill dry drops the dry) <-------------------+
 //
-// Stages 1 and 2 of the roadmap in README.md: the calm sea, and the storm
+// Stages 1 to 3 of the roadmap in README.md: the calm sea, and the storm
 // so far, in brackets. Each block works out the storm's strength from
 // moment to moment: Storm, swung by Gusts (slow fronts and sudden gusts,
 // both Wanders), eased down to nothing while Calm is held and up to full
@@ -22,6 +24,8 @@
 // Surge: stretches the decay towards ∞ and pushes the sea's gain past
 // unity into its clipper, so the tail swells and boils; as the storm
 // drops it settles back to its Decay.
+// Rain, Lightning and Thunder: the sky plays slices of the sea's own tail
+// back into it and into the wet.
 //
 // The gate closes the sea's input when off (the tail rings out with trails
 // on, and is cut in 5 ms with them off) and while frozen. Decay's top
@@ -39,6 +43,7 @@
 
 #include "dsp.h"
 #include "sea.h"
+#include "sky.h"
 #include "wander.h"
 
 class StormEngine
@@ -74,12 +79,16 @@ class StormEngine
         bool  kill_dry = false;
 
         // The storm
-        float storm  = 0.0f; // 0 calm .. 1 gale
-        float gusts  = 0.4f; // 0 steady .. 1 fronts and gusts
-        float wind   = 0.5f; // each element's part in the storm, 0..1
-        float surge  = 0.4f;
-        bool  calm   = false; // held: the storm dies down
-        bool  squall = false; // held: the storm rises to full
+        float storm     = 0.0f; // 0 calm .. 1 gale
+        float gusts     = 0.4f; // 0 steady .. 1 fronts and gusts
+        float wind      = 0.5f; // each element's part in the storm, 0..1
+        float rain      = 0.3f;
+        float lightning = 0.3f;
+        float thunder   = 0.5f;
+        float surge     = 0.4f;
+        int   strike    = Sky::kFlash;
+        bool  calm      = false; // held: the storm dies down
+        bool  squall    = false; // held: the storm rises to full
     };
 
     // For the web page and the LEDs.
@@ -90,13 +99,14 @@ class StormEngine
         float rt60;  // the decay now, s (1e6: held)
         float hold;  // 0..1: how far the sea is held (∞ or frozen)
         float storm; // the storm's strength now, 0..1
+        float flash; // 1 at a lightning strike, falling away
     };
 
     // The memory Init needs, in floats: fast (RAM_D2) for the sea, and
-    // slow (SDRAM) for the predelay.
+    // slow (SDRAM) for the predelay and the sky's tail ring.
     static constexpr size_t kFastFloats     = Sea::kFloats;
     static constexpr size_t kPredelayFrames = 16384; // a power of two, over 240 ms
-    static constexpr size_t kSlowFloats     = 2 * kPredelayFrames;
+    static constexpr size_t kSlowFloats     = 2 * kPredelayFrames + Sky::kFloats;
 
     // The decay a Decay setting gives, in seconds, or 0 for ∞.
     static float DecaySeconds(float decay);
@@ -123,6 +133,7 @@ class StormEngine
     float sample_rate_ = 48000.0f;
 
     Sea         sea_;
+    Sky         sky_;
     Wander      tide_level_, tide_pan_;
     Wander      fronts_, gust_, whistle_sweep_;
     dsp::Biquad low_cut_[2];

@@ -2,8 +2,8 @@
 //
 // The parameter list in the page's order, and the hello and telemetry
 // frame messages (common/web_link.h). Frames carry levels, CPU, and traces
-// of the sea's level, Tide's swell, the storm's strength and the decay
-// time (∞ while the sea is held). main.cpp reads and sets the values, collects the Telemetry in the
+// of the sea's level, Tide's swell, the storm's strength, lightning's
+// flashes and the decay time (∞ while the sea is held). main.cpp reads and sets the values, collects the Telemetry in the
 // audio callback and sends the messages. libDaisy-free.
 
 #pragma once
@@ -16,7 +16,8 @@
 namespace web_view
 {
 // Decay to Surge are the Pod's knob pages in order: page i / 2, knob i % 2.
-// Width and Predelay are pages 1 and 2's encoder choices.
+// Page 7's second knob is kept for Undertow. Width, Predelay and Strike
+// are pages 1, 2 and 6's encoder choices.
 enum ParamId
 {
     kParamDecay,
@@ -28,9 +29,13 @@ enum ParamId
     kParamStorm,
     kParamGusts,
     kParamWind,
+    kParamRain,
+    kParamLightning,
+    kParamThunder,
     kParamSurge,
     kParamWidth,
     kParamPredelay,
+    kParamStrike,
     kParamTrails,
     kParamKillDry,
     kParamActive,
@@ -49,6 +54,7 @@ enum TraceId
     kTraceSea,
     kTraceTide,
     kTraceStorm,
+    kTraceFlash,
     kTraceDecay,
     kNumTraces,
 };

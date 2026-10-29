@@ -134,7 +134,7 @@ formats, menus and colours are still looked up by the full name.
   the channels sit beside the display; the drawer holds Hidden options, DIP
   switches, Ramping, Tempo and Synth Mode.
 - **slowdrift**: Mode is the feature (big tiles, what X does in each mode).
-- **stormsea**: no feature, so its five pages and the switches sit beside
+- **stormsea**: no feature, so its seven pages and the switches sit beside
   the display; the decay readout says ∞ while the sea is held (`formatTrace`).
 - **wavebyte**: seven sections in the rail, the Layer switch in the header,
   effects shown only while a slot runs them, mod amounts bipolar.

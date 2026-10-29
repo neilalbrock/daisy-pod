@@ -13,13 +13,15 @@ using weblink::Store;
 
 const char *const kWidthNames[]    = {"Narrow", "Medium", "Wide"};
 const char *const kPredelayNames[] = {"0 ms", "15 ms", "30 ms", "60 ms", "120 ms", "240 ms"};
-const char *const kGroupNames[]    = {"Page 1", "Page 2", "Page 3", "Page 4", "Page 5", "Switches"};
+const char *const kStrikeNames[]   = {"Flash", "Glint", "Fork"};
+const char *const kGroupNames[]    = {"Page 1", "Page 2", "Page 3", "Page 4", "Page 5", "Page 6", "Page 7", "Switches"};
 const char *const kMeterNames[]    = {"In", "Wet", "Out"};
 
 const weblink::Trace kTraces[kNumTraces] = {
     {"Sea", "dB", -60, 0},
     {"Tide", "dB", -5, 5},
     {"Storm", "%", 0, 100},
+    {"Flash", "%", 0, 100},
     {"Decay", "s", 0, (int16_t)kHeldDecay},
 };
 
@@ -40,16 +42,20 @@ constexpr weblink::Param kParams[kNumParams] = {
     {"Storm", Kind::kContinuous, 3, nullptr, 0, 0, Store::kPreset},
     {"Gusts", Kind::kContinuous, 3, nullptr, 0, 0, Store::kPreset},
     {"Wind", Kind::kContinuous, 4, nullptr, 0, 0, Store::kPreset},
-    {"Surge", Kind::kContinuous, 4, nullptr, 0, 0, Store::kPreset},
+    {"Rain", Kind::kContinuous, 4, nullptr, 0, 0, Store::kPreset},
+    {"Lightning", Kind::kContinuous, 5, nullptr, 0, 0, Store::kPreset},
+    {"Thunder", Kind::kContinuous, 5, nullptr, 0, 0, Store::kPreset},
+    {"Surge", Kind::kContinuous, 6, nullptr, 0, 0, Store::kPreset},
     {"Width", Kind::kChoice, 0, kWidthNames, Count(kWidthNames), 3, Store::kPreset},
     {"Predelay", Kind::kChoice, 1, kPredelayNames, Count(kPredelayNames), 3, Store::kPreset},
-    {"Trails", Kind::kToggle, 5, nullptr, 0, 0, Store::kGlobal},
-    {"Kill dry", Kind::kToggle, 5, nullptr, 0, 0, Store::kGlobal},
-    {"On", Kind::kToggle, 5, nullptr, 0, 0, Store::kNone},
-    {"Freeze", Kind::kToggle, 5, nullptr, 0, 0, Store::kNone},
-    {"Calm", Kind::kToggle, 5, nullptr, 0, 0, Store::kNone},
-    {"Squall", Kind::kToggle, 5, nullptr, 0, 0, Store::kNone},
-    {"Mono in", Kind::kToggle, 5, nullptr, 0, 0, Store::kGlobal},
+    {"Strike", Kind::kChoice, 5, kStrikeNames, Count(kStrikeNames), 3, Store::kPreset},
+    {"Trails", Kind::kToggle, 7, nullptr, 0, 0, Store::kGlobal},
+    {"Kill dry", Kind::kToggle, 7, nullptr, 0, 0, Store::kGlobal},
+    {"On", Kind::kToggle, 7, nullptr, 0, 0, Store::kNone},
+    {"Freeze", Kind::kToggle, 7, nullptr, 0, 0, Store::kNone},
+    {"Calm", Kind::kToggle, 7, nullptr, 0, 0, Store::kNone},
+    {"Squall", Kind::kToggle, 7, nullptr, 0, 0, Store::kNone},
+    {"Mono in", Kind::kToggle, 7, nullptr, 0, 0, Store::kGlobal},
 };
 static_assert(UniqueKeys(kParams, kNumParams), "two parameter names share a preset key");
 

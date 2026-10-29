@@ -8,11 +8,15 @@ const PAGE_COLOURS = {
   "Page 2": "#33d6d6", // Shape: cyan
   "Page 3": "#45d36b", // Motion: green
   "Page 4": "#9a4dff", // Storm: violet
-  "Page 5": "#7d8794", // Wind and Surge: white on the Pod
+  "Page 5": "#7d8794", // Wind and Rain: white on the Pod
+  "Page 6": "#e0a400", // Lightning: yellow
+  "Page 7": "#ff4d4d", // Surge: red
 };
 const WIDTH_COLOURS = ["#ff5a5a", "#45d36b", "#4f7dff"]; // narrow red, medium green, wide blue
 // The predelay: cyan on the Pod, dim to bright.
 const PREDELAY_COLOURS = ["#0b4a4a", "#126e6e", "#1a8f8f", "#22adad", "#2ac4c4", "#33d6d6"];
+
+const STRIKE_COLOURS = ["#aeb6c2", "#8fb3ff", "#f2b630"]; // Flash (white on the Pod), Glint pale blue, Fork yellow
 
 const INFINITE = 0.96; // StormEngine::kInfinite: Decay from here up holds the sea
 const HELD_DECAY = 999; // web_view.h kHeldDecay: the Decay trace while held
@@ -28,12 +32,13 @@ const FORMATS = {
 const OPTION_COLOURS = {
   Width: WIDTH_COLOURS,
   Predelay: PREDELAY_COLOURS,
+  Strike: STRIKE_COLOURS,
 };
 
 export default {
   tagline: "a reverb with a storm on top",
   tracesTitle: "Sea & storm · last 8 s",
-  displayTraces: ["Sea", "Storm"], // Tide and the decay show as numbers
+  displayTraces: ["Sea", "Storm", "Flash"], // Tide and the decay show as numbers
   formatTrace: (name, v) => (name === "Decay" ? (v >= HELD_DECAY - 0.5 ? "∞" : seconds(v)) : undefined),
   // On: calm deep blue; Freeze: moonlight (paler on the Pod); Calm and
   // Squall: the storm's ends on LED 1.

@@ -75,8 +75,9 @@ void StormEngine::Init(float sample_rate, size_t block_size, float *fast_mem, fl
         f.Set(Biquad::Type::kHighPass, kLowCut, 0.707f, 0.0f, sample_rate);
 
     pre_ = slow_mem;
-    for(size_t i = 0; i < kSlowFloats; i++)
+    for(size_t i = 0; i < 2 * kPredelayFrames; i++)
         pre_[i] = 0.0f;
+    sky_.Init(sample_rate, block_size, slow_mem + 2 * kPredelayFrames);
     pre_step_ = 1.0f / (0.03f * sample_rate);
 
     coef_.fast    = BlockCoef(0.05f, block_rate);
@@ -155,6 +156,11 @@ void StormEngine::SetParams(const Params &p)
     hold_ += coef_.hold * ((held && !cut ? 1.0f : 0.0f) - hold_);
     float hf = kDarkHf * powf(kBrightHf / kDarkHf, tone);
     sea_.SetDecay(expf(log_rt), Lerp(hf, 1.0f, hold_));
+
+    // The sky: nothing new while the tail is being cut.
+    float sky = cut ? 0.0f : strength_;
+    sky_.Set(Clamp(p.rain, 0.0f, 1.0f) * sky, Clamp(p.lightning, 0.0f, 1.0f) * sky,
+             Clamp(p.thunder, 0.0f, 1.0f) * sky, p.strike, gust * gusts);
 
     // Wind: the lines churn, deeper and faster as it rises; the whistle's
     // centre wanders and the gusts lift it.
@@ -251,8 +257,16 @@ void StormEngine::Process(float in_l, float in_r, float *out_l, float *out_r)
     }
     pre_pos_ = (pre_pos_ + 1) & kMask;
 
+    // The sky drops rain, strikes and thunder into the sea, and hears its
+    // tail for the weather to come.
+    float drop_l, drop_r, sky_l, sky_r;
+    sky_.Render(&drop_l, &drop_r, &sky_l, &sky_r);
+    l += drop_l;
+    r += drop_r;
+
     float wet_l, wet_r;
     sea_.Process(0.5f * (l + r), 0.5f * (l - r), &wet_l, &wet_r);
+    sky_.Record(wet_l, wet_r);
 
     float mid  = 0.5f * width_gain_ * (wet_l + wet_r);
     float side = 0.5f * width_gain_ * (wet_l - wet_r);
@@ -267,8 +281,8 @@ void StormEngine::Process(float in_l, float in_r, float *out_l, float *out_r)
         wet_l += whistle_mix_ * wl;
         wet_r += whistle_mix_ * wr;
     }
-    wet_l *= tide_l_;
-    wet_r *= tide_r_;
+    wet_l = tide_l_ * (wet_l + sky_l);
+    wet_r = tide_r_ * (wet_r + sky_r);
     wet_peak_ = fmaxf(wet_peak_, fmaxf(fabsf(wet_l), fabsf(wet_r)));
 
     // Bypassed, the dry goes to unity, and the wet either rings out
@@ -291,5 +305,6 @@ StormEngine::Probe StormEngine::GetProbe() const
     p.rt60  = expf(log_rt60_);
     p.hold  = hold_;
     p.storm = strength_;
+    p.flash = sky_.Flash();
     return p;
 }
