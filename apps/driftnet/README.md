@@ -340,4 +340,12 @@ back to its defaults.
 switch, the levels (in, wet, loop, out) and CPU, traces of the clock, Env's
 detector against its threshold and the ramp, and the loop: the ring filling
 while the looper listens, then the loop with what's playing it (Tape's
-window, Env's slice, Stretch's grains) and its play heads.
+window, Env's slice, Stretch's grains) and its play heads. The deep
+settings (hidden options, DIP switches, ramping, tempo and Synth Mode) are
+in a drawer under the knob pages, a tab at a time.
+
+![Driftnet's web page: the loop with Stretch's grains on the display, the three knob pages with their toggles, the channels, and the drawer open at the hidden options](../../screenshots/faceplate-driftnet.png)
+
+For Ableton Live, `make m4l` builds a Max for Live device for it: every
+parameter as a Live parameter you can automate and map, kept in sync with
+the Pod both ways. See [m4l/README.md](../../m4l/README.md).

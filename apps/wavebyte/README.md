@@ -426,9 +426,22 @@ cutoff, its amp envelope, Flavour's pitch drift on osc 1, both LFOs as it
 sees them, how many voices are sounding, and how much stack the firmware
 has never used (Stack free: its margin in DTCM). Every control is there
 too, with Limit Waves, Fixed, the play note, a Play switch, MPE, Tempo,
-and the split channel, which the Pod doesn't have. Each
-layer's cards are in a tab of their own, A-D, which follows the Pod's
-Layer page both ways. See [web/README.md](../../web/README.md).
+and the split channel, which the Pod doesn't have. The Layer switch in
+the header (A-D) picks the layer the cards edit, and follows the Pod's
+Layer page both ways. A rail of sections under the display (Oscillators,
+Filter & character, Envelopes, Amp & LFOs, Mod matrix, Effects, Layers &
+play) shows one at a time, each saying which Pod pages it covers and
+whether it edits the layer or is shared. See
+[web/README.md](../../web/README.md).
+
+![Wavebyte's web page at the Oscillators section: both oscillators' waves, tables and AKWF banks, and pitch, for layer A](../../screenshots/faceplate-wavebyte.png)
+
+![Wavebyte's web page at the Mod matrix section: eight slots of source, amount and target](../../screenshots/faceplate-wavebyte-mod-matrix.png)
+
+To play it from Ableton Live, `make m4l` builds a Max for Live MIDI effect
+for it, to go before an External Instrument: every parameter as a Live
+parameter, kept in sync with the Pod both ways. Its layer controls edit
+whichever layer is picked, as here. See [m4l/README.md](../../m4l/README.md).
 
 ## Roadmap
 

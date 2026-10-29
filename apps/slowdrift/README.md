@@ -175,3 +175,9 @@ of the LFO, the reverb's input gain and the decay time. The input gain trace
 shows Rise's swells and the gate closing for off and Freeze. The decay trace
 shows Sustain and Freeze stretching the decay, and Stretch lengthening it.
 Every control is there too. See [web/README.md](../../web/README.md).
+
+![Slowdrift's web page: the LFO and swell traces on the display, the five modes, the four knob pages and the switches](../../screenshots/faceplate-slowdrift.png)
+
+For Ableton Live, `make m4l` builds a Max for Live device for it: every
+parameter as a Live parameter you can automate and map, kept in sync with
+the Pod both ways. See [m4l/README.md](../../m4l/README.md).

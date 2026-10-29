@@ -39,6 +39,10 @@ levels and CPU) next to all its controls. Run `make web` and open
 http://localhost:8000 in Chrome or Edge. Every app but the starter supports
 it; see [web/README.md](web/README.md).
 
+![Grainfall's web page: a faceplate with the buffer display, effect grid and knob pages](screenshots/faceplate-grainfall.png)
+
+Each app's README has a shot of its own page.
+
 ## Max for Live devices
 
 `m4l/` builds a Max for Live device per app (`make m4l`) with every parameter

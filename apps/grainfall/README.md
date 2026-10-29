@@ -357,7 +357,13 @@ The Microcosm's phrase looper and preset CCs are ignored.
 With the Pod plugged in by USB, `make web` and http://localhost:8000 (Chrome
 or Edge) show the buffer with every voice and delay tap as it plays, the beat
 grid, detected notes, levels and CPU load, next to all the controls: the
-effect grid, the five knob pages, tempo and tap, and the switches (including
+effect grid, the six knob pages, tempo and tap, and the switches (including
 mono in). See [web/README.md](../../web/README.md).
 
+![Grainfall's web page: the buffer display with voices and the beat grid, the effect grid, the six knob pages, tempo and switches](../../screenshots/faceplate-grainfall.png)
+
 The page only streams while it's open, and only over USB.
+
+For Ableton Live, `make m4l` builds a Max for Live device for it: every
+parameter as a Live parameter you can automate and map, kept in sync with
+the Pod both ways. See [m4l/README.md](../../m4l/README.md).

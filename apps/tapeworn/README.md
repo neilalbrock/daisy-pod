@@ -124,5 +124,10 @@ and CPU load, next to all the controls: the tape model, the four knob pages,
 the AUX type and switch, bypass and mono in. See
 [web/README.md](../../web/README.md).
 
-Tapeworn listens to USB MIDI only for the page; it has no MIDI CC map.
+![Tapeworn's web page: tape speed and the saturator's hysteresis loop on the display, the tape models, the four knob pages, AUX and switches](../../screenshots/faceplate-tapeworn.png)
+
+Tapeworn listens to USB MIDI only for the page; it has no MIDI CC map. To
+automate it from Ableton Live, `make m4l` builds a Max for Live device for
+it: every parameter as a Live parameter, kept in sync with the Pod both
+ways. See [m4l/README.md](../../m4l/README.md).
 
