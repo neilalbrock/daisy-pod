@@ -26,6 +26,10 @@ const SCAN_MS = 2000;
 const GUARD_MS = 600; // ignore the Pod's value for a control this long after moving it
 const PUSH_BATCH = 8; // sets per tick when sending everything (the Pod's USB FIFO is small)
 const PUSH_TICK_MS = 5;
+// A Pod knob's reading flickers by a step or two at rest. Following it would
+// rewrite the Live parameter over and over (filling the undo history and
+// overriding automation), so a knob must move more than this (0.1%) first.
+const KNOB_DEADBAND = 16;
 
 export const PORT_PATTERN = /daisy/i;
 
@@ -57,7 +61,14 @@ export function fromRaw(control, raw) {
 
 // Whether two raw values show the same on the control.
 function same(control, a, b) {
-  return control.kind === "menu" ? fromRaw(control, a) === fromRaw(control, b) : a === b;
+  switch (control.kind) {
+    case "dial":
+      return Math.abs(a - b) <= KNOB_DEADBAND;
+    case "menu":
+      return fromRaw(control, a) === fromRaw(control, b);
+    default:
+      return a === b;
+  }
 }
 
 // Picks the Pod's ports by name, opens them and reassembles SysEx.
@@ -197,7 +208,12 @@ export class DeviceLink {
   // --- From the Pod
 
   receive(bytes) {
-    const m = decode(bytes);
+    let m;
+    try {
+      m = decode(bytes);
+    } catch {
+      return; // cut short or garbled: a throw here would stop the node script
+    }
     if (!m) return;
     this.lastHeard = Date.now();
     switch (m.type) {

@@ -42,8 +42,10 @@ and its CPU, or "The Pod is running X, not Y" if the wrong app is flashed.
 - **A device in a saved set** sends its saved values to the Pod when it
   connects, like a plugin restoring its state. So reopening a set puts the
   Pod back how it was.
-- After that, each side follows the other. **Get from Pod** takes the Pod's
-  values again, for example after loading a Pod preset on the Pod.
+- After that, each side follows the other. A knob on the Pod has to move
+  more than 0.1% before the device follows it, so the flicker of a knob at
+  rest doesn't keep rewriting the Live parameter. **Get from Pod** takes
+  the Pod's values again, for example after loading a Pod preset on the Pod.
 - Clicking a **preset slot** loads that Pod preset (or selects an empty
   slot), and the device takes its values. **Save** saves to the selected
   slot. "edited" means the sound has changed since the preset was loaded.
