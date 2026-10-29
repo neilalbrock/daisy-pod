@@ -22,6 +22,9 @@ const weblink::Trace kTraces[kNumTraces] = {
     {"Tide", "dB", -5, 5},
     {"Storm", "%", 0, 100},
     {"Flash", "%", 0, 100},
+    {"Wind", "%", 0, 100},
+    {"Rain", "%", 0, 100},
+    {"Thunder", "%", 0, 100},
     {"Decay", "s", 0, (int16_t)kHeldDecay},
 };
 
@@ -46,6 +49,7 @@ constexpr weblink::Param kParams[kNumParams] = {
     {"Lightning", Kind::kContinuous, 5, nullptr, 0, 0, Store::kPreset},
     {"Thunder", Kind::kContinuous, 5, nullptr, 0, 0, Store::kPreset},
     {"Surge", Kind::kContinuous, 6, nullptr, 0, 0, Store::kPreset},
+    {"Undertow", Kind::kContinuous, 6, nullptr, 0, 0, Store::kPreset},
     {"Width", Kind::kChoice, 0, kWidthNames, Count(kWidthNames), 3, Store::kPreset},
     {"Predelay", Kind::kChoice, 1, kPredelayNames, Count(kPredelayNames), 3, Store::kPreset},
     {"Strike", Kind::kChoice, 5, kStrikeNames, Count(kStrikeNames), 3, Store::kPreset},

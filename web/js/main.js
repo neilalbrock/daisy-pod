@@ -49,11 +49,15 @@ async function loadApp(name) {
 }
 
 // What the display shows: the buffer (or the app's view of it), else the
-// traces the app picks; the traces it doesn't plot show as numbers.
+// traces the app picks; the traces it doesn't plot show as numbers. An
+// app's View that draws from the traces (View.fromTraces, stormsea's sea)
+// shows too, with no buffer.
 function setUpDisplay(msg, ex) {
-  const scope = msg.bufferFrames > 0;
-  const plotted = scope ? [] : (ex.displayTraces ?? msg.traces.slice(0, 2).map((t) => t.name));
+  const buffer = msg.bufferFrames > 0;
+  const scope = buffer || !!ex.View?.fromTraces;
+  const plotted = buffer ? [] : (ex.displayTraces ?? msg.traces.slice(0, 2).map((t) => t.name));
   $("#scope").hidden = !scope;
+  $("#scope").setAttribute("aria-label", ex.scopeLabel || "The sample buffer over time, with the voices and delay taps reading from it");
   $("#traces").hidden = plotted.length === 0;
   $("#display-title").textContent = scope ? ex.scopeTitle || "Buffer · last 8 s" : ex.tracesTitle || (msg.traces.length ? "Traces · last 8 s" : "Levels");
   $("#display-meta").replaceChildren();

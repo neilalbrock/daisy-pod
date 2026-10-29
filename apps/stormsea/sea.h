@@ -6,7 +6,9 @@
 //   each line: delay (Size; Depth and Wind swing it)
 //              -> damping (decay and Tone) -> DC block
 //              [-> Surge: gain past unity, soft clip]
-//   the 8 lines -> Hadamard matrix x the sea wall -> back into the lines
+//   the 8 lines [-> Undertow: four pairs turned] -> Hadamard matrix
+//              [-> Undertow: two lines' feed sinking] x the sea wall
+//              -> back into the lines
 //   the lines' outputs, two sign patterns -> left and right
 //
 // Eight delay lines of different lengths, 21 ms to 137 ms at full Size,
@@ -25,6 +27,17 @@
 //
 // Surge raises each line's gain past unity into a soft clipper, so the
 // tail swells up to the clipper and boils there instead of dying away.
+//
+// Undertow turns four pairs of lines into each other by slowly wandering
+// angles before the matrix. A rotation is orthogonal, and so is the
+// product of two orthogonal matrices, so the sea still neither gains nor
+// loses: energy only moves between lines of different lengths, and the
+// tail's colours shift and churn. And two lines' feed always passes a
+// frequency shifter (freq_shift.h), which Undertow turns down by a
+// fraction of a hertz, so each trip round lowers every partial a little
+// and long tails slide down into the deep. A pitch shifter there, blended
+// with the dry feed, lost power wherever the two decorrelated, and
+// drained a frozen sea in a minute; the frequency shifter keeps it.
 
 // The sea wall is a slow level control in the loop. It reads the lines'
 // level each block and, over a ceiling, takes a little off each trip
@@ -48,6 +61,7 @@
 #include <cstddef>
 #include <cstdint>
 
+#include "freq_shift.h"
 #include "wander.h"
 
 namespace sea_detail
@@ -85,6 +99,9 @@ class Sea
     static constexpr float kSurgeGain = 0.25f;
 
     // The memory Init needs, in floats.
+    static constexpr int kTurns = 4; // pairs of lines Undertow turns
+    static constexpr int kSinks = 2; // lines whose feed sinks
+
     static constexpr size_t kFloats = sea_detail::Sum(kLengths, kLines) + kLines * kSpare
                                       + sea_detail::Sum(kDiffuserLengths[0], kDiffusers)
                                       + sea_detail::Sum(kDiffuserLengths[1], kDiffusers);
@@ -107,6 +124,10 @@ class Sea
     // Surge, 0..1: each line's gain past unity, up to 1 + kSurgeGain,
     // into a soft clipper. 0 skips the clipper.
     void SetSurge(float surge);
+
+    // Undertow, 0..1: how far the pairs turn (their angles wander up to
+    // kMaxTurn each way) and how far the two lines' feed sinks a trip.
+    void SetUndertow(float undertow);
     void SetInputSide(float side) { in_side_ = side; } // 0 mono .. 1 stereo
 
     // Once per block, after the block: the sea wall reads the level.
@@ -163,6 +184,11 @@ class Sea
     float depth_    = 0.0f;
     float in_side_  = 1.0f;
     float surge_    = 0.0f, surge_gain_ = 1.0f;
+
+    Wander     turn_wander_[kTurns];
+    float      turn_c_[kTurns] = {}, turn_s_[kTurns] = {};
+    bool       turning_    = false;
+    FreqShift  sink_[kSinks];
 
     float block_frames_ = 4.0f;
 

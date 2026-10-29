@@ -96,9 +96,10 @@ the feature column, 56 px in sections and the drawer, 48 px in the strip.
   `n` becomes a table (wavebyte's mod matrix): list fields as drop-downs,
   others as sliders (`bipolar` ones fill from the middle).
 - **Display** (`index.html` `#display`, `js/views/*`): the scope canvas (the
-  buffer view or the app's `View`, 112 px tall) or the trace strip (the
-  `displayTraces`, overlaid, 80 px), the X-Y plot (108 px square), meters (one
-  row each), the tempo line, the other traces as numbers, and CPU.
+  buffer view or the app's `View`, 112 px tall; a `View` with `fromTraces`
+  shows without a buffer) or the trace strip (the `displayTraces`, overlaid,
+  80 px), the X-Y plot (108 px square), meters (one row each), the tempo
+  line, the other traces as numbers, and CPU.
 
 ## Layout rules (`Controls.build`)
 
@@ -134,8 +135,10 @@ formats, menus and colours are still looked up by the full name.
   the channels sit beside the display; the drawer holds Hidden options, DIP
   switches, Ramping, Tempo and Synth Mode.
 - **slowdrift**: Mode is the feature (big tiles, what X does in each mode).
-- **stormsea**: no feature, so its seven pages and the switches sit beside
-  the display; the decay readout says ∞ while the sea is held (`formatTrace`).
+- **stormsea**: its own sea `View`, drawn from the traces (`fromTraces`, so
+  it shows with no buffer); no feature, so its seven pages and the switches
+  sit beside the display; the decay readout says ∞ while the sea is held
+  (`formatTrace`).
 - **wavebyte**: seven sections in the rail, the Layer switch in the header,
   effects shown only while a slot runs them, mod amounts bipolar.
 

@@ -1,7 +1,10 @@
 // Stormsea's touches on the faceplate: the Pod's page colours, the
-// choices' LED colours and readable units. No feature, so the pages and
-// the switches sit beside the display. Matches apps/stormsea/main.cpp,
+// choices' LED colours and readable units, and its view of the sea
+// (views/sea.js), drawn from its traces. No feature, so the pages and the
+// switches sit beside the display. Matches apps/stormsea/main.cpp,
 // storm_engine.cpp and its README.
+
+import { SeaView } from "../views/sea.js";
 
 const PAGE_COLOURS = {
   "Page 1": "#4f7dff", // Sea: blue
@@ -37,8 +40,11 @@ const OPTION_COLOURS = {
 
 export default {
   tagline: "a reverb with a storm on top",
-  tracesTitle: "Sea & storm · last 8 s",
-  displayTraces: ["Sea", "Storm", "Flash"], // Tide and the decay show as numbers
+  View: SeaView,
+  scopeTitle: "The sea",
+  scopeLabel: "The sea: its surface with the tail's level, clouds, rain and lightning with the storm, and the storm's last minute",
+  displayTraces: [], // the sea view draws them
+  readouts: ["Tide", "Decay"],
   formatTrace: (name, v) => (name === "Decay" ? (v >= HELD_DECAY - 0.5 ? "∞" : seconds(v)) : undefined),
   // On: calm deep blue; Freeze: moonlight (paler on the Pod); Calm and
   // Squall: the storm's ends on LED 1.

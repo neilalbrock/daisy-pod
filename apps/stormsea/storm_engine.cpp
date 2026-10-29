@@ -128,8 +128,10 @@ void StormEngine::SetParams(const Params &p)
     squall_ += (p.squall ? coef_.squall : coef_.squall_back) * ((p.squall ? 1.0f : 0.0f) - squall_);
     strength_ = Lerp(fminf(storm_knob_ * swing, 1.0f) * calm_, 1.0f, squall_);
 
-    float wind  = Clamp(p.wind, 0.0f, 1.0f) * strength_;
-    float surge = Clamp(p.surge, 0.0f, 1.0f) * strength_;
+    float wind     = Clamp(p.wind, 0.0f, 1.0f) * strength_;
+    float surge    = Clamp(p.surge, 0.0f, 1.0f) * strength_;
+    float undertow = Clamp(p.undertow, 0.0f, 1.0f) * strength_;
+    wind_          = wind;
 
     // Decay, eased in log time: holding comes in over about 0.3 s and lets
     // go over about a second, so a freeze let go fades away at the Decay
@@ -150,6 +152,7 @@ void StormEngine::SetParams(const Params &p)
     // storm, which is already smooth.
     float log_rt = cut ? log_rt60_ : Lerp(log_rt60_, logf(kHoldRt60), surge);
     sea_.SetSurge(cut ? 0.0f : fmaxf(surge - kSurgeBoil, 0.0f) / (1.0f - kSurgeBoil));
+    sea_.SetUndertow(cut ? 0.0f : undertow);
 
     // Held, Tone moves from the loop's damping to the output's low-pass, so
     // the sea keeps the colour it had rather than darkening to a hum.
@@ -305,6 +308,9 @@ StormEngine::Probe StormEngine::GetProbe() const
     p.rt60  = expf(log_rt60_);
     p.hold  = hold_;
     p.storm = strength_;
-    p.flash = sky_.Flash();
+    p.flash   = sky_.Flash();
+    p.wind    = wind_;
+    p.rain    = sky_.Rain();
+    p.thunder = sky_.Thunder();
     return p;
 }

@@ -46,6 +46,17 @@ constexpr float kInvClip = 1.0f / kClip;
 constexpr float kCalmMove  = 1.5f;
 constexpr float kStormMove = 0.1f;
 
+// Undertow: the pairs it turns (a short line with a long one, so energy
+// moves between lengths), the most each pair turns either way, how long
+// each wander takes, the lines whose feed sinks, and by how much a trip at
+// full Undertow.
+constexpr int   kTurnPairs[Sea::kTurns][2] = {{0, 5}, {1, 4}, {2, 7}, {3, 6}};
+constexpr float kMaxTurn                   = 1.0f; // radians: nearly 60 degrees
+constexpr float kTurnShortest              = 4.0f; // s
+constexpr float kTurnLongest               = 12.0f;
+constexpr int   kSinkLines[Sea::kSinks]    = {0, 3};
+constexpr float kMaxSinkHz                 = 0.6f;
+
 constexpr float kLn1000 = 6.9077553f; // 60 dB
 } // namespace
 
@@ -81,6 +92,11 @@ void Sea::Init(float sample_rate, size_t block_size, float *mem)
                 df.buf[k] = 0.0f;
             mem += df.size;
         }
+    for(int k = 0; k < kTurns; k++)
+    {
+        turn_wander_[k].Init(kTurnShortest, kTurnLongest, sample_rate / (float)block_size, 0x7E1Du + 131u * k);
+        turn_c_[k] = 1.0f;
+    }
 
     float block_rate = sample_rate / (float)block_size;
     block_frames_    = (float)block_size;
@@ -140,6 +156,30 @@ void Sea::SetTurbulence(float frames, float speed)
         ln.turbulence.SetTimes(0.6f * move, 1.4f * move);
         float target = frames * (1.0f + ln.turbulence.Next());
         ln.wind_step = (target - ln.wind) / block_frames_;
+    }
+}
+
+void Sea::SetUndertow(float undertow)
+{
+    undertow    = Clamp(undertow, 0.0f, 1.0f);
+    turning_    = undertow > 0.0f;
+    for(int k = 0; k < kSinks; k++)
+        sink_[k].Set(-kMaxSinkHz * undertow, sample_rate_);
+    for(int k = 0; k < kTurns; k++)
+    {
+        // The wanders keep moving whatever Undertow is, so turning it up
+        // joins them where they are.
+        float angle = undertow * kMaxTurn * turn_wander_[k].Next();
+        float phase = angle * (1.0f / kTwoPi);
+        if(phase < 0.0f)
+            phase += 1.0f;
+        float s = FastSin(phase);
+        float c = FastSin(WrapPhase(phase + 0.25f));
+        // FastSin is good to 0.1%, which is 0.01 dB a trip: in a frozen sea
+        // that would creep. Normalised, the rotation is exact.
+        float n    = 1.0f / sqrtf(c * c + s * s);
+        turn_c_[k] = c * n;
+        turn_s_[k] = s * n;
     }
 }
 
@@ -209,7 +249,16 @@ void Sea::Process(float mid, float side, float *l, float *r)
     *l = kOutGain * out_l;
     *r = kOutGain * out_r;
 
-    // The Hadamard matrix, as a fast Walsh-Hadamard transform.
+    // Undertow turns its pairs, then the Hadamard matrix, as a fast
+    // Walsh-Hadamard transform, mixes all eight.
+    if(turning_)
+        for(int k = 0; k < kTurns; k++)
+        {
+            float a             = m[kTurnPairs[k][0]];
+            float b             = m[kTurnPairs[k][1]];
+            m[kTurnPairs[k][0]] = turn_c_[k] * a - turn_s_[k] * b;
+            m[kTurnPairs[k][1]] = turn_s_[k] * a + turn_c_[k] * b;
+        }
     for(int len = 1; len < kLines; len <<= 1)
         for(int i = 0; i < kLines; i += len << 1)
             for(int j = i; j < i + len; j++)
@@ -219,6 +268,11 @@ void Sea::Process(float mid, float side, float *l, float *r)
                 m[j]       = a + b;
                 m[j + len] = a - b;
             }
+
+    // Undertow's sinking. The shifters always run, at 0 Hz only an
+    // allpass, so nothing changes when Undertow starts.
+    for(int k = 0; k < kSinks; k++)
+        m[kSinkLines[k]] = sink_[k].Process(m[kSinkLines[k]]);
 
     float fb = kMatrix * wall_;
     for(int i = 0; i < kLines; i++)

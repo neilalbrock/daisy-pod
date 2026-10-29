@@ -3,8 +3,7 @@
 // Our own design, after Oceanus Procellarum, the Ocean of Storms on the
 // Moon. With the storm down it's a clean, lush reverb (a feedback delay
 // network) whose tails run from half a second to forever; Storm raises
-// weather on the tail, and Gusts makes it come and go. This is stage 3 of
-// the roadmap in README.md: the calm sea, and the storm but for Undertow.
+// weather on the tail, and Gusts makes it come and go.
 //
 // The two knobs are shared across seven pages; press the encoder to change
 // page (LED 2 shows which). After a page change a knob does nothing until
@@ -28,7 +27,7 @@
 //          (LED 2 yellow)        Knob 2 - Thunder: how loud it rolls after
 //                                Encoder - Strike: Flash, Glint, Fork
 //   Page 7 Surge (LED 2 red)     Knob 1 - Surge: the tail swells, then boils
-//                                Knob 2 - kept for Undertow, still to come
+//                                Knob 2 - Undertow: the tail churns and sinks
 //   (a limiter holds dry + wet under -1 dBFS)
 //
 //   Page 8 (LED 2: the slot) Presets. Encoder turn - select a slot, loading
@@ -56,7 +55,7 @@
 //
 //   14 Decay   15 Mix   16 Size   17 Tone   18 Depth   19 Tide
 //   20 Storm   21 Gusts   22 Wind   23 Rain   24 Lightning   25 Thunder
-//   26 Surge
+//   26 Surge   27 Undertow
 //   28 Width   29 Predelay   30 Strike   (0-127 split evenly between them)
 //   64 Sustain pedal: Freeze while down
 //   102 On/off   103 Freeze   104 Mono in   105 Calm   106 Squall
@@ -65,8 +64,8 @@
 //
 // Over USB MIDI it also talks to the web control surface (web/, `make
 // web`), streaming levels, CPU, the sea's level, Tide's swell, the storm's
-// strength, lightning's flashes and the decay time while the page is
-// open, with the presets.
+// strength, lightning's flashes, wind, rain, thunder and the decay time
+// while the page is open (it draws the sea from them), with the presets.
 //
 // Presets (common/presets.h) hold the knobs, width, predelay and strike. Mono in,
 // trails and kill dry are saved on their own a few seconds after they
@@ -123,7 +122,7 @@ PagedKnobs<kNumPages, kNumKnobs> pages({
     {0.0f, 0.4f},   // storm (calm), gusts
     {0.5f, 0.3f},   // wind, rain
     {0.3f, 0.5f},   // lightning, thunder
-    {0.4f, 0.0f},   // surge, (undertow)
+    {0.4f, 0.2f},   // surge, undertow
     {0.0f, 0.0f},   // presets: unused
 });
 
@@ -248,13 +247,16 @@ void Collect(size_t size)
         return;
     trace_samples = 0;
 
-    float *point       = trace_ring[trace_written & (kTraceRing - 1)];
-    point[kTraceSea]   = 10.0f * log10f(p.level + 1e-7f);
-    point[kTraceTide]  = p.tide;
-    point[kTraceStorm] = 100.0f * p.storm;
-    point[kTraceFlash] = 100.0f * p.flash;
-    point[kTraceDecay]       = p.hold > 0.5f ? kHeldDecay : fminf(p.rt60, kHeldDecay);
-    trace_written            = trace_written + 1; // after the point is in place
+    float *point         = trace_ring[trace_written & (kTraceRing - 1)];
+    point[kTraceSea]     = 10.0f * log10f(p.level + 1e-7f);
+    point[kTraceTide]    = p.tide;
+    point[kTraceStorm]   = 100.0f * p.storm;
+    point[kTraceFlash]   = 100.0f * p.flash;
+    point[kTraceWind]    = 100.0f * p.wind;
+    point[kTraceRain]    = 100.0f * p.rain;
+    point[kTraceThunder] = 100.0f * fminf(p.thunder, 1.0f);
+    point[kTraceDecay]   = p.hold > 0.5f ? kHeldDecay : fminf(p.rt60, kHeldDecay);
+    trace_written        = trace_written + 1; // after the point is in place
 }
 
 // In the main loop: what's new since the last frame. The callback only
@@ -318,9 +320,8 @@ void SendWeb(uint32_t now_ms)
 // from the web page: the Pod's knob lets go until it's moved. Choices
 // split 0-127 evenly, so a controller's knob sweeps through them.
 
-// Each knob's CC, by parameter: 14-19 the calm sea, 20-26 the storm
-// (Undertow, still to come, takes 27).
-constexpr uint8_t kKnobCc[kNumKnobParams] = {14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25, 26};
+// Each knob's CC, by parameter: 14-19 the calm sea, 20-27 the storm.
+constexpr uint8_t kKnobCc[kNumKnobParams] = {14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25, 26, 27};
 
 void HandleCc(uint8_t cc, uint8_t value, uint32_t now_ms)
 {
@@ -445,6 +446,7 @@ void AudioCallback(AudioHandle::InputBuffer  in,
     p.lightning = pages.Value(5, 0);
     p.thunder   = pages.Value(5, 1);
     p.surge     = pages.Value(6, 0);
+    p.undertow  = pages.Value(6, 1);
     p.strike    = choices[5];
     p.calm      = calm || calm_held;
     p.squall    = squall || squall_held;

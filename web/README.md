@@ -51,9 +51,12 @@ screens). `CLAUDE.md` here has the design system and the layout rules.
   - **LFO & swell** (slowdrift): the modulation LFO and the reverb's input
     gain (Rise's swells, the gate closing while off or frozen); the decay time
     shows as a number.
-  - **Sea & storm** (stormsea): the sea's level, the storm's strength and
-    lightning's flashes; Tide's swell and the decay time show as numbers,
-    the decay ∞ while the sea is held.
+  - **The sea** (stormsea): the surface rising and falling with the tail's
+    level and Tide and chopping with the wind, clouds gathering with the
+    storm, rain, a bolt and a lit sky at each lightning strike (no flash
+    with reduced motion), thunder shaking the water, and the storm's
+    strength over the last minute along the top. Tide's swell and the
+    decay time show as numbers, the decay ∞ while the sea is held.
   - **Last voice** (wavebyte): its wave position, cutoff and amp envelope;
     the voices playing and the stack's margin show as numbers.
   - **Tempo** (grainfall, and driftnet, marked not synced while it runs free),
@@ -114,6 +117,7 @@ works over USB: the Pod's TRS MIDI is far too slow for the telemetry.
 | `js/presets.js` | The presets, in the header |
 | `js/views/buffer.js` | The buffer view |
 | `js/views/loop.js` | The loop view, which an app can use instead (driftnet) |
+| `js/views/sea.js` | The sea view, drawn from the traces (stormsea) |
 | `js/views/readouts.js` | Tempo, levels, CPU and trace values |
 | `js/views/traces.js` | The trace strip and the X-Y plot |
 | `js/apps/<app>.js` | Optional extras per app: colours, units, menus, layout hints, its own buffer view |
@@ -152,7 +156,7 @@ On the page, add `js/apps/<app>.js` for the rest; every entry is optional
 | `feature`, `optionHint(param, i)` | The main choice, and a line under each of its options |
 | `displayTraces`, `readouts`, `tracesTitle` | The traces the display plots, those it shows as numbers, and its title |
 | `formatTrace(name, value)` | A trace's reading as a number, in its own words (stormsea's held decay as ∞), or undefined for the default |
-| `View`, `scopeTitle` | A class drawing the buffer its own way (`setLayout`, `addOverview`, `setFrame`, `draw`, optionally `status`), as driftnet's `js/views/loop.js` |
+| `View`, `scopeTitle`, `scopeLabel` | A class drawing the buffer its own way (`setLayout`, `addOverview`, `setFrame`, `draw`, optionally `status`), as driftnet's `js/views/loop.js`; or, with `static fromTraces = true`, drawing from the traces for an app with no buffer, as stormsea's `js/views/sea.js`. The display's title and the canvas's accessible label |
 | `tempo: true` | Keep the tempo line for an app that only sends a tempo some of the time |
 | `drawer` | Group names for the tabbed drawer |
 | `sections`, `groupVisible(name, value)` | A rail of sections (`{ label, groups, note }`), and when a card shows |

@@ -30,6 +30,9 @@ constexpr float kStrikeAttack   = 0.003f; // s
 constexpr float kStrikeCorner   = 1000.0f; // Hz
 constexpr float kStrikeTreble   = 2.0f;
 constexpr float kStrikeDecay    = -8.66f; // log2 of the level at the end: about -52 dB
+// A strike's ceiling, through a soft clip: lifting the top of a bright
+// tail (white noise, at worst) took a strike 19 dB over it.
+constexpr float kStrikeCeiling  = 0.5f;
 
 // Thunder: how long after its strike, and its low-pass, near and far.
 constexpr float kThunderSoonest = 0.2f; // s
@@ -118,7 +121,7 @@ void Sky::StartStrike(int strike)
     v->left     = v->length;
     v->env_step = 1.0f / (float)v->length;
     v->coef     = strike_hp_;
-    Pan(kStrikeGain, rng_.Range(0.2f, 0.8f), &v->gain_l, &v->gain_r);
+    Pan(1.0f, rng_.Range(0.2f, 0.8f), &v->gain_l, &v->gain_r); // its gain is in Render, before its clip
     flash_ = 1.0f;
 
     // Its thunder, the further off the later.
@@ -176,9 +179,16 @@ void Sky::Set(float rain, float lightning, float thunder, int strike, float gust
     if(strike_rate_ > 0.0f && rng_.Uni() * block_rate_ < strike_rate_)
         StartStrike(strike);
 
+    rolling_ = 0.0f;
     for(int i = 0; i < kBolts; i++)
-        if(thunder_[i].left > 0 && thunder_[i].wait <= 0)
-            roll_[i] = 0.65f + 0.35f * rumble_[i].Next();
+    {
+        const Voice &v = thunder_[i];
+        if(v.left <= 0 || v.wait > 0)
+            continue;
+        roll_[i] = 0.65f + 0.35f * rumble_[i].Next();
+        float env = v.t < kThunderSwell ? v.t / kThunderSwell : (1.0f - v.t) / (1.0f - kThunderSwell);
+        rolling_ += env * roll_[i] * (v.gain_l + v.gain_r) * (0.5f / kThunderGain);
+    }
 }
 
 float Sky::Read(float pos) const
@@ -225,6 +235,7 @@ void Sky::Render(float *into_l, float *into_r, float *out_l, float *out_r)
         v.lp1 += v.coef * (x - v.lp1);
         float attack = fminf((float)(v.length - v.left) * attack_step_, 1.0f);
         x            = attack * FastExp2(kStrikeDecay * v.t) * (x + kStrikeTreble * (x - v.lp1));
+        x            = kStrikeCeiling * SoftClip(kStrikeGain / kStrikeCeiling * x);
         in_l += kStrikeIn * v.gain_l * x;
         in_r += kStrikeIn * v.gain_r * x;
         o_l += kStrikeOut * v.gain_l * x;

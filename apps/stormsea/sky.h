@@ -70,6 +70,11 @@ class Sky
     // 1 at a strike, falling away over about 60 ms: for LED 1 and the page.
     float Flash() const { return flash_; }
 
+    // For the page: how hard it's raining (0..1), and how loud the thunder
+    // rolling now is (0..1 for one at full).
+    float Rain() const { return rain_; }
+    float Thunder() const { return rolling_; }
+
   private:
     static constexpr int kDrops = 12;
     static constexpr int kBolts = 4;
@@ -107,4 +112,5 @@ class Sky
     float drop_hp_ = 0.0f, strike_hp_ = 0.0f; // the drops' high-pass and the strikes' treble corner
     float attack_step_ = 0.0f;                // a strike's attack, a sample
     float flash_ = 0.0f, flash_decay_ = 0.0f;
+    float rolling_ = 0.0f;
 };

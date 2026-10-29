@@ -3,7 +3,8 @@
 // The parameter list in the page's order, and the hello and telemetry
 // frame messages (common/web_link.h). Frames carry levels, CPU, and traces
 // of the sea's level, Tide's swell, the storm's strength, lightning's
-// flashes and the decay time (∞ while the sea is held). main.cpp reads and sets the values, collects the Telemetry in the
+// flashes, wind, rain and thunder, and the decay time (∞ while the sea is
+// held): the page draws the sea from them (web/js/views/sea.js). main.cpp reads and sets the values, collects the Telemetry in the
 // audio callback and sends the messages. libDaisy-free.
 
 #pragma once
@@ -15,9 +16,9 @@
 
 namespace web_view
 {
-// Decay to Surge are the Pod's knob pages in order: page i / 2, knob i % 2.
-// Page 7's second knob is kept for Undertow. Width, Predelay and Strike
-// are pages 1, 2 and 6's encoder choices.
+// Decay to Undertow are the Pod's knob pages in order: page i / 2, knob
+// i % 2. Width, Predelay and Strike are pages 1, 2 and 6's encoder
+// choices.
 enum ParamId
 {
     kParamDecay,
@@ -33,6 +34,7 @@ enum ParamId
     kParamLightning,
     kParamThunder,
     kParamSurge,
+    kParamUndertow,
     kParamWidth,
     kParamPredelay,
     kParamStrike,
@@ -45,7 +47,7 @@ enum ParamId
     kParamMono,
     kNumParams,
 };
-constexpr int kNumKnobParams = kParamSurge + 1;
+constexpr int kNumKnobParams = kParamUndertow + 1;
 
 extern const weblink::Param kParams[kNumParams];
 
@@ -55,14 +57,18 @@ enum TraceId
     kTraceTide,
     kTraceStorm,
     kTraceFlash,
+    kTraceWind,
+    kTraceRain,
+    kTraceThunder,
     kTraceDecay,
     kNumTraces,
 };
 
 constexpr float kHeldDecay = 999.0f; // the Decay trace while the sea is held: ∞ on the page
 
-constexpr int kTracePeriodMs = 1;  // a trace point per ms
-constexpr int kTracePoints   = 48; // the most a frame carries (older ones are dropped)
+// A point every 2 ms, so a frame of 8 traces stays well under a message.
+constexpr int kTracePeriodMs = 2;
+constexpr int kTracePoints   = 32; // the most a frame carries (older ones are dropped)
 
 // What a frame shows: copied in the main loop from what the audio callback
 // collected.

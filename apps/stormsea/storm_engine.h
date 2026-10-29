@@ -5,14 +5,14 @@
 //       +-> gate (on/off, Freeze) -> low cut -> predelay              |
 //           [+ what the sky drops in]                                 |
 //           -> the sea (sea.h): 8 lines, Size, Decay, Tone, Depth,    |
-//              [Wind's turbulence, Surge]  -> [the sky's tail ring]   |
+//              [Wind's turbulence, Surge, Undertow]                   |
+//              -> [the sky's tail ring]                               |
 //           -> Width -> Tone's output low-pass (at ∞ and frozen)      |
 //           [-> Wind's whistle, + the sky (sky.h): Rain, Lightning,   |
 //            Thunder] -> Tide (level and position) -> wet             |
 //       mix (equal power; Kill dry drops the dry) <-------------------+
 //
-// Stages 1 to 3 of the roadmap in README.md: the calm sea, and the storm
-// so far, in brackets. Each block works out the storm's strength from
+// The calm sea, and the storm in brackets. Each block works out the storm's strength from
 // moment to moment: Storm, swung by Gusts (slow fronts and sudden gusts,
 // both Wanders), eased down to nothing while Calm is held and up to full
 // while Squall is. Each element's own setting x the strength is how much
@@ -26,6 +26,7 @@
 // drops it settles back to its Decay.
 // Rain, Lightning and Thunder: the sky plays slices of the sea's own tail
 // back into it and into the wet.
+// Undertow: the sea's lines turn into each other and its feed sinks.
 //
 // The gate closes the sea's input when off (the tail rings out with trails
 // on, and is cut in 5 ms with them off) and while frozen. Decay's top
@@ -86,6 +87,7 @@ class StormEngine
         float lightning = 0.3f;
         float thunder   = 0.5f;
         float surge     = 0.4f;
+        float undertow  = 0.2f;
         int   strike    = Sky::kFlash;
         bool  calm      = false; // held: the storm dies down
         bool  squall    = false; // held: the storm rises to full
@@ -99,7 +101,10 @@ class StormEngine
         float rt60;  // the decay now, s (1e6: held)
         float hold;  // 0..1: how far the sea is held (∞ or frozen)
         float storm; // the storm's strength now, 0..1
-        float flash; // 1 at a lightning strike, falling away
+        float flash;   // 1 at a lightning strike, falling away
+        float wind;    // each element now, 0..1: its setting x the storm
+        float rain;
+        float thunder; // the thunder rolling now
     };
 
     // The memory Init needs, in floats: fast (RAM_D2) for the sea, and
@@ -161,7 +166,7 @@ class StormEngine
     float log_cutoff_ = 9.9f, cutoff_set_ = 0.0f;
     float mix_ = 0.35f, dry_ = 1.0f, wet_ = 0.0f;
     float tide_l_ = 1.0f, tide_r_ = 1.0f, tide_db_ = 0.0f;
-    float storm_knob_ = 0.0f, calm_ = 1.0f, squall_ = 0.0f, strength_ = 0.0f;
+    float storm_knob_ = 0.0f, calm_ = 1.0f, squall_ = 0.0f, strength_ = 0.0f, wind_ = 0.0f;
     float whistle_mix_ = 0.0f, whistle_set_ = 0.0f; // the whistle's level, and the centre last set
 
     // Per sample: ramps of 5 ms (bypass, cut, kill dry) and 20 ms (the gate).
