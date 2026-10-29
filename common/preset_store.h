@@ -43,6 +43,7 @@ enum PresetRegion
     kRegionDriftnet  = 2,
     kRegionSlowdrift = 3,
     kRegionWavebyte  = 4,
+    kRegionStormsea  = 5,
 };
 
 class PresetStore

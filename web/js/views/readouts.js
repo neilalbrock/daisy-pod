@@ -137,7 +137,10 @@ export class TraceReadouts {
     this.items = [];
   }
 
-  setLayout(traces, names) {
+  // format(name, value): the app's own reading for a value, or undefined
+  // for the default.
+  setLayout(traces, names, format) {
+    this.format = format;
     this.root.replaceChildren();
     this.items = traces
       .map((t, i) => ({ t, i }))
@@ -162,7 +165,7 @@ export class TraceReadouts {
       const digits = max - min > 50 ? 0 : 1;
       // The unit, unless it only repeats the name ("Voices 4").
       const shown = unit.toLowerCase() === item.trace.name.toLowerCase() ? "" : ` ${unit}`;
-      const text = `${v.toFixed(digits).replace("-", "−")}${shown}`;
+      const text = this.format?.(item.trace.name, v) ?? `${v.toFixed(digits).replace("-", "−")}${shown}`;
       if (text !== item.shown) item.el.textContent = item.shown = text;
     }
   }

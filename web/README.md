@@ -3,7 +3,7 @@
 A page that connects to the Pod over USB MIDI (Web MIDI), shows what the app
 is doing and gives you every control at once. It works with any app that
 speaks the web link protocol (`common/web_link.h`): grainfall, tapeworn,
-driftnet, slowdrift and wavebyte so far. The page shows whichever views the app sends data for.
+driftnet, slowdrift, stormsea and wavebyte so far. The page shows whichever views the app sends data for.
 
 ```sh
 make web    # serves this folder on http://localhost:8000
@@ -51,6 +51,8 @@ screens). `CLAUDE.md` here has the design system and the layout rules.
   - **LFO & swell** (slowdrift): the modulation LFO and the reverb's input
     gain (Rise's swells, the gate closing while off or frozen); the decay time
     shows as a number.
+  - **Sea & tide** (stormsea): the sea's level and Tide's level swell; the
+    decay time shows as a number, ∞ while the sea is held.
   - **Last voice** (wavebyte): its wave position, cutoff and amp envelope;
     the voices playing and the stack's margin show as numbers.
   - **Tempo** (grainfall, and driftnet, marked not synced while it runs free),
@@ -148,6 +150,7 @@ On the page, add `js/apps/<app>.js` for the rest; every entry is optional
 | `groupTitle(name, params)` | A card's title, instead of the default |
 | `feature`, `optionHint(param, i)` | The main choice, and a line under each of its options |
 | `displayTraces`, `readouts`, `tracesTitle` | The traces the display plots, those it shows as numbers, and its title |
+| `formatTrace(name, value)` | A trace's reading as a number, in its own words (stormsea's held decay as ∞), or undefined for the default |
 | `View`, `scopeTitle` | A class drawing the buffer its own way (`setLayout`, `addOverview`, `setFrame`, `draw`, optionally `status`), as driftnet's `js/views/loop.js` |
 | `tempo: true` | Keep the tempo line for an app that only sends a tempo some of the time |
 | `drawer` | Group names for the tabbed drawer |

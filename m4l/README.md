@@ -1,6 +1,6 @@
 # Max for Live devices
 
-A device per app (grainfall, tapeworn, driftnet, slowdrift, wavebyte) that
+A device per app (grainfall, tapeworn, driftnet, slowdrift, stormsea, wavebyte) that
 puts every one of the app's parameters in Live as a Live parameter, so you can
 automate it, draw clip envelopes, map it to a controller or Push, and save it
 with the set. The device and the Pod follow each other: turn a knob on the
@@ -26,7 +26,7 @@ from this folder, and `../web/js/protocol.js`, so use them from here. Add the
 `m4l` folder to Live's browser (Places → Add Folder…) and drag them in from
 there.
 
-- The effects (grainfall, tapeworn, driftnet, slowdrift) are audio effects
+- The effects (grainfall, tapeworn, driftnet, slowdrift, stormsea) are audio effects
   that pass audio through. Put one on the track that sends to and returns from
   the Pod, for example just before an External Audio Effect.
 - Wavebyte is a MIDI effect that passes MIDI through. Put it on a MIDI track

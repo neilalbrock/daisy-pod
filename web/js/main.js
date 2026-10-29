@@ -59,7 +59,7 @@ function setUpDisplay(msg, ex) {
   $("#display-meta").replaceChildren();
   traces.setLayout(msg, plotted);
   const rest = msg.traces.map((t) => t.name).filter((n) => !plotted.includes(n));
-  readouts.setLayout(msg.traces, ex.readouts ? rest.filter((n) => ex.readouts.includes(n)) : rest);
+  readouts.setLayout(msg.traces, ex.readouts ? rest.filter((n) => ex.readouts.includes(n)) : rest, ex.formatTrace);
   $("#xy").hidden = !msg.xy;
   $("#xy").setAttribute("aria-label", `${msg.xy}: input against output`);
 }
