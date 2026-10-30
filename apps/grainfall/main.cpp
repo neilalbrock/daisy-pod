@@ -12,10 +12,10 @@
 //   Page 2 (LED 2 magenta) Knob 1 - Shape: square, ramp up, triangle, ramp down
 //                          Knob 2 - Time: subdivision 1/4, 1/2, TAP, 2x, 4x, 8x
 //   Page 3 (LED 2 yellow)  Knob 1 - Filter: low-pass, fully open at max
-//                          Knob 2 - Mix: dry to wet
+//                          Knob 2 - filter resonance
 //   Page 4 (LED 2 cyan)    Knob 1 - pitch mod depth
 //                          Knob 2 - pitch mod rate
-//   Page 5 (LED 2 white)   Knob 1 - filter resonance
+//   Page 5 (LED 2 white)   Knob 1 - Mix: dry to wet
 //                          Knob 2 - effect volume (noon is unity, max x2)
 //                          (a limiter holds dry + wet under -1 dBFS)
 //   Page 6 (LED 2 green)   Knob 1 - Space: reverb mix, none to reverb only
@@ -114,9 +114,9 @@ constexpr int kNumSlots = GrainEngine::kNumEffects * GrainEngine::kNumVariations
 PagedKnobs<kNumPages, kNumKnobs> pages({
     {0.5f, 0.5f},  // activity, repeats
     {0.1f, 0.42f}, // shape square, time TAP
-    {1.0f, 0.5f},  // filter open, mix 50 %
+    {1.0f, 0.2f},  // filter open, resonance
     {0.0f, 0.3f},  // mod depth off, rate
-    {0.2f, 0.5f},  // resonance, volume unity
+    {0.5f, 0.5f},  // mix 50 %, volume unity
     {0.0f, 0.625f}, // space off, reverb C Large Hall
     {0.0f, 0.0f},   // presets: unused
 });
@@ -182,12 +182,12 @@ void HandleCc(uint8_t cc, uint8_t value, uint32_t now)
         case 6: pages.Set(0, 0, v); break;  // activity
         case 7: pages.Set(1, 0, v); break;  // shape
         case 8: pages.Set(2, 0, v); break;  // filter
-        case 9: pages.Set(2, 1, v); break;  // mix
+        case 9: pages.Set(4, 0, v); break;  // mix
         case 10: tempo.SetBpm(40.0f + v * 200.0f); break; // time, as tempo
         case 11: pages.Set(0, 1, v); break; // repeats
         case 12: pages.Set(5, 0, v); break; // space
         case 14: pages.Set(3, 1, v); break; // mod rate
-        case 15: pages.Set(4, 0, v); break; // resonance
+        case 15: pages.Set(2, 1, v); break; // resonance
         case 16: pages.Set(4, 1, v); break; // effect volume
         case 19: pages.Set(3, 0, v); break; // mod depth
         case 20: pages.Set(5, 1, v); break; // reverb mode, in four zones
@@ -504,7 +504,7 @@ void AudioCallback(AudioHandle::InputBuffer  in,
     beat_phase = tempo.BeatPos() - floorf(tempo.BeatPos());
 
     // Equal-power mix: the dry and wet are mostly uncorrelated.
-    float mix      = pages.Value(2, 1);
+    float mix      = pages.Value(4, 0);
     float dry_gain = cosf(mix * 1.57079633f);
     float wet_gain = sinf(mix * 1.57079633f);
 
@@ -524,7 +524,7 @@ void AudioCallback(AudioHandle::InputBuffer  in,
     p.post.filter      = pages.Value(2, 0);
     p.post.mod_depth   = pages.Value(3, 0);
     p.post.mod_rate    = pages.Value(3, 1);
-    p.post.resonance   = pages.Value(4, 0);
+    p.post.resonance   = pages.Value(2, 1);
     p.post.volume      = pages.Value(4, 1);
     p.post.space       = pages.Value(5, 0);
     p.post.reverb      = (int)fminf(pages.Value(5, 1) * Space::kNumModes, Space::kNumModes - 1);

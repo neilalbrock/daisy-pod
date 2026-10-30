@@ -30,9 +30,9 @@ jump.
 |---|---|---|
 | 1 (blue) | Activity: more or less of the effect | Repeats: how long the effect goes on |
 | 2 (magenta) | Shape: square, ramp up, triangle, ramp down (quarters of the knob) | Time: subdivision 1/4, 1/2, TAP, 2x, 4x, 8x (sixths of the knob) |
-| 3 (yellow) | Filter: low-pass, fully open at max, silent at min | Mix: dry to wet |
+| 3 (yellow) | Filter: low-pass, fully open at max, silent at min | Filter resonance |
 | 4 (cyan) | Pitch mod depth | Pitch mod rate, 0.05 - 10 Hz |
-| 5 (white) | Filter resonance | Effect volume, noon is unity, max x2 |
+| 5 (white) | Mix: dry to wet | Effect volume, noon is unity, max x2 |
 | 6 (green) | Space: reverb mix, none to reverb only | Reverb mode: A Bright Room, B Dark Medium, C Large Hall, D Ambient (quarters of the knob) |
 
 | Control | Function |
