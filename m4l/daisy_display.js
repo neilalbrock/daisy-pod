@@ -1,12 +1,15 @@
 // Daisy display - the [v8ui] in every designed device: a small screen of
 // what the Pod is doing, drawn from what daisy_link.mjs sends it
 //
-// The node script sends "display <json>" twenty times a second while
-// something changes: the status, the Pod's streams (traces, the buffer,
-// tempo, levels, the saturator's loop) and the values the layout names (a
-// knob 0..1, a choice as its index and text). Each app has its picture;
-// every screen has a title line, and the status and preset along the bottom.
-// Everything else the node script says comes here too, and is ignored.
+// The node script sends "display" with its state as JSON twenty times a
+// second while something changes: the status, the Pod's streams (traces
+// over the last 8 s with their latest values, the buffer, tempo, levels,
+// the saturator's loop) and the values the layout names (a knob 0..1, a
+// choice as its index and text). The JSON comes as numbers, three 7-bit
+// characters to each (packText in link_core.mjs), as a string would stay in
+// Max's symbol table for good. Each app has its picture; every screen has a
+// title line, and the status and preset along the bottom. Everything else
+// the node script says comes here too, and is ignored.
 
 autowatch = 0;
 inlets = 1;
@@ -31,7 +34,15 @@ const ACCENT = {
   wavebyte: [0.27, 0.83, 0.42],
 };
 
-function display(json) {
+function display() {
+  const codes = [];
+  for (let i = 0; i < arguments.length; i++) {
+    const n = arguments[i];
+    codes.push((n >> 14) & 127, (n >> 7) & 127, n & 127);
+  }
+  while (codes.length && codes[codes.length - 1] === 0) codes.pop();
+  let json = "";
+  for (let i = 0; i < codes.length; i += 4096) json += String.fromCharCode.apply(null, codes.slice(i, i + 4096));
   try {
     S = JSON.parse(json);
   } catch (e) {
@@ -116,23 +127,51 @@ function chips(x, y, list, accent, maxX) {
   }
 }
 
-// A trace's points (0..1 of its range), the last n, across a box.
-function tracePoints(t, x, y, w, h, n, lo, hi) {
+// A waveform from the middle: columns as [x, 0..1], scaled up so the
+// loudest fills the height (at most 4x, so a quiet buffer still looks
+// quiet and silence stays flat).
+function wave(columns, mid, half) {
+  let peak = 0;
+  for (const [, v] of columns) peak = Math.max(peak, v);
+  const gain = peak > 0 ? Math.min(4, 0.9 / peak) : 1;
+  for (const [x, v] of columns) {
+    const hh = Math.max(0.5, v * gain * half);
+    rect(x, mid - hh, 1, hh * 2, DIM);
+  }
+}
+
+// A trace's points (0..1 of its range) across a box, now at the right, so
+// a trace still filling grows from there.
+function tracePoints(t, x, y, w, h, lo, hi) {
   if (!t || !t.points.length) return [];
-  const pts = t.points.slice(-n);
+  const pts = t.points;
+  const n = Math.max(2, S.traceLength || pts.length);
   const a = lo === undefined ? 0 : lo;
   const b = hi === undefined ? 1 : hi;
-  return pts.map((v, i) => [x + (i / Math.max(1, n - 1)) * w, y + h - ((Math.min(b, Math.max(a, v)) - a) / (b - a)) * h]);
+  return pts.map((v, i) => [x + w - ((pts.length - 1 - i) / (n - 1)) * w, y + h - ((Math.min(b, Math.max(a, v)) - a) / (b - a)) * h]);
 }
 
 // The same, scaled to the points' own spread (at least a tenth of the range).
-function fitted(t, x, y, w, h, n) {
+function fitted(t, x, y, w, h) {
   if (!t || !t.points.length) return [];
-  const pts = t.points.slice(-n);
-  let lo = Math.min(...pts);
-  let hi = Math.max(...pts);
+  let lo = Math.min(...t.points);
+  let hi = Math.max(...t.points);
   if (hi - lo < 0.1) (lo = Math.max(0, (lo + hi) / 2 - 0.05)), (hi = lo + 0.1);
-  return tracePoints(t, x, y, w, h, n, lo, hi);
+  return tracePoints(t, x, y, w, h, lo, hi);
+}
+
+// A number 0..1 fixed for each i, and a wrap into 0..1.
+function hash(i) {
+  const s = Math.sin(i * 12.9898) * 43758.5453;
+  return s - Math.floor(s);
+}
+
+function wrap(v) {
+  return v - Math.floor(v);
+}
+
+function mod(x, n) {
+  return ((x % n) + n) % n;
 }
 
 function trace(name) {
@@ -143,8 +182,8 @@ function trace(name) {
 
 function last(name) {
   const t = trace(name);
-  if (!t || !t.points.length) return null;
-  return t.min + t.points[t.points.length - 1] * (t.max - t.min);
+  if (!t || t.now === null || t.now === undefined) return null;
+  return t.min + t.now * (t.max - t.min);
 }
 
 function value(name) {
@@ -206,7 +245,7 @@ const APPS = {
       }
     }
     const top = a.y + 22;
-    const bottom = a.y + a.h - 16;
+    const bottom = a.y + a.h - 20; // onsets under it, above the chips
     const mid = (top + bottom) / 2;
     const half = (bottom - top) / 2;
     const N = S.bufferFrames;
@@ -216,12 +255,12 @@ const APPS = {
       const span = Math.min(N, 48000 * 8);
       const ageAt = (x) => (1 - (x - a.x) / a.w) * span;
       const xOf = (age) => a.x + a.w * (1 - age / span);
+      const columns = [];
       for (let x = a.x; x < a.x + a.w; x += 2) {
         const f = (((buf.write - ageAt(x)) % N) + N) % N;
-        const amp = ov[Math.floor(f / (N / ov.length))] / 127;
-        const hh = Math.max(0.5, amp * half);
-        rect(x, mid - hh, 1, hh * 2, DIM);
+        columns.push([x, ov[Math.floor(f / (N / ov.length))] / 127]);
       }
+      wave(columns, mid, half);
       const ageOf = (f) => (((buf.write - f) % N) + N) % N;
       for (const o of buf.onsets || []) {
         const age = ageOf(o);
@@ -257,14 +296,14 @@ const APPS = {
     hdots(a.x, a.x + pw, sy + sh / 2);
     const lo = 0.5 - 50 / 400;
     const hi = 0.5 + 50 / 400;
-    line(tracePoints(trace("Speed R"), a.x, sy, pw, sh, 240, lo, hi), DIM, 1, 1);
-    line(tracePoints(trace("Speed L"), a.x, sy, pw, sh, 240, lo, hi), a.accent, 1, 1.5);
+    line(tracePoints(trace("Speed R"), a.x, sy, pw, sh, lo, hi), DIM, 1, 1);
+    line(tracePoints(trace("Speed L"), a.x, sy, pw, sh, lo, hi), a.accent, 1, 1.5);
     const cents = last("Speed L");
     if (cents !== null) text(a.x + pw, top + 7, (cents >= 0 ? "+" : "") + cents.toFixed(0) + " c", 8.5, INK, true, "right");
     // Level, as a strip.
     const ly = sy + sh + 8;
     text(a.x, ly + 7, "Level", 8.5, DIM, false);
-    line(tracePoints(trace("Level L"), a.x + 30, ly, pw - 30, 10, 240, 0.6, 1), INK, 0.8, 1);
+    line(tracePoints(trace("Level L"), a.x + 30, ly, pw - 30, 10, 0.6, 1), INK, 0.8, 1);
     // The saturator's loop.
     frameRect(sx, top, sq, sq, FAINT);
     rect(sx + sq / 2, top + 2, 1, sq - 4, FAINT);
@@ -274,7 +313,9 @@ const APPS = {
     chips(a.x, a.y + a.h - 12, [["AUX " + choice("AUX type", ""), on("AUX")]], a.accent, a.x + a.w);
   },
 
-  // The modes, the loop (its slice of the buffer, with the play head), the
+  // The modes, the looper (as the web page's loop view: while it listens,
+  // the ring it records into, now at the right; while it plays, the loop,
+  // oldest first, with what plays it boxed with its play head), the
   // envelope's input against its threshold, and the clock.
   driftnet(a) {
     const wet = choice("Wet mode", "—");
@@ -288,19 +329,34 @@ const APPS = {
     const mid = (top + bottom) / 2;
     const half = (bottom - top) / 2;
     const ov = S.overview;
-    const loop = S.buffer && S.buffer.heads && S.buffer.heads[0];
-    if (ov && loop && loop.length > 0) {
+    const heads = (S.buffer && S.buffer.heads) || [];
+    const loop = heads[0]; // the loop itself, with the clock as its rate
+    if (ov && loop) {
       const N = S.bufferFrames || ov.length;
+      const listening = !(loop.length > 0);
+      const span = listening ? N : loop.length;
+      const first = listening ? S.buffer.write - N : loop.start;
+      const xOf = (f) => a.x + (mod(f - first, N) / span) * a.w;
+      const columns = [];
       for (let x = a.x; x < a.x + a.w; x += 2) {
-        const f = loop.start + ((x - a.x) / a.w) * loop.length;
-        const amp = ov[Math.floor(((((f % N) + N) % N) / N) * ov.length)] / 127;
-        const hh = Math.max(0.5, amp * half);
-        rect(x, mid - hh, 1, hh * 2, DIM);
+        const f = first + ((x - a.x) / a.w) * span;
+        columns.push([x, ov[Math.floor((mod(f, N) / N) * ov.length)] / 127]);
       }
-      const into = (((loop.pos - loop.start) % loop.length) + loop.length) % loop.length;
-      const px = a.x + (into / loop.length) * a.w;
-      rect(px - 1, top - 2, 3, 2, a.accent);
-      rect(px, top, 1, bottom - top, a.accent);
+      wave(columns, mid, half);
+      for (let i = 1; i < heads.length; i++) {
+        const v = heads[i];
+        const x0 = xOf(v.start);
+        const x1 = Math.min(a.x + a.w, x0 + (v.length / span) * a.w);
+        const hh = Math.max(4, v.amp * half);
+        frameRect(x0, mid - hh, Math.max(3, x1 - x0), hh * 2, a.accent, 0.9);
+        const px = Math.min(a.x + a.w - 1, xOf(v.start + mod(v.pos - v.start, Math.max(1, v.length))));
+        rect(px - 1, mid - hh - 2, 3, 2, a.accent);
+        rect(px, mid - hh, 1, hh * 2, a.accent);
+      }
+      if (listening) rect(a.x + a.w - 1, top, 1, bottom - top, a.accent);
+      const hz = S.sampleRate * loop.rate;
+      const secs = hz > 0 ? span / hz : 0;
+      text(a.x + a.w, a.y + 24, (listening ? "Listening " : "Playing ") + secs.toFixed(secs < 10 ? 1 : 0) + " s", 8.5, DIM, false, "right");
     } else hdots(a.x, a.x + a.w, mid);
     // Env input against the threshold, -60..0 dB.
     const ey = a.y + a.h - 28;
@@ -346,7 +402,7 @@ const APPS = {
     // The LFO, with its shape.
     const ly = a.y + a.h - 30;
     text(a.x, ly + 9, choice("Waveshape", "LFO"), 8.5, DIM, false);
-    line(tracePoints(trace("LFO"), a.x + 44, ly, a.w - 44, 12, 300), INK, 0.9, 1);
+    line(tracePoints(trace("LFO"), a.x + 44, ly, a.w - 44, 12), INK, 0.9, 1);
     chips(a.x, a.y + a.h - 12, [[choice("Width", "Width"), true], ["Sustain", on("Sustain")], ["Freeze", frozen]], a.accent, a.x + a.w);
   },
 
@@ -376,11 +432,12 @@ const APPS = {
       mgraphics.ellipse(cx - r * 1.8, a.y + 18, r * 3.6, r * 1.6);
       mgraphics.fill();
     }
-    // Rain: slanted streaks, slanting more in the wind.
+    // Rain: slanted streaks, slanting and blowing more in the wind, each
+    // drop at its own place and speed.
     const drops = Math.round(rain * 40);
     for (let i = 0; i < drops; i++) {
-      const x = a.x + ((i * 0.618 + t * 0.07) % 1) * a.w;
-      const y = a.y + 30 + ((i * 0.381 + t * 0.9) % 1) * (bottom - a.y - 60);
+      const x = a.x + wrap(hash(i) - t * 0.05 * wind) * a.w;
+      const y = a.y + 30 + wrap(hash(i + 97) + t * (0.7 + 0.4 * hash(i + 31))) * (bottom - a.y - 60);
       line([[x, y], [x - 2 - wind * 3, y + 5]], INK, 0.55, 1);
     }
     if (flash > 0.3) {
@@ -430,8 +487,8 @@ const APPS = {
     const th = a.y + a.h - 16 - ty;
     text(a.x, ty + 8, "Cutoff", 8, DIM, false);
     text(a.x + 34, ty + 8, "Level", 8, a.accent, false);
-    line(fitted(trace("Cutoff"), a.x, ty + 10, a.w, th - 10, 300), DIM, 1, 1);
-    line(fitted(trace("Amp"), a.x, ty + 10, a.w, th - 10, 300), a.accent, 1, 1.2);
+    line(fitted(trace("Cutoff"), a.x, ty + 10, a.w, th - 10), DIM, 1, 1);
+    line(fitted(trace("Amp"), a.x, ty + 10, a.w, th - 10), a.accent, 1, 1.2);
     const voices = last("Voices");
     chips(a.x, a.y + a.h - 12, [["FX " + choice("FX 1 Type", "Off"), choice("FX 1 Type", "Off") !== "Off"], ["FX " + choice("FX 2 Type", "Off"), choice("FX 2 Type", "Off") !== "Off"], [(voices === null ? 0 : Math.round(voices)) + " voices", false]], a.accent, a.x + a.w);
   },

@@ -49,6 +49,8 @@ From the left:
   tape speed and saturator loop, driftnet's loop and envelope, slowdrift's
   tail and LFO, stormsea's sea, wavebyte's envelopes and last voice. Its
   bottom line is the link's status (CPU once connected) and the preset.
+  The node script sends it its state as JSON packed into numbers, not as a
+  string: Max keeps every symbol it's sent until it quits.
 - **Sections** of controls, titled in the Pod's page colours. Driftnet and
   wavebyte have several banks, picked by the tab along the top. Wavebyte's
   effects show one at a time; picking an effect for a slot brings it to the

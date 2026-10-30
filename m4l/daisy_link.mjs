@@ -12,7 +12,8 @@
 //   out: param <id> <value>     show the Pod's value
 //        status <text>
 //        page <key> <page>      show a section's page (an effect a slot picked)
-//        display <json>         the display's state (daisy_display.js), 20 times a second
+//        display <n...>         the display's state (daisy_display.js) as JSON, packed
+//                               into numbers (packText), 20 times a second
 //        presets <slot> <modified> <used...>
 //        synced                 the device has synced: save that with the set
 //        dump                   send what Live restored
@@ -21,7 +22,7 @@ import { readFileSync } from "node:fs";
 
 import maxApi from "max-api";
 
-import { DeviceLink } from "./link_core.mjs";
+import { DeviceLink, packText } from "./link_core.mjs";
 
 const app = process.argv[2];
 const spec = JSON.parse(readFileSync(new URL(`./specs/${app}.json`, import.meta.url), "utf8"));
@@ -49,7 +50,7 @@ if (spec.display)
   setInterval(() => {
     if (!link.displayDirty) return;
     link.displayDirty = false;
-    maxApi.outlet("display", JSON.stringify(link.displayState()));
+    maxApi.outlet("display", ...packText(JSON.stringify(link.displayState())));
   }, DISPLAY_MS);
 
 maxApi.addHandlers({

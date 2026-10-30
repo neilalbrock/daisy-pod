@@ -36,7 +36,10 @@ const PUSH_TICK_MS = 5;
 // rewrite the Live parameter over and over (filling the undo history and
 // overriding automation), so a knob must move more than this (0.1%) first.
 const KNOB_DEADBAND = 16;
-const TRACE_POINTS = 480; // kept per trace for the display
+// Traces for the display: the last 8 s (as the web page plots them), each
+// point the mean of the Pod's points in its share of that.
+const TRACE_SPAN_MS = 8000;
+const TRACE_POINTS = 160;
 const DISPLAY_COLUMNS = 256; // the buffer's overview, for the display
 
 export const PORT_PATTERN = /daisy/i;
@@ -65,6 +68,21 @@ export function fromRaw(control, raw) {
     default:
       return raw;
   }
+}
+
+// Text for Max as numbers, three 7-bit characters to each (under 2^21, so
+// exact even as a 32-bit float), padded with 0s. Max keeps every symbol it
+// is sent for good, so a string that changes twenty times a second (the
+// display's state) would fill its symbol table; numbers aren't kept.
+// Anything past ASCII goes as a JSON escape, so pack only JSON.
+export function packText(s) {
+  const ascii = s.replace(/[^\x01-\x7f]/g, (c) => "\\u" + c.charCodeAt(0).toString(16).padStart(4, "0"));
+  const out = new Array(Math.ceil(ascii.length / 3));
+  for (let i = 0; i < out.length; i++) {
+    const at = i * 3;
+    out[i] = ((ascii.charCodeAt(at) || 0) << 14) | ((ascii.charCodeAt(at + 1) || 0) << 7) | (ascii.charCodeAt(at + 2) || 0);
+  }
+  return out;
 }
 
 // Whether two raw values show the same on the control.
@@ -177,7 +195,7 @@ export class DeviceLink {
     this.cpu = null;
     this.pushing = [];
     // For the display.
-    this.stream = { traces: [], points: [], overview: null, buffer: null, tempo: null, levels: null, xy: null, presets: null };
+    this.stream = { traces: [], points: [], sums: [], now: [], summed: 0, per: 1, overview: null, buffer: null, tempo: null, levels: null, xy: null, presets: null };
     this.displayDirty = true;
   }
 
@@ -240,6 +258,9 @@ export class DeviceLink {
         else this.status(`${m.app}: syncing`);
         this.stream.traces = m.traces;
         this.stream.points = m.traces.map(() => []);
+        this.stream.sums = m.traces.map(() => 0);
+        this.stream.now = m.traces.map(() => null);
+        this.stream.per = Math.max(1, Math.round(TRACE_SPAN_MS / TRACE_POINTS / (m.tracePeriodMs || 1)));
         this.stream.overview = m.overviewColumns ? new Uint8Array(m.overviewColumns) : null;
         break;
       case "params":
@@ -269,13 +290,19 @@ export class DeviceLink {
   keep(m) {
     const st = this.stream;
     if (m.traces)
-      for (const p of m.traces)
+      for (const p of m.traces) {
         p.forEach((v, k) => {
-          const line = st.points[k];
-          if (!line) return;
-          line.push(v);
-          if (line.length > TRACE_POINTS) line.splice(0, line.length - TRACE_POINTS);
+          if (k < st.sums.length) (st.sums[k] += v), (st.now[k] = v);
         });
+        if (++st.summed < st.per) continue;
+        st.sums.forEach((sum, k) => {
+          const line = st.points[k];
+          line.push(Math.round((sum / st.summed) * 1000) / 1000);
+          if (line.length > TRACE_POINTS) line.shift();
+          st.sums[k] = 0;
+        });
+        st.summed = 0;
+      }
     if (m.overview && st.overview) {
       const { first, values } = m.overview;
       for (let i = 0; i < values.length; i++) st.overview[(first + i) % st.overview.length] = values[i];
@@ -311,9 +338,11 @@ export class DeviceLink {
       status: this.lastStatus ?? "",
       live: this.live && !this.wrongApp,
       cpu: this.cpu,
+      sampleRate: h?.sampleRate ?? 0,
       bufferFrames: h?.bufferFrames ?? 0,
       tracePeriodMs: h?.tracePeriodMs ?? 0,
-      traces: st.traces.map((t, k) => ({ name: t.name, unit: t.unit, min: t.min, max: t.max, points: st.points[k] })),
+      traceLength: TRACE_POINTS,
+      traces: st.traces.map((t, k) => ({ name: t.name, unit: t.unit, min: t.min, max: t.max, now: st.now[k], points: st.points[k] })),
       overview,
       buffer: st.buffer,
       tempo: st.tempo,
