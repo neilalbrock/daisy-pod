@@ -11,6 +11,8 @@
 //        preset <slot>, save    the Pod's preset slots
 //   out: param <id> <value>     show the Pod's value
 //        status <text>
+//        page <key> <page>      show a section's page (an effect a slot picked)
+//        display <json>         the display's state (daisy_display.js), 20 times a second
 //        presets <slot> <modified> <used...>
 //        synced                 the device has synced: save that with the set
 //        dump                   send what Live restored
@@ -39,7 +41,16 @@ const link = new DeviceLink(spec, {
     maxApi.outlet("presets", ...args);
   },
   synced: () => maxApi.outlet("synced"),
+  page: (key, page) => maxApi.outlet("page", key, page),
 });
+
+const DISPLAY_MS = 50;
+if (spec.display)
+  setInterval(() => {
+    if (!link.displayDirty) return;
+    link.displayDirty = false;
+    maxApi.outlet("display", JSON.stringify(link.displayState()));
+  }, DISPLAY_MS);
 
 maxApi.addHandlers({
   ctl: (id, value) => link.control(id, value),

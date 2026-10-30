@@ -13,8 +13,14 @@
 // the Pod's instead. After that each side follows the other. Wavebyte's
 // device holds only the edited layer, so it always takes the Pod's.
 //
+// It also keeps what the Pod streams for the device's display (traces, the
+// buffer, tempo, levels) with the values the display names, as
+// displayState(); displayDirty says when that has changed. A section page
+// that follows a control (wavebyte's effect, by its slots' types) is told
+// to show the page that control picks.
+//
 // out: { param(id, value), status(text), presets(slot, modified, used),
-//        synced(), log(text) }
+//        synced(), page(key, page), log(text) }
 
 import midi from "@julusian/midi";
 
@@ -30,6 +36,8 @@ const PUSH_TICK_MS = 5;
 // rewrite the Live parameter over and over (filling the undo history and
 // overriding automation), so a knob must move more than this (0.1%) first.
 const KNOB_DEADBAND = 16;
+const TRACE_POINTS = 480; // kept per trace for the display
+const DISPLAY_COLUMNS = 256; // the buffer's overview, for the display
 
 export const PORT_PATTERN = /daisy/i;
 
@@ -146,6 +154,7 @@ export class DeviceLink {
     for (const c of spec.controls) this.byIndex.set(c.index, c);
     this.layerControl = spec.controls.find((c) => c.name === spec.layerParam) || null;
 
+    this.byName = new Map(spec.controls.map((c) => [c.name, c]));
     this.values = new Map(); // control id -> Live value, as the device shows it
     this.restored = false; // the device has sent what Live restored
     this.synced = false; // the device has synced before (saved with the set)
@@ -167,6 +176,9 @@ export class DeviceLink {
     this.lastHeard = 0;
     this.cpu = null;
     this.pushing = [];
+    // For the display.
+    this.stream = { traces: [], points: [], overview: null, buffer: null, tempo: null, levels: null, xy: null, presets: null };
+    this.displayDirty = true;
   }
 
   close() {
@@ -201,7 +213,7 @@ export class DeviceLink {
   }
 
   status(text) {
-    if (text !== this.lastStatus) this.out.status(text);
+    if (text !== this.lastStatus) this.out.status(text), (this.displayDirty = true);
     this.lastStatus = text;
   }
 
@@ -226,6 +238,9 @@ export class DeviceLink {
         else if (m.numParams !== this.spec.numParams)
           this.status(`${m.app} has changed: run make m4l`), (this.wrongApp = true);
         else this.status(`${m.app}: syncing`);
+        this.stream.traces = m.traces;
+        this.stream.points = m.traces.map(() => []);
+        this.stream.overview = m.overviewColumns ? new Uint8Array(m.overviewColumns) : null;
         break;
       case "params":
         // The spec has them; check its names match, so no value lands on the wrong control.
@@ -244,8 +259,77 @@ export class DeviceLink {
         if (this.wrongApp) break;
         if (m.presets) this.out.presets(m.presets.slot, m.presets.modified, m.presets.used);
         if (m.cpu) this.cpu = m.cpu;
+        this.keep(m);
         if (this.live) this.status(`${this.hello.app} on ${this.ports.name}${this.cpu ? `, CPU ${this.cpu.avg}%` : ""}`);
         break;
+    }
+  }
+
+  // What a frame brings for the display.
+  keep(m) {
+    const st = this.stream;
+    if (m.traces)
+      for (const p of m.traces)
+        p.forEach((v, k) => {
+          const line = st.points[k];
+          if (!line) return;
+          line.push(v);
+          if (line.length > TRACE_POINTS) line.splice(0, line.length - TRACE_POINTS);
+        });
+    if (m.overview && st.overview) {
+      const { first, values } = m.overview;
+      for (let i = 0; i < values.length; i++) st.overview[(first + i) % st.overview.length] = values[i];
+    }
+    for (const k of ["buffer", "tempo", "levels", "xy", "presets"]) if (m[k]) st[k] = m[k];
+    this.displayDirty = true;
+  }
+
+  // The display's view of it all: plain data, for JSON.
+  displayState() {
+    const st = this.stream;
+    const h = this.hello;
+    const values = {};
+    for (const name of this.spec.display?.values ?? []) {
+      const c = this.byName.get(name);
+      const raw = c ? this.pod[this.indexOf(c)] : undefined;
+      if (raw === undefined) continue;
+      const v = c.kind === "dial" ? raw / UNIT_MAX : fromRaw(c, raw);
+      values[name] = { v, text: c.options?.[v] };
+    }
+    let overview = null;
+    if (st.overview) {
+      const n = Math.min(DISPLAY_COLUMNS, st.overview.length);
+      const per = st.overview.length / n;
+      overview = Array.from({ length: n }, (_, i) => {
+        let peak = 0;
+        for (let k = Math.floor(i * per); k < Math.floor((i + 1) * per); k++) peak = Math.max(peak, st.overview[k]);
+        return peak;
+      });
+    }
+    return {
+      app: this.spec.app,
+      status: this.lastStatus ?? "",
+      live: this.live && !this.wrongApp,
+      cpu: this.cpu,
+      bufferFrames: h?.bufferFrames ?? 0,
+      tracePeriodMs: h?.tracePeriodMs ?? 0,
+      traces: st.traces.map((t, k) => ({ name: t.name, unit: t.unit, min: t.min, max: t.max, points: st.points[k] })),
+      overview,
+      buffer: st.buffer,
+      tempo: st.tempo,
+      levels: st.levels,
+      xy: st.xy,
+      presets: st.presets && { slot: st.presets.slot, modified: st.presets.modified },
+      values,
+    };
+  }
+
+  // A section page that follows this control: show the page it picks.
+  followPage(c, value) {
+    for (const p of this.spec.pages ?? []) {
+      if (!p.follow.includes(c.id)) continue;
+      const page = p.map[value];
+      if (page !== undefined) this.out.page?.(p.key, page);
     }
   }
 
@@ -256,6 +340,7 @@ export class DeviceLink {
       if (this.pod[index] === undefined) this.have++;
       const changed = this.pod[index] !== values[i];
       this.pod[index] = values[i];
+      if (changed) this.displayDirty = true;
       if (this.live && changed) this.follow(index);
     }
     if (this.live && this.editLayer() !== editBefore) this.showLayer();
@@ -278,6 +363,7 @@ export class DeviceLink {
     const value = fromRaw(c, raw);
     this.values.set(c.id, value);
     this.out.param(c.id, value);
+    this.followPage(c, value);
   }
 
   // --- Layers (wavebyte): layer controls edit the layer the Pod edits
@@ -367,6 +453,7 @@ export class DeviceLink {
     }
     this.values.set(id, value);
     this.moved.set(id, Date.now());
+    this.followPage(c, value);
     if (!this.live) return;
     this.send(c, value);
     if (c === this.layerControl) this.showLayer();

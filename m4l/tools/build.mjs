@@ -8,9 +8,14 @@
 // (continuous parameters that pick from a list) and card colours. Writes
 // m4l/<app>.amxd and m4l/specs/<app>.json, which daisy_link.mjs reads.
 //
-// Every parameter becomes a Live parameter (triggers excepted), laid out as
-// the page does: a card per group, knobs then choices then switches. Cards
-// that don't fit in one device width go in banks, picked down the left.
+// Every parameter becomes a Live parameter (triggers excepted). An app with
+// a layout in m4l/layouts/<app>.mjs gets it: a column for the Pod's presets
+// and switches, a display (daisy_display.js, a [v8ui] drawing what the Pod
+// streams), then titled sections of controls placed as the layout says, in
+// banks picked by a tab along the top if there are several. Every control
+// must be placed, once. Without a layout the device is laid out as the page
+// does: a card per group, knobs then choices then switches, in banks picked
+// down the left.
 // Wavebyte's layers: only layer A's parameters get controls, and they edit
 // whichever layer the Pod edits (link_core.mjs maps them).
 
@@ -137,7 +142,7 @@ function describe(app, hello, params, mod) {
     layers,
     layerParam: layerParams ? mod.tabParam || "Layer" : null,
     pullOnly: layerParams > 0,
-    controls: controls.map(({ id, index, name, podName, kind, n, layer }) => ({ id, index, name, podName, kind, n, layer })),
+    controls: controls.map(({ id, index, name, podName, kind, n, layer, options }) => ({ id, index, name, podName, kind, n, layer, options })),
   };
   return { spec, controls, cards: [...cards.values()] };
 }
@@ -236,9 +241,15 @@ const valueof = (c, fields) => ({
 });
 
 // A control's box, by kind, at its presentation rect.
-function controlBox(c, varname, patching, rect) {
+function controlBox(c, varname, patching, rect, as = c.kind, it = {}) {
   const common = { varname, patching_rect: patching, presentation: 1, presentation_rect: rect, parameter_enable: 1 };
-  switch (c.kind) {
+  const text = it.text ?? c.short;
+  switch (as) {
+    case "num": // a dial's parameter as a number box
+      return {
+        maxclass: "live.numbox", numinlets: 1, numoutlets: 2, outlettype: ["", "float"], ...common,
+        ...valueof(c, { parameter_type: 0, parameter_mmin: 0, parameter_mmax: 100, parameter_unitstyle: 5 }),
+      };
     case "dial":
       return {
         maxclass: "live.dial", numinlets: 1, numoutlets: 2, outlettype: ["", "float"], ...common,
@@ -253,19 +264,19 @@ function controlBox(c, varname, patching, rect) {
     case "tab":
       return {
         maxclass: "live.tab", numinlets: 1, numoutlets: 3, outlettype: ["", "", "float"], ...common,
-        num_lines_patching: 1, num_lines_presentation: 1,
+        num_lines_patching: it.lines ?? 1, num_lines_presentation: it.lines ?? 1,
         ...valueof(c, { parameter_type: 2, parameter_enum: c.options, parameter_mmax: c.options.length - 1 }),
       };
     case "toggle":
       return {
         maxclass: "live.text", numinlets: 1, numoutlets: 2, outlettype: ["", ""], ...common,
-        mode: 1, text: c.short, texton: c.short,
+        mode: 1, text, texton: text,
         ...valueof(c, { parameter_type: 2, parameter_enum: ["off", "on"], parameter_mmax: 1 }),
       };
     default: // trigger: not a Live parameter
       return {
         maxclass: "live.text", numinlets: 1, numoutlets: 2, outlettype: ["", ""], ...common,
-        parameter_enable: 0, mode: 0, text: c.short, texton: c.short,
+        parameter_enable: 0, mode: 0, text, texton: text,
       };
   }
 }
@@ -374,6 +385,10 @@ function buildPatcher(app, kind, cards, { banks, width, left }) {
     }
   }
 
+  return patcherJson(P, app, kind, Math.max(width, hx + 4));
+}
+
+function patcherJson(P, app, kind, devicewidth) {
   return {
     patcher: {
       fileversion: 1,
@@ -401,7 +416,7 @@ function buildPatcher(app, kind, cards, { banks, width, left }) {
       boxanimatetime: 500,
       enablehscroll: 1,
       enablevscroll: 1,
-      devicewidth: Math.max(width, hx + 4),
+      devicewidth,
       description: `Daisy Pod ${app}: every parameter, synced both ways over USB`,
       digest: "",
       tags: "",
@@ -436,6 +451,304 @@ function buildPatcher(app, kind, cards, { banks, width, left }) {
   };
 }
 
+// --- Designed devices (m4l/layouts/<app>.mjs)
+//
+// A layout: { display: { w, values }, pod: [items], sections: [...] } or
+// banks: [{ name, sections }]. A section: { title, group (for its colour),
+// cols: [[items]] } or pages: { key, follow, list: [{ name, group, cols }] },
+// whose tab shows one page at a time (the one a follow control picks comes
+// to the front). An item: a control's name, or { name, as ("tab", "menu",
+// "num"), w, lines (a tab's rows), label (false: none), text (a switch's),
+// short (the dial's name) }, { row: [items], justify ("start") },
+// { label: text, w } or { space: px }.
+
+const L = {
+  POD_X: 3,
+  POD_W: 62,
+  DISPLAY_X: 70,
+  TOP: 3, // sections' top, one bank
+  BANKS_TOP: 22, // under the bank tab
+  BOTTOM: 166,
+  GAP: 3, // between items in a column, or in a row
+  COL_GAP: 6,
+  SECTION_GAP: 13,
+  TITLE_H: 14,
+  LABEL_H: 12,
+  LINE_H: 15, // a menu, a tab's row
+  PAGE_TAB_H: 18,
+};
+const DIVIDER = [0.16, 0.16, 0.16, 1];
+const textWidth = (text) => Math.ceil(text.length * 5.6) + 4;
+
+async function layoutModule(app) {
+  try {
+    return (await import(`../layouts/${app}.mjs`)).default;
+  } catch (e) {
+    if (e.code === "ERR_MODULE_NOT_FOUND") return null;
+    throw e;
+  }
+}
+
+function boxKind(it) {
+  if (it.as) return it.as;
+  return { dial: "dial", menu: "menu", choice: "menu", tab: "tab", toggle: "toggle", trigger: "trigger" }[it.c.kind];
+}
+
+function labelled(it) {
+  const k = boxKind(it);
+  return (k === "menu" || k === "tab") && it.label !== false;
+}
+
+function itemSize(it) {
+  if (it.row) {
+    const s = it.row.map(itemSize);
+    return { w: s.reduce((a, b) => a + b.w, 0) + L.GAP * (s.length - 1), h: Math.max(...s.map((x) => x.h)) };
+  }
+  if (it.space) return { w: 0, h: it.space };
+  if (!it.c) return { w: it.w ?? textWidth(it.text), h: L.LABEL_H };
+  const top = labelled(it) ? L.LABEL_H : 0;
+  switch (boxKind(it)) {
+    case "dial": // wide enough for its name
+      return { w: it.w ?? Math.max(44, textWidth(it.short ?? it.c.short) - 2), h: 48 };
+    case "num":
+      return { w: it.w ?? 40, h: L.LINE_H };
+    case "menu":
+      return { w: it.w ?? 84, h: top + L.LINE_H };
+    case "tab":
+      return { w: it.w ?? 84, h: top + L.LINE_H * (it.lines ?? 1) };
+    default:
+      return { w: it.w ?? 60, h: 16 };
+  }
+}
+
+// Places an item (a row's items across the column's width) and returns its
+// placements: { it, x, y, w, h }.
+function placeItem(it, x, y, colW, out) {
+  const { w, h } = itemSize(it);
+  if (it.row) {
+    const sizes = it.row.map(itemSize);
+    // Spread across the column: the spare width shared round the items.
+    const spare = it.justify !== "start" && it.row.length > 1 ? colW - w : 0;
+    const gap = L.GAP + spare / it.row.length;
+    let cx = x + spare / it.row.length / 2;
+    it.row.forEach((child, i) => {
+      placeItem(child, Math.round(cx), y, sizes[i].w, out);
+      cx += sizes[i].w + gap;
+    });
+  } else if (!it.space) out.push({ it, x, y, w, h });
+  return h;
+}
+
+// Places columns from (x, y); returns { w, placed }.
+function placeCols(cols, x, y, where) {
+  const placed = [];
+  let cx = x;
+  for (const col of cols) {
+    const colW = Math.max(...col.map((it) => itemSize(it).w));
+    let cy = y;
+    for (const it of col) {
+      cy += placeItem(it, cx, cy, colW, placed) + L.GAP;
+      if (cy - L.GAP > L.BOTTOM) throw new Error(`${where}: a column runs past the bottom of the device (${cy - L.GAP} > ${L.BOTTOM})`);
+    }
+    cx += colW + L.COL_GAP;
+  }
+  return { w: cx - L.COL_GAP - x, placed };
+}
+
+function design(app, controls, mod, layout) {
+  const byName = new Map(controls.map((c) => [c.name, c]));
+  const used = new Set();
+  const resolve = (item, where) => {
+    if (typeof item === "string") item = { name: item };
+    if (item.row) return { ...item, row: item.row.map((i) => resolve(i, where)) };
+    if (item.space || (item.label !== undefined && item.name === undefined)) return { ...item, text: item.label };
+    const c = byName.get(item.name);
+    if (!c) throw new Error(`${app} layout, ${where}: no control called "${item.name}"`);
+    if (used.has(c.id)) throw new Error(`${app} layout, ${where}: "${item.name}" is placed twice`);
+    used.add(c.id);
+    return { ...item, c };
+  };
+  // A group's colour for its title, lifted if it's too dark to read.
+  const tint = (group) => {
+    const c = colour(mod.groupColour?.(group));
+    if (!c) return null;
+    const lum = 0.2126 * c[0] + 0.7152 * c[1] + 0.0722 * c[2];
+    return lum < 0.45 ? c.map((x) => x + (1 - x) * 0.45) : c;
+  };
+
+  const pod = (layout.pod ?? []).map((i) => resolve(i, "pod"));
+  const display = layout.display;
+  const banksIn = layout.banks ?? [{ name: "", sections: layout.sections }];
+  const top = banksIn.length > 1 ? L.BANKS_TOP : L.TOP;
+  const x0 = L.DISPLAY_X + display.w + 8;
+
+  const pages = [];
+  let width = x0;
+  const banks = banksIn.map((bank, b) => {
+    let x = x0;
+    const sections = bank.sections.map((sec) => {
+      const where = `${bank.name || "device"} / ${sec.title}`;
+      const out = { title: sec.title, colour: tint(sec.group), x, y: top };
+      const y0 = top + L.TITLE_H;
+      if (sec.pages) {
+        const p = sec.pages;
+        const list = p.list.map((pg) => ({ ...pg, cols: pg.cols.map((col) => col.map((i) => resolve(i, `${where} / ${pg.name}`))) }));
+        const placedPages = list.map((pg) => ({ name: pg.name, colour: tint(pg.group), ...placeCols(pg.cols, x, y0 + L.PAGE_TAB_H, `${where} / ${pg.name}`) }));
+        const tabW = Math.max(p.tabW ?? 0, list.length * Math.max(...list.map((pg) => textWidth(pg.name) + 6)));
+        out.pages = { key: p.key, names: list.map((pg) => pg.name), tab: { x, y: y0, w: tabW, h: L.LINE_H }, placed: placedPages };
+        out.w = Math.max(tabW, ...placedPages.map((pg) => pg.w));
+        pages.push({ key: p.key, follow: p.follow ?? [], list, bank: b });
+      } else {
+        const cols = sec.cols.map((col) => col.map((i) => resolve(i, where)));
+        const { w, placed } = placeCols(cols, x, y0, where);
+        out.placed = placed;
+        out.w = w;
+      }
+      out.w = Math.max(out.w, textWidth(sec.title));
+      x += out.w + L.SECTION_GAP;
+      return out;
+    });
+    width = Math.max(width, x - L.SECTION_GAP + 4);
+    return { name: bank.name, sections };
+  });
+
+  const missing = controls.filter((c) => !used.has(c.id));
+  if (missing.length) throw new Error(`${app} layout: no place for ${missing.map((c) => `"${c.name}"`).join(", ")}`);
+
+  // The pages that follow a control: its option -> the page of that name.
+  const follows = pages.map((p) => {
+    const ids = p.follow.map((n) => byName.get(n)).filter(Boolean);
+    const map = {};
+    for (const c of ids)
+      (c.options ?? []).forEach((o, i) => {
+        const k = p.list.findIndex((pg) => pg.name === o || pg.group === o);
+        if (k >= 0) map[i] = k;
+      });
+    return { key: p.key, follow: ids.map((c) => c.id), map };
+  });
+
+  return { pod, display, banks, top, width, follows };
+}
+
+function buildDesigned(app, kind, D) {
+  const P = new Patcher();
+  const hub = P.obj("v8 daisy_hub.js", [20, 60, 110, 22], 1, 1, [""]);
+  const node = P.obj(`node.script daisy_link.mjs @autostart 1 @watch 0 @args ${app}`, [20, 110, 320, 22], 1, 2, ["", ""]);
+  P.connect(hub, 0, node, 0);
+  P.connect(node, 0, hub, 0);
+  if (kind === "midi") {
+    const i = P.obj("midiin", [380, 20, 50, 22], 1, 1, ["int"]);
+    const o = P.obj("midiout", [380, 60, 55, 22], 1, 0);
+    P.connect(i, 0, o, 0);
+  } else {
+    const i = P.obj("plugin~", [380, 20, 53, 22], 2, 2, ["signal", "signal"]);
+    const o = P.obj("plugout~", [380, 60, 53, 22], 2, 2, ["signal", "signal"]);
+    P.connect(i, 0, o, 0);
+    P.connect(i, 1, o, 1);
+  }
+
+  let px = 20;
+  let py = 180;
+  const toHub = (from, prefix) => {
+    const p = P.obj(`prepend ${prefix}`, [px, py + 60, 90, 22], 1, 1, [""]);
+    P.connect(from, 0, p, 0);
+    P.connect(p, 0, hub, 0);
+  };
+  const slot = () => {
+    const at = [px, py, 90, 50];
+    px += 110;
+    if (px > 1500) (px = 20), (py += 120);
+    return at;
+  };
+  // A view tab: a Live parameter so it has its options, but hidden, and not
+  // saved with the set.
+  const viewTab = (name, varname, options, rect, lines = 1) => ({
+    maxclass: "live.tab", numinlets: 1, numoutlets: 3, outlettype: ["", "", "float"], varname,
+    parameter_enable: 1, patching_rect: slot(), presentation: 1, presentation_rect: rect,
+    num_lines_patching: lines, num_lines_presentation: lines, fontsize: 9.0,
+    ...valueof({ name, short: name }, { parameter_type: 2, parameter_enum: options, parameter_mmax: options.length - 1, parameter_invisible: 2 }),
+  });
+  let n = 0;
+  const control = (it, prefix, x, y) => {
+    const c = it.c;
+    const k = boxKind(it);
+    let at = y;
+    if (labelled(it)) {
+      P.add(comment(it.short ?? c.short, `${prefix}l${n++}`, slot(), [x - 1, y - 1, itemSize(it).w + 2, L.LABEL_H + 1]));
+      at += L.LABEL_H;
+    }
+    const w = itemSize(it).w;
+    const h = k === "dial" ? 48 : k === "tab" ? L.LINE_H * (it.lines ?? 1) : k === "num" ? L.LINE_H : k === "menu" ? L.LINE_H : 16;
+    const box = controlBox({ ...c, short: it.short ?? c.short }, `${prefix}c${c.id}`, slot(), [x, at, w, h], k, it);
+    toHub(P.add(box), `${c.id}`);
+  };
+  const placeAll = (placed, prefix) => {
+    for (const p of placed) {
+      if (p.it.c) control(p.it, prefix, p.x, p.y);
+      else P.add(comment(p.it.text, `${prefix}l${n++}`, slot(), [p.x - 1, p.y - 1, p.w + 2, L.LABEL_H + 1], { textcolor: [0.62, 0.62, 0.62, 1] }));
+    }
+  };
+
+  // The Pod: presets, Save and Get, the edited note, then the app's switches.
+  for (let s = 0; s < 8; s++) {
+    const rect = [L.POD_X + (s % 4) * 15, L.TOP + 1 + Math.floor(s / 4) * 15, 14, 14];
+    toHub(P.add(button(`${s + 1}`, `preset${s}`, true, slot(), rect)), `presetclick ${s}`);
+  }
+  toHub(P.add(button("Save", "save", false, slot(), [L.POD_X, L.TOP + 33, 29, 14])), "save");
+  toHub(P.add(button("Get", "pull", false, slot(), [L.POD_X + 30, L.TOP + 33, 29, 14])), "pull");
+  P.add(comment("", "presetnote", slot(), [L.POD_X - 1, L.TOP + 48, L.POD_W, 13], { textcolor: [0.62, 0.62, 0.62, 1] }));
+  const podPlaced = [];
+  let y = L.TOP + 64;
+  for (const it of D.pod) y += placeItem(it, L.POD_X, y, L.POD_W - 3, podPlaced) + 2;
+  if (y > L.BOTTOM) throw new Error(`${app} layout: the pod column runs past the bottom`);
+  placeAll(podPlaced, "pod_");
+
+  // Whether this device has synced before, kept with the set.
+  const synced = P.add({
+    maxclass: "live.toggle", numinlets: 1, numoutlets: 1, outlettype: [""], varname: "synced",
+    parameter_enable: 1, patching_rect: slot(),
+    ...valueof({ name: "Device synced with Pod", short: "Device synced" }, { parameter_type: 2, parameter_enum: ["off", "on"], parameter_mmax: 1, parameter_invisible: 1 }),
+  });
+  toHub(synced, "stored_synced");
+
+  // The display: everything the node script says goes to it too.
+  const display = P.add({
+    maxclass: "v8ui", filename: "daisy_display.js", varname: "display", numinlets: 1, numoutlets: 1, outlettype: [""],
+    parameter_enable: 0, border: 0, patching_rect: slot(), presentation: 1,
+    presentation_rect: [L.DISPLAY_X, L.TOP, D.display.w, L.BOTTOM - L.TOP],
+  });
+  P.connect(node, 0, display, 0);
+
+  // The bank tab.
+  const x0 = L.DISPLAY_X + D.display.w + 8;
+  if (D.banks.length > 1) {
+    const names = D.banks.map((b) => b.name);
+    const w = names.length * Math.max(...names.map((t) => textWidth(t) + 10)); // a tab's segments are all one width
+    toHub(P.add(viewTab("Bank", "banktab", names, [x0, 3, w, 15])), "bank");
+  }
+
+  // The sections.
+  D.banks.forEach((bank, b) => {
+    bank.sections.forEach((sec, s) => {
+      const prefix = `b${b}_`;
+      P.add(comment(sec.title, `${prefix}t${n++}`, slot(), [sec.x - 1, sec.y - 1, sec.w + 2, L.TITLE_H], sec.colour ? { textcolor: [...sec.colour, 1] } : {}));
+      if (s < bank.sections.length - 1)
+        P.add({
+          maxclass: "panel", numinlets: 1, numoutlets: 0, varname: `${prefix}d${n++}`, background: 1, patching_rect: slot(),
+          presentation: 1, presentation_rect: [sec.x + sec.w + Math.floor(L.SECTION_GAP / 2), sec.y + 2, 1, L.BOTTOM - sec.y - 2],
+          bgcolor: DIVIDER, border: 0, rounded: 0, mode: 0,
+        });
+      if (sec.pages) {
+        const { key, names, tab, placed } = sec.pages;
+        toHub(P.add(viewTab(`View ${key}`, `${prefix}pagetab_${key}`, names, [tab.x, tab.y, tab.w, tab.h])), `page ${key}`);
+        placed.forEach((pg, i) => placeAll(pg.placed, `${prefix}${key}p${i}_`));
+      } else placeAll(sec.placed, prefix);
+    });
+  });
+
+  return patcherJson(P, app, kind, Math.max(D.width, x0 + 4));
+}
+
 // --- The .amxd: "ampf" with the device type, "meta", then "ptch" with the
 // patcher as JSON, NUL-terminated.
 
@@ -467,13 +780,25 @@ for (const [app, dumper] of pairs) {
   const { hello, params } = readDump(dumper);
   const mod = await appModule(app);
   const { spec, controls, cards } = describe(app, hello, params, mod);
-  const placed = layout(cards);
   const kind = SYNTHS.includes(app) ? "midi" : "audio";
-  const patcher = buildPatcher(app, kind, cards, placed);
+  const designedLayout = await layoutModule(app);
+  let patcher;
+  let banks;
+  if (designedLayout) {
+    const D = design(app, controls, mod, designedLayout);
+    patcher = buildDesigned(app, kind, D);
+    spec.display = { values: designedLayout.display.values ?? [] };
+    spec.pages = D.follows;
+    banks = D.banks.length;
+  } else {
+    const placed = layout(cards);
+    patcher = buildPatcher(app, kind, cards, placed);
+    banks = placed.banks.length;
+  }
   writeFileSync(join(M4L, `${app}.amxd`), amxd(kind, patcher));
   writeFileSync(join(M4L, "specs", `${app}.json`), JSON.stringify(spec, null, 2) + "\n");
   const params_ = controls.filter((c) => c.kind !== "trigger").length;
   console.log(
-    `${app}.amxd: ${controls.length} controls (${params_} Live parameters), ${placed.banks.length} bank(s), ${patcher.patcher.devicewidth} px wide`
+    `${app}.amxd: ${controls.length} controls (${params_} Live parameters), ${banks} bank(s), ${patcher.patcher.devicewidth} px wide`
   );
 }
