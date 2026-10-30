@@ -51,6 +51,12 @@ Each app's README has a shot of its own page.
 as a Live parameter, for automation and mapping, kept in sync both ways with
 the Pod over USB, along with the Pod's presets. See [m4l/README.md](m4l/README.md).
 
+![Grainfall's Max for Live device: the preset slots and switches, the display with the buffer and voices, then its controls in sections](screenshots/m4l-grainfall.png)
+
+*A render of the device's layout, not a capture from Live: Live draws its own controls a little differently.*
+
+Each app's README has its own device.
+
 ## Toolchain
 
 | Tool | Version | Location |

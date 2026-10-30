@@ -443,6 +443,10 @@ for it, to go before an External Instrument: every parameter as a Live
 parameter, kept in sync with the Pod both ways. Its layer controls edit
 whichever layer is picked, as here. See [m4l/README.md](../../m4l/README.md).
 
+![Wavebyte's Max for Live device at its Oscillators bank: the preset slots, the layer switch, the display with the envelopes and the last voice's cutoff and level, then both oscillators and the voice settings](../../screenshots/m4l-wavebyte.png)
+
+*A render of the device's layout, not a capture from Live: Live draws its own controls a little differently.*
+
 ## Roadmap
 
 From the Protein's manual (firmware 1.02). Each stage is proven on the Pod

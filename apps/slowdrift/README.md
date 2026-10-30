@@ -181,3 +181,7 @@ Every control is there too. See [web/README.md](../../web/README.md).
 For Ableton Live, `make m4l` builds a Max for Live device for it: every
 parameter as a Live parameter you can automate and map, kept in sync with
 the Pod both ways. See [m4l/README.md](../../m4l/README.md).
+
+![Slowdrift's Max for Live device: the preset slots and switches, the display with the decay's tail and the LFO, then the Reverb, Tail and Motion sections](../../screenshots/m4l-slowdrift.png)
+
+*A render of the device's layout, not a capture from Live: Live draws its own controls a little differently.*

@@ -257,6 +257,10 @@ For Ableton Live, `make m4l` builds a Max for Live device for it: every
 parameter as a Live parameter you can automate and map, kept in sync with
 the Pod both ways. See [m4l/README.md](../../m4l/README.md).
 
+![Stormsea's Max for Live device: the preset slots and switches, the display with the sea under clouds and rain, then the Sea, Motion, Storm, Sky and Surge sections](../../screenshots/m4l-stormsea.png)
+
+*A render of the device's layout, not a capture from Live: Live draws its own controls a little differently.*
+
 ## Under the hood
 
 - The Seed runs at 480 MHz, with block size 4.

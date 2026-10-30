@@ -349,3 +349,7 @@ in a drawer under the knob pages, a tab at a time.
 For Ableton Live, `make m4l` builds a Max for Live device for it: every
 parameter as a Live parameter you can automate and map, kept in sync with
 the Pod both ways. See [m4l/README.md](../../m4l/README.md).
+
+![Driftnet's Max for Live device at its MOOD bank: the preset slots, the display with the listening ring and the envelope, then the Wet, Clock and Loop columns with their toggles and channel switches](../../screenshots/m4l-driftnet.png)
+
+*A render of the device's layout, not a capture from Live: Live draws its own controls a little differently.*

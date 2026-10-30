@@ -131,3 +131,7 @@ automate it from Ableton Live, `make m4l` builds a Max for Live device for
 it: every parameter as a Live parameter, kept in sync with the Pod both
 ways. See [m4l/README.md](../../m4l/README.md).
 
+![Tapeworn's Max for Live device: the preset slots and switches, the display with tape speed, level and the saturator's loop, then the machine, Wobble, Wear, Hiss and Output sections](../../screenshots/m4l-tapeworn.png)
+
+*A render of the device's layout, not a capture from Live: Live draws its own controls a little differently.*
+

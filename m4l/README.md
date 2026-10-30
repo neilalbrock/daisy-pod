@@ -38,6 +38,10 @@ and its CPU, or "The Pod is running X, not Y" if the wrong app is flashed.
 
 ## The device
 
+![Grainfall's device: the Pod column of presets and switches, the display, then the sections of controls](../screenshots/m4l-grainfall.png)
+
+*A render of the device's layout, not a capture from Live: Live draws its own controls a little differently.* Each app's README shows its own device.
+
 From the left:
 
 - **The Pod column**: its eight preset slots, **Save** and **Get** (take the
