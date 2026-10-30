@@ -18,11 +18,13 @@ make APP=stormsea program-dfu
 Every control is also over MIDI (see [MIDI](#midi)) and on the
 [web page](#the-web-page). Eight [presets](#presets) are kept in flash.
 
-All four stages of the [Roadmap](#roadmap) are built: **the calm sea**, a
-reverb with Freeze, presets, MIDI and the web page, and **the storm**:
-Storm and Gusts, Wind, Rain, Lightning and Thunder, Surge and Undertow, and
-Calm and Squall on the buttons, with a view of the sea on the web page.
-What's left is tuning the storm's ranges by ear on the Pod.
+All four stages of the [Roadmap](#roadmap) are built and running on the
+Pod: **the calm sea**, a reverb with Freeze, presets, MIDI and the web
+page, and **the storm**: Storm and Gusts, Wind, Rain, Lightning and its
+thunder, Surge and Undertow, and Calm and Squall on the buttons, with a
+view of the sea on the web page. Tuning by ear has begun (the wet level,
+and lightning and thunder); the rest of the storm's ranges are still to
+tune.
 
 ## Signal flow
 
@@ -309,17 +311,22 @@ the Pod both ways. See [m4l/README.md](../../m4l/README.md).
 
 ## Roadmap
 
-Each stage is proven on the Pod before the next. The calm sea has to sound
-beautiful on its own before any weather goes on it.
+The calm sea had to sound beautiful on its own before any weather went on
+it; the four stages were built in turn, then flashed to the Pod together.
 
-1. **Built, to try on the Pod:** the calm sea. The feedback delay network,
-   input diffusers, Decay up to ∞, Size, Tone, Depth, Tide, Predelay,
-   Width, the sea wall, Mix, on/off with trails, Freeze, mono in, Kill dry,
-   the pages, MIDI, presets and the web page.
-2. **Built, to try on the Pod:** Wind, Surge, the Storm and Gusts
-   controls, Calm and Squall.
-3. **Built, to try on the Pod:** Lightning, Thunder (now Distance and
-   Rumble) and Rain, over the tail ring.
-4. **Built, to try on the Pod:** Undertow and the web page's sea view.
-   **Still to do:** tuning Storm's curve and the elements' ranges by ear,
-   on the Pod.
+1. **Done:** the calm sea. The feedback delay network, input diffusers,
+   Decay up to ∞, Size, Tone, Depth, Tide, Predelay, Width, the sea wall,
+   Mix, on/off with trails, Freeze, mono in, Kill dry, the pages, MIDI,
+   presets and the web page.
+2. **Done:** Wind, Surge, the Storm and Gusts controls, Calm and Squall.
+3. **Done:** Lightning, its thunder (Distance and Rumble) and Rain, over
+   the tail ring.
+4. **Done:** Undertow and the web page's sea view.
+5. **Tuning, by ear on the Pod.** Done so far: the wet level (the tail
+   piled up as Decay rose, and an infinite sea passed the dry signal, so
+   the sea's input now falls with Decay and the sea wall follows what's
+   played), and lightning (strikes made a sound of their own, which
+   sounded odd, so they're silent, and Distance times and shapes the
+   thunder). Still to tune: Storm's curve and Gusts, Wind's churn and
+   whistle, Rain's level, thunder's levels and lengths, Surge's boil and
+   Undertow's speed.

@@ -2,7 +2,8 @@
 //
 // A value from -1 to 1 that eases from one random point to the next, each
 // move taking a random time between two limits, with no tempo: Tide's
-// swells now, and the storm's moods to come. Call Next() at a steady rate
+// swells, Gusts' fronts and gusts, Wind's turbulence and whistle,
+// Undertow's turning and thunder's roll. Call Next() at a steady rate
 // (once per block). libDaisy-free.
 
 #pragma once
